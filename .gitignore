@@ -73,4 +73,10 @@ global.json
 
 # Claude / AI assistant metadata
 CLAUDE.md
-.claude/
+.claude/ 
+
+# Ignore Rust build files
+rust/target/
+
+# Ignore rust-analyzer files
+target/rust-analyzer/
