@@ -152,3 +152,10 @@ publish-nuget-dry-run:
 
 clean:
 	find . -name '*.csproj' -print0 | xargs -0 -n1 dotnet clean
+
+build-rust:
+	cd rust; \
+	cargo build; \
+	cd ../examples/RustWrapper/bin/Debug/net8/; \
+	ln -f -s ../../../../../rust/target/debug/libcsharp_wrapper.so . || true
+
