@@ -18,3 +18,8 @@ crate-type = ["cdylib", "lib"] # "lib" needed for doctests
 [dev-dependencies]
 ntest = "0.9"
 uuid = "1"
+
+[lints.rust]
+unsafe-op-in-unsafe-fn = "warn"
+unnameable_types = "warn"
+# unreachable_pub = "warn"
