@@ -24,6 +24,8 @@
     <RepositoryUrl>https://github.com/scylladb/csharp-driver</RepositoryUrl>
     <PackageProjectUrl>https://github.com/scylladb/csharp-driver</PackageProjectUrl>
     <LangVersion>12.0</LangVersion>
+    <!-- Required for FFI, in particular conversion to function pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NuGetAudit>false</NuGetAudit>
   </PropertyGroup>
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d$'))">
