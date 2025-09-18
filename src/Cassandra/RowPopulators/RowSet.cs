@@ -18,6 +18,7 @@ using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Cassandra.Serialization;
 
@@ -43,7 +44,7 @@ namespace Cassandra
     /// </para>
     /// </summary>
     /// <remarks>Parallel enumerations are supported and thread-safe.</remarks>
-    public class RowSet : IEnumerable<Row>, IDisposable
+    public class RowSet : IEnumerable<Row>, IDisposable, IAsyncEnumerable<Row>
     {
         private bool _exhausted = false;
 
@@ -219,13 +220,36 @@ namespace Cassandra
 
                 yield return row;
             }
-
-            yield break;
         }
 
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
+        }
+
+        /// <inheritdoc />
+        public virtual async IAsyncEnumerator<Row> GetAsyncEnumerator(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            while (!IsExhausted())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                Row row = await DeserializeRow().ConfigureAwait(false);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (row == null)
+                    yield break;
+
+                yield return row;
+            }
+        }
+
+        IAsyncEnumerator<Row> IAsyncEnumerable<Row>.GetAsyncEnumerator(CancellationToken cancellationToken)
+        {
+            return GetAsyncEnumerator(cancellationToken);
         }
 
         /// <summary>
