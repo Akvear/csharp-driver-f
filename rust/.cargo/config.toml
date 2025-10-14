@@ -1,0 +1,3 @@
+[build]
+# To enable csharp-rs only features from Rust driver.
+rustflags = ["--cfg", "csharp_rs_unstable"]
