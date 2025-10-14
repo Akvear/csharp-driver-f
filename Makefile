@@ -159,6 +159,18 @@ build-rust:
 	cd ../examples/RustWrapper/bin/Debug/net8/; \
 	ln -f -s ../../../../../rust/target/debug/libcsharp_wrapper.so . || true
 
+build-rust-asan:
+	cd rust; \
+	RUSTFLAGS="\
+		-Zsanitizer=address \
+		-C link-arg=-Wl,--whole-archive \
+		-C link-arg=/usr/lib/clang/20/lib/x86_64-redhat-linux-gnu/libclang_rt.asan_static.a" \
+	cargo +nightly build -Zbuild-std --target x86_64-unknown-linux-gnu; \
+	cd ../examples/RustWrapper/bin/Debug/net8/ ; \
+	ln -f -s ../../../../../rust/target/x86_64-unknown-linux-gnu/debug/libcsharp_wrapper.so . || true
+
 run-wrapper-example:
 	dotnet run --project examples/RustWrapper/RustWrapper.csproj
 
+run-wrapper-example-asan:
+	LD_PRELOAD=/usr/lib64/libasan.so.8 dotnet run --project examples/RustWrapper/RustWrapper.csproj
