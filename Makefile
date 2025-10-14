@@ -159,3 +159,6 @@ build-rust:
 	cd ../examples/RustWrapper/bin/Debug/net8/; \
 	ln -f -s ../../../../../rust/target/debug/libcsharp_wrapper.so . || true
 
+run-wrapper-example:
+	dotnet run --project examples/RustWrapper/RustWrapper.csproj
+
