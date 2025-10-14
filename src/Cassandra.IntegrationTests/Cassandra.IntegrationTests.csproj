@@ -18,6 +18,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <DirectPInvoke Include="csharp_wrapper"/>
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Extensions\Cassandra.AppMetrics\Cassandra.AppMetrics.csproj">
       <SetTargetFramework>TargetFramework=$(TargetFramework)</SetTargetFramework>
     </ProjectReference>

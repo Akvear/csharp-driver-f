@@ -33,6 +33,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <DirectPInvoke Include="csharp_wrapper"/>
     <None Include="..\..\LICENSE.md" Pack="true" PackagePath="LICENSE.md" />
   </ItemGroup>
 
