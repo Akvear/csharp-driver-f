@@ -24,6 +24,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Cassandra.Tasks;
 using Cassandra.Serialization;
+using System.Linq;
 
 // ReSharper disable DoNotCallOverridableMethodsInConstructor
 // ReSharper disable CheckNamespace
@@ -63,6 +64,48 @@ namespace Cassandra
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         // bool does not work well with C FFI, use int instead (0 = false, non-0 = true).
         unsafe private static extern int row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern ulong row_set_get_columns_count(IntPtr rowSetPtr);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern int row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void row_set_type_info_free(IntPtr typeInfoHandle);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern ulong row_set_type_info_get_code(IntPtr typeInfoHandle);
+
+        // [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        // unsafe private static extern int row_set_type_info_get_collection_child(IntPtr typeInfoHandle, out IntPtr childHandle);
+
+        // Important note here: I am not sure if having `out` in the function signature is correct for FFI, but it seems to work.
+        // I think the compiler figures it out correctly. Especially since it's just IntPtr that we pass back into Rust. 
+        // Alternatively, we could just callback from Rust into C# with pretty much the same effect.
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern int row_set_type_info_get_list_child(IntPtr typeInfoHandle, out IntPtr childHandle);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern int row_set_type_info_get_set_child(IntPtr typeInfoHandle, out IntPtr childHandle);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern int row_set_type_info_get_udt_name(IntPtr typeInfoHandle, out IntPtr namePtr, out nint nameLen, out IntPtr keyspacePtr, out nint keyspaceLen);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern ulong row_set_type_info_get_udt_field_count(IntPtr typeInfoHandle);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern int row_set_type_info_get_udt_field(IntPtr typeInfoHandle, ulong index, out IntPtr fieldNamePtr, out nint fieldNameLen, out IntPtr fieldTypeHandle);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern int row_set_type_info_get_map_children(IntPtr typeInfoHandle, out IntPtr keyHandle, out IntPtr valueHandle);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern ulong row_set_type_info_get_tuple_field_count(IntPtr typeInfoHandle);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern int row_set_type_info_get_tuple_field(IntPtr typeInfoHandle, ulong index, out IntPtr fieldHandle);
 
         private bool _exhausted = false;
 
@@ -129,23 +172,210 @@ namespace Cassandra
             Info = new ExecutionInfo();
         }
 
-        private static CqlColumn[] ExtractColumnsFromRust(IntPtr rowSetPtr)
+        private static IColumnInfo BuildTypeInfoFromHandle(IntPtr handle, ColumnTypeCode code)
         {
-            var columns = new CqlColumn[1]; // FIXME: bridge with Rust.
-            columns[0] = new CqlColumn
+            if (handle == IntPtr.Zero) return null;
+            try
             {
-                Name = "host_id",
-                Type = typeof(Guid),
-                TypeCode = ColumnTypeCode.Uuid,
-                Index = 0,
-                TypeInfo = null
-            };
-
-            return columns;
-
-            // throw new NotImplementedException("ExtractColumnsFromRust is not yet implemented"); // FIXME: bridge with Rust.
+                switch (code)
+                {
+                    case ColumnTypeCode.List:
+                        // For List: ask Rust for the child handle and build recursively
+                        unsafe
+                        {
+                            if (row_set_type_info_get_list_child(handle, out IntPtr child) != 0)
+                            {
+                                var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
+                                var childInfo = BuildTypeInfoFromHandle(child, childCode);
+                                var listInfo = new ListColumnInfo { ValueTypeCode = childCode, ValueTypeInfo = childInfo };
+                                row_set_type_info_free(handle);
+                                return listInfo;
+                            }
+                        }
+                        row_set_type_info_free(handle);
+                        return null;
+                    case ColumnTypeCode.Map:
+                        // For Map: ask Rust for key/value handles
+                        unsafe
+                        {
+                            if (row_set_type_info_get_map_children(handle, out IntPtr keyHandle, out IntPtr valueHandle) != 0)
+                            {
+                                var keyCode = (ColumnTypeCode)row_set_type_info_get_code(keyHandle);
+                                var valueCode = (ColumnTypeCode)row_set_type_info_get_code(valueHandle);
+                                var keyInfo = BuildTypeInfoFromHandle(keyHandle, keyCode);
+                                var valueInfo = BuildTypeInfoFromHandle(valueHandle, valueCode);
+                                var mapInfo = new MapColumnInfo { KeyTypeCode = keyCode, KeyTypeInfo = keyInfo, ValueTypeCode = valueCode, ValueTypeInfo = valueInfo };
+                                row_set_type_info_free(handle);
+                                return mapInfo;
+                            }
+                        }
+                        row_set_type_info_free(handle);
+                        return null;
+                    case ColumnTypeCode.Tuple:
+                        // For Tuple: get amount of fields and then each field
+                        unsafe
+                        {
+                            ulong count = row_set_type_info_get_tuple_field_count(handle);
+                            var tupleInfo = new TupleColumnInfo();
+                            for (ulong i = 0; i < count; i++)
+                            {
+                                if (row_set_type_info_get_tuple_field(handle, i, out IntPtr fieldHandle) != 0)
+                                {
+                                    var fCode = (ColumnTypeCode)row_set_type_info_get_code(fieldHandle);
+                                    var fInfo = BuildTypeInfoFromHandle(fieldHandle, fCode);
+                                    var desc = new ColumnDesc { TypeCode = fCode, TypeInfo = fInfo };
+                                    tupleInfo.Elements.Add(desc);
+                                }
+                            }
+                            row_set_type_info_free(handle);
+                            return tupleInfo;
+                        }
+                    case ColumnTypeCode.Udt:
+                        // For UDT: get name+keyspace and then the fields
+                        unsafe
+                        {
+                            if (row_set_type_info_get_udt_name(handle, out IntPtr udtNamePtr, out nint udtNameLen, out IntPtr udtKsPtr, out nint udtKsLen) != 0)
+                            {
+                                var name = (udtNamePtr == IntPtr.Zero || udtNameLen == 0) ? null : Marshal.PtrToStringUTF8(udtNamePtr, (int)udtNameLen);
+                                var ks = (udtKsPtr == IntPtr.Zero || udtKsLen == 0) ? null : Marshal.PtrToStringUTF8(udtKsPtr, (int)udtKsLen);
+                                var udtInfo = new UdtColumnInfo(name ?? "");
+                                ulong fcount = row_set_type_info_get_udt_field_count(handle);
+                                for (ulong i = 0; i < fcount; i++)
+                                {
+                                    if (row_set_type_info_get_udt_field(handle, i, out IntPtr fieldNamePtr, out nint fieldNameLen, out IntPtr fieldTypeHandle) != 0)
+                                    {
+                                        var fname = (fieldNamePtr == IntPtr.Zero || fieldNameLen == 0) ? null : Marshal.PtrToStringUTF8(fieldNamePtr, (int)fieldNameLen);
+                                        var fcode = (ColumnTypeCode)row_set_type_info_get_code(fieldTypeHandle);
+                                        var fInfo = BuildTypeInfoFromHandle(fieldTypeHandle, fcode);
+                                        var desc = new ColumnDesc { Name = fname, TypeCode = fcode, TypeInfo = fInfo };
+                                        udtInfo.Fields.Add(desc);
+                                    }
+                                }
+                                row_set_type_info_free(handle);
+                                return udtInfo;
+                            }
+                        }
+                        row_set_type_info_free(handle);
+                        return null;
+                    case ColumnTypeCode.Set:
+                        // For Set: ask Rust for the single element child
+                        unsafe
+                        {
+                            if (row_set_type_info_get_set_child(handle, out IntPtr child) != 0)
+                            {
+                                var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
+                                var childInfo = BuildTypeInfoFromHandle(child, childCode);
+                                var setInfo = new SetColumnInfo { KeyTypeCode = childCode, KeyTypeInfo = childInfo };
+                                row_set_type_info_free(handle);
+                                return setInfo;
+                            }
+                        }
+                        row_set_type_info_free(handle);
+                        return null;
+                    default:
+                        // Native types or unknown: nothing to build; just free the handle
+                        row_set_type_info_free(handle);
+                        return null;
+                }
+            }
+            catch (Exception e)
+            {
+                Console.Error.WriteLine($"[FFI] BuildTypeInfoFromHandle threw: {e}");
+                try { row_set_type_info_free(handle); } catch { } return null;
+            }
         }
 
+        private static CqlColumn[] ExtractColumnsFromRust(IntPtr rowSetPtr)
+        {
+            // Query Rust for the number of columns
+            var count = (int)row_set_get_columns_count(rowSetPtr);
+            if (count <= 0)
+            {
+                return [];
+            }
+
+            var columns = new CqlColumn[count];
+            for (int i = 0; i < count; i++)
+            {
+                columns[i] = new CqlColumn();
+            }
+
+            var columnsHandle = GCHandle.Alloc(columns);
+            try
+            {
+                IntPtr columnsPtr = GCHandle.ToIntPtr(columnsHandle);
+                unsafe
+                {
+                    int res = row_set_fill_columns_metadata(rowSetPtr, columnsPtr, (IntPtr)setColumnMetaPtr);
+                }
+            }
+            finally
+            {
+                columnsHandle.Free();
+            }
+
+            return columns;
+        }
+
+        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nint, IntPtr, nint, IntPtr, nint, IntPtr, nint, nint, IntPtr, void> setColumnMetaPtr = &SetColumnMeta;
+
+        /// <summary>
+        /// This shall be called by Rust code for each column.
+        /// </summary>
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        private static void SetColumnMeta(
+            IntPtr columnsPtr,
+            nint columnIndex,
+            IntPtr namePtr,
+            nint nameLen,
+            IntPtr keyspacePtr,
+            nint keyspaceLen,
+            IntPtr tablePtr,
+            nint tableLen,
+            nint typeCode,
+            IntPtr typeInfoPtr
+        )
+        {
+            try
+            {
+                var columnsHandle = GCHandle.FromIntPtr(columnsPtr);
+                if (columnsHandle.Target is CqlColumn[] columns)
+                {
+                    if (columnIndex < 0 || columnIndex >= columns.Length) return;
+
+                    var col = columns[columnIndex];
+                    col.Name = (namePtr == IntPtr.Zero || nameLen == 0) ? null : Marshal.PtrToStringUTF8(namePtr, (int)nameLen);
+                    col.Keyspace = (keyspacePtr == IntPtr.Zero || keyspaceLen == 0) ? null : Marshal.PtrToStringUTF8(keyspacePtr, (int)keyspaceLen);
+                    col.Table = (tablePtr == IntPtr.Zero || tableLen == 0) ? null : Marshal.PtrToStringUTF8(tablePtr, (int)tableLen);
+                    col.TypeCode = (ColumnTypeCode)typeCode;
+                    col.Index = (int)columnIndex;
+                    col.Type = MapTypeFromCode(col.TypeCode);
+                    
+                    // If a non-null type-info handle was provided by Rust, build the corresponding IColumnInfo
+                    if (typeInfoPtr != IntPtr.Zero)
+                    {
+                        try
+                        {
+                            // BuildTypeInfoFromHandle frees the handle after building
+                            col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.Error.WriteLine($"[FFI] BuildTypeInfoFromHandle threw: {ex}");
+                            try { row_set_type_info_free(typeInfoPtr); } catch { }
+                        }
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException("GCHandle referenced type mismatch.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[FFI] SetColumnMeta threw exception: {ex}");
+            }
+        }
 #nullable enable
         private Row? DeserializeRow()
 #nullable disable
@@ -182,9 +412,15 @@ namespace Cassandra
                 serializerHandle.Free();
             }
 
-            // FIXME: bridge with Rust to get the column indexes.
-            var columnIndexes = new Dictionary<string, int>();
-            columnIndexes["host_id"] = 0;
+            var columnIndexes = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (int i = 0; i < Columns.Length; ++i)
+            {
+                var name = Columns[i].Name;
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                if (!columnIndexes.ContainsKey(name))
+                    columnIndexes[name] = i;
+            }
 
             return new Row(values, Columns, columnIndexes);
         }
@@ -310,6 +546,37 @@ namespace Cassandra
                 throw new InvalidOperationException("Can not append a Row to a RowSet instance created for VOID results");
             }
             RowQueue.Enqueue(row);
+        }
+
+        private static Type MapTypeFromCode(ColumnTypeCode code)
+        {
+            switch (code)
+            {
+                case ColumnTypeCode.Uuid:
+                case ColumnTypeCode.Timeuuid:
+                    return typeof(Guid);
+                case ColumnTypeCode.Int:
+                    return typeof(int);
+                case ColumnTypeCode.Bigint:
+                case ColumnTypeCode.Counter:
+                    return typeof(long);
+                case ColumnTypeCode.Boolean:
+                    return typeof(bool);
+                case ColumnTypeCode.Double:
+                    return typeof(double);
+                case ColumnTypeCode.Float:
+                    return typeof(float);
+                case ColumnTypeCode.Blob:
+                    return typeof(byte[]);
+                case ColumnTypeCode.Text:
+                case ColumnTypeCode.Varchar:
+                case ColumnTypeCode.Ascii:
+                    return typeof(string);
+                case ColumnTypeCode.Timestamp:
+                    return typeof(DateTime);
+                default:
+                    return typeof(object);
+            }
         }
     }
 }
