@@ -396,7 +396,7 @@ pub trait RefFFI: Sized + origin_sealed::FromRefSealed {
         // SAFETY:
         // 1. validity guarantee - pointer is valid, since it's obtained a valid reference.
         // 2. pointer's lifetime - pointer inherits the lifetime of provided reference's borrow.
-        // 3. ownerhsip - we always create a `Shared` pointer.
+        // 3. ownership - we always create a `Shared` pointer.
         unsafe { BridgedPtr::from_raw(self) }
     }
 
