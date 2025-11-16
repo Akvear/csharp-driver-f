@@ -72,9 +72,6 @@ namespace Cassandra
         unsafe private static extern int row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void row_set_type_info_free(IntPtr typeInfoHandle);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern ulong row_set_type_info_get_code(IntPtr typeInfoHandle);
 
         // [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
@@ -188,11 +185,9 @@ namespace Cassandra
                                 var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
                                 var childInfo = BuildTypeInfoFromHandle(child, childCode);
                                 var listInfo = new ListColumnInfo { ValueTypeCode = childCode, ValueTypeInfo = childInfo };
-                                row_set_type_info_free(handle);
                                 return listInfo;
                             }
                         }
-                        row_set_type_info_free(handle);
                         return null;
                     case ColumnTypeCode.Map:
                         // For Map: ask Rust for key/value handles
@@ -205,11 +200,9 @@ namespace Cassandra
                                 var keyInfo = BuildTypeInfoFromHandle(keyHandle, keyCode);
                                 var valueInfo = BuildTypeInfoFromHandle(valueHandle, valueCode);
                                 var mapInfo = new MapColumnInfo { KeyTypeCode = keyCode, KeyTypeInfo = keyInfo, ValueTypeCode = valueCode, ValueTypeInfo = valueInfo };
-                                row_set_type_info_free(handle);
                                 return mapInfo;
                             }
                         }
-                        row_set_type_info_free(handle);
                         return null;
                     case ColumnTypeCode.Tuple:
                         // For Tuple: get amount of fields and then each field
@@ -227,7 +220,6 @@ namespace Cassandra
                                     tupleInfo.Elements.Add(desc);
                                 }
                             }
-                            row_set_type_info_free(handle);
                             return tupleInfo;
                         }
                     case ColumnTypeCode.Udt:
@@ -251,11 +243,9 @@ namespace Cassandra
                                         udtInfo.Fields.Add(desc);
                                     }
                                 }
-                                row_set_type_info_free(handle);
                                 return udtInfo;
                             }
                         }
-                        row_set_type_info_free(handle);
                         return null;
                     case ColumnTypeCode.Set:
                         // For Set: ask Rust for the single element child
@@ -266,22 +256,18 @@ namespace Cassandra
                                 var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
                                 var childInfo = BuildTypeInfoFromHandle(child, childCode);
                                 var setInfo = new SetColumnInfo { KeyTypeCode = childCode, KeyTypeInfo = childInfo };
-                                row_set_type_info_free(handle);
                                 return setInfo;
                             }
                         }
-                        row_set_type_info_free(handle);
                         return null;
                     default:
-                        // Native types or unknown: nothing to build; just free the handle
-                        row_set_type_info_free(handle);
                         return null;
                 }
             }
             catch (Exception e)
             {
                 Console.Error.WriteLine($"[FFI] BuildTypeInfoFromHandle threw: {e}");
-                try { row_set_type_info_free(handle); } catch { } return null;
+                return null;
             }
         }
 
@@ -350,19 +336,17 @@ namespace Cassandra
                     col.TypeCode = (ColumnTypeCode)typeCode;
                     col.Index = (int)columnIndex;
                     col.Type = MapTypeFromCode(col.TypeCode);
-                    
+
                     // If a non-null type-info handle was provided by Rust, build the corresponding IColumnInfo
                     if (typeInfoPtr != IntPtr.Zero)
                     {
                         try
                         {
-                            // BuildTypeInfoFromHandle frees the handle after building
                             col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode);
                         }
                         catch (Exception ex)
                         {
                             Console.Error.WriteLine($"[FFI] BuildTypeInfoFromHandle threw: {ex}");
-                            try { row_set_type_info_free(typeInfoPtr); } catch { }
                         }
                     }
                 }

@@ -5,8 +5,7 @@ use scylla::frame::response::result::{ColumnType, NativeType};
 
 use crate::FfiPtr;
 use crate::ffi::{
-    ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr,
-    BridgedPtr, FFI, FromArc, FromBox,
+    ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, FFI, FromArc, FromRef, RefFFI,
 };
 use crate::task::BridgedFuture;
 
@@ -29,9 +28,8 @@ impl FFI for RowSet {
     type Origin = FromArc;
 }
 
-// Not sure about this lifetime
 impl FFI for ColumnType<'_> {
-    type Origin = FromBox;
+    type Origin = FromRef;
 }
 
 #[unsafe(no_mangle)]
@@ -59,7 +57,7 @@ type SetMetadata = unsafe extern "C" fn(
     table_ptr: *const u8,
     table_len: usize,
     type_code: usize,
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType>,
+    type_info_handle: BridgedBorrowedSharedPtr<ColumnType>,
 );
 
 /// Calls back into C# for each column to provide metadata.
@@ -94,15 +92,11 @@ pub extern "C" fn row_set_fill_columns_metadata(
 
         let type_code = column_type_to_code(spec.typ()) as usize;
 
-        // Another big issue to address: creating a new Box for each ColumnType using clone()
-        // Allocating a lot of memory to pass the values to C#
-        // I wasn't able to figure out how to do it differently
-        // Open to suggestions
-        let mut type_info_handle: BridgedOwnedExclusivePtr<ColumnType> = BridgedPtr::null();
-        if type_code >= 0x00020 {
-            let boxed = Box::new(spec.typ().clone());
-            type_info_handle = BoxFFI::into_ptr(boxed)
-        }
+        let type_info_handle: BridgedBorrowedSharedPtr<ColumnType> = if type_code >= 0x00020 {
+            RefFFI::as_ptr(spec.typ())
+        } else {
+            RefFFI::null()
+        };
 
         unsafe {
             set_metadata(
@@ -205,37 +199,29 @@ pub extern "C" fn row_set_next_row<'row_set>(
 // TODO: Below change all unwrap() to unwrap_or_else() with proper error handling
 
 #[unsafe(no_mangle)]
-pub extern "C" fn row_set_type_info_free(type_info_handle: BridgedOwnedExclusivePtr<ColumnType>) {
-    if type_info_handle.is_null() {
-        return;
-    }
-    BoxFFI::free(type_info_handle);
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn row_set_type_info_get_code(
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType>,
+    type_info_handle: BridgedBorrowedSharedPtr<ColumnType>,
 ) -> usize {
     if type_info_handle.is_null() {
         return 0;
     }
 
-    let type_info = BoxFFI::as_ref(type_info_handle).unwrap();
+    let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     column_type_to_code(type_info) as usize
 }
 
 // Specific child accessors
 
 #[unsafe(no_mangle)]
-pub extern "C" fn row_set_type_info_get_list_child(
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType<'static>>,
-    out_child_handle: *mut BridgedOwnedExclusivePtr<ColumnType<'static>>,
+pub extern "C" fn row_set_type_info_get_list_child<'typ>(
+    type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
+    out_child_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
 ) -> i32 {
     if type_info_handle.is_null() {
         return 0;
     }
 
-    let type_info = BoxFFI::as_ref(type_info_handle).unwrap();
+    let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::Collection {
             typ: CollectionType::List(inner),
@@ -244,11 +230,9 @@ pub extern "C" fn row_set_type_info_get_list_child(
             if out_child_handle.is_null() {
                 return 0;
             }
-            let child = (*inner).as_ref().clone();
-            let boxed = Box::new(child);
-            let child_ptr = BoxFFI::into_ptr(boxed);
+            let child = inner.as_ref();
             unsafe {
-                *out_child_handle = child_ptr;
+                out_child_handle.write(RefFFI::as_ptr(child));
             }
             1
         }
@@ -257,15 +241,15 @@ pub extern "C" fn row_set_type_info_get_list_child(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn row_set_type_info_get_set_child(
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType<'static>>,
-    out_child_handle: *mut BridgedOwnedExclusivePtr<ColumnType<'static>>,
+pub extern "C" fn row_set_type_info_get_set_child<'typ>(
+    type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
+    out_child_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
 ) -> i32 {
     if type_info_handle.is_null() {
         return 0;
     }
 
-    let type_info = BoxFFI::as_ref(type_info_handle).unwrap();
+    let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::Collection {
             typ: CollectionType::Set(inner),
@@ -274,11 +258,9 @@ pub extern "C" fn row_set_type_info_get_set_child(
             if out_child_handle.is_null() {
                 return 0;
             }
-            let child = (*inner).as_ref().clone();
-            let boxed = Box::new(child);
-            let child_ptr = BoxFFI::into_ptr(boxed);
+            let child = inner.as_ref();
             unsafe {
-                *out_child_handle = child_ptr;
+                out_child_handle.write(RefFFI::as_ptr(child));
             }
             1
         }
@@ -287,16 +269,16 @@ pub extern "C" fn row_set_type_info_get_set_child(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn row_set_type_info_get_map_children(
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType<'static>>,
-    out_key_handle: *mut BridgedOwnedExclusivePtr<ColumnType<'static>>,
-    out_value_handle: *mut BridgedOwnedExclusivePtr<ColumnType<'static>>,
+pub extern "C" fn row_set_type_info_get_map_children<'typ>(
+    type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
+    out_key_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
+    out_value_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
 ) -> i32 {
     if type_info_handle.is_null() {
         return 0;
     }
 
-    let type_info = BoxFFI::as_ref(type_info_handle).unwrap();
+    let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::Collection {
             typ: CollectionType::Map(key, value),
@@ -305,12 +287,10 @@ pub extern "C" fn row_set_type_info_get_map_children(
             if out_key_handle.is_null() || out_value_handle.is_null() {
                 return 0;
             }
-            let key_child = (*key).as_ref().clone();
-            let value_child = (*value).as_ref().clone();
-            let boxed_k = Box::new(key_child);
-            let boxed_v = Box::new(value_child);
-            let k_ptr = BoxFFI::into_ptr(boxed_k);
-            let v_ptr = BoxFFI::into_ptr(boxed_v);
+            let key_child = key.as_ref();
+            let value_child = value.as_ref();
+            let k_ptr = RefFFI::as_ptr(key_child);
+            let v_ptr = RefFFI::as_ptr(value_child);
             unsafe {
                 *out_key_handle = k_ptr;
                 *out_value_handle = v_ptr;
@@ -323,13 +303,13 @@ pub extern "C" fn row_set_type_info_get_map_children(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_type_info_get_tuple_field_count(
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType<'static>>,
+    type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
 ) -> usize {
     if type_info_handle.is_null() {
         return 0;
     }
 
-    let type_info = BoxFFI::as_ref(type_info_handle).unwrap();
+    let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::Tuple(fields) => fields.len(),
         _ => 0,
@@ -337,27 +317,25 @@ pub extern "C" fn row_set_type_info_get_tuple_field_count(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn row_set_type_info_get_tuple_field(
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType<'static>>,
+pub extern "C" fn row_set_type_info_get_tuple_field<'typ>(
+    type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
     index: usize,
-    out_field_handle: *mut BridgedOwnedExclusivePtr<ColumnType<'static>>,
+    out_field_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
 ) -> i32 {
     if type_info_handle.is_null() {
         return 0;
     }
 
-    let type_info = BoxFFI::as_ref(type_info_handle).unwrap();
+    let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::Tuple(fields) => {
-            if index >= fields.len() {
-                return 0;
-            }
             if out_field_handle.is_null() {
                 return 0;
             }
-            let field = fields[index].clone();
-            let boxed = Box::new(field);
-            let ptr = BoxFFI::into_ptr(boxed);
+            let Some(field) = fields.get(index) else {
+                return 0;
+            };
+            let ptr = RefFFI::as_ptr(field);
             unsafe {
                 *out_field_handle = ptr;
             }
@@ -371,7 +349,7 @@ pub extern "C" fn row_set_type_info_get_tuple_field(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_type_info_get_udt_name(
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType<'static>>,
+    type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
     out_name_ptr: *mut *const u8,
     out_name_len: *mut usize,
     out_keyspace_ptr: *mut *const u8,
@@ -381,7 +359,7 @@ pub extern "C" fn row_set_type_info_get_udt_name(
         return 0;
     }
 
-    let type_info = BoxFFI::as_ref(type_info_handle).unwrap();
+    let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::UserDefinedType { definition, .. } => {
             let name = definition.name.as_ref();
@@ -398,13 +376,13 @@ pub extern "C" fn row_set_type_info_get_udt_name(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_type_info_get_udt_field_count(
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType<'static>>,
+    type_info_handle: BridgedBorrowedSharedPtr<ColumnType<'_>>,
 ) -> usize {
     if type_info_handle.is_null() {
         return 0;
     }
 
-    let type_info = BoxFFI::as_ref(type_info_handle).unwrap();
+    let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::UserDefinedType { definition, .. } => definition.field_types.len(),
         _ => 0,
@@ -412,30 +390,31 @@ pub extern "C" fn row_set_type_info_get_udt_field_count(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn row_set_type_info_get_udt_field(
-    type_info_handle: BridgedOwnedExclusivePtr<ColumnType<'static>>,
+pub extern "C" fn row_set_type_info_get_udt_field<'typ>(
+    type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
     index: usize,
     out_field_name_ptr: *mut *const u8,
     out_field_name_len: *mut usize,
-    out_field_type_handle: *mut BridgedOwnedExclusivePtr<ColumnType<'static>>,
+    out_field_type_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
 ) -> i32 {
     if type_info_handle.is_null() {
         return 0;
     }
 
-    let type_info = BoxFFI::as_ref(type_info_handle).unwrap();
+    let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::UserDefinedType { definition, .. } => {
-            if index >= definition.field_types.len() || out_field_type_handle.is_null() {
+            if out_field_type_handle.is_null() {
                 return 0;
             }
-            let (ref field_name, ref field_type) = definition.field_types[index];
+            let Some((field_name, field_type)) = definition.field_types.get(index) else {
+                return 0;
+            };
             unsafe { *out_field_name_ptr = field_name.as_ptr() };
             unsafe { *out_field_name_len = field_name.len() };
 
-            let child = field_type.clone();
-            let boxed = Box::new(child);
-            let ptr = BoxFFI::into_ptr(boxed);
+            let child = field_type;
+            let ptr = RefFFI::as_ptr(child);
             unsafe {
                 *out_field_type_handle = ptr;
             }
