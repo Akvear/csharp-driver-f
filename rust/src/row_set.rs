@@ -75,29 +75,22 @@ pub extern "C" fn row_set_fill_columns_metadata(
 
     // Iterate column specs and call the metadata setter
     for (i, spec) in pager.column_specs().iter().enumerate() {
+        fn str_to_ptr_and_len(s: &str) -> (*const u8, usize) {
+            if s.is_empty() {
+                (std::ptr::null(), 0)
+            } else {
+                (s.as_ptr(), s.len())
+            }
+        }
+
         let name = spec.name();
-        let name_ptr = if name.is_empty() {
-            std::ptr::null()
-        } else {
-            name.as_ptr()
-        };
-        let name_len = name.len();
+        let (name_ptr, name_len) = str_to_ptr_and_len(name);
 
         let ks = spec.table_spec().ks_name();
-        let keyspace_ptr = if ks.is_empty() {
-            std::ptr::null()
-        } else {
-            ks.as_ptr()
-        };
-        let keyspace_len = ks.len();
+        let (keyspace_ptr, keyspace_len) = str_to_ptr_and_len(ks);
 
         let table = spec.table_spec().table_name();
-        let table_ptr = if table.is_empty() {
-            std::ptr::null()
-        } else {
-            table.as_ptr()
-        };
-        let table_len = table.len();
+        let (table_ptr, table_len) = str_to_ptr_and_len(table);
 
         let type_code = column_type_to_code(spec.typ()) as usize;
 
