@@ -286,19 +286,17 @@ namespace Cassandra
                 columns[i] = new CqlColumn();
             }
 
-            var columnsHandle = GCHandle.Alloc(columns);
-            try
+            unsafe
             {
-                IntPtr columnsPtr = GCHandle.ToIntPtr(columnsHandle);
-                unsafe
-                {
-                    int res = row_set_fill_columns_metadata(rowSetPtr, columnsPtr, (IntPtr)setColumnMetaPtr);
-                }
+                void* columnsPtr = Unsafe.AsPointer(ref columns);
+                int res = row_set_fill_columns_metadata(rowSetPtr, (IntPtr)columnsPtr, (IntPtr)setColumnMetaPtr);
+                // FIXME: Do something with `res`.
             }
-            finally
-            {
-                columnsHandle.Free();
-            }
+
+            // This was recommended by ChatGPT in the general case to ensure the raw pointer is still valid.
+            // I believe it's not needed in this particular case, because `columns` are returned from this function,
+            // so they must live at least until `return`.
+            // GC.KeepAlive(columns);
 
             return columns;
         }
@@ -322,10 +320,18 @@ namespace Cassandra
             IntPtr typeInfoPtr
         )
         {
-            try
+            unsafe
             {
-                var columnsHandle = GCHandle.FromIntPtr(columnsPtr);
-                if (columnsHandle.Target is CqlColumn[] columns)
+                // Safety:
+                // 1. pointer validity:
+                //   - columnsPtr is a valid pointer to an array of CqlColumn.
+                //   - the referenced CqlColumn[] array lives **on the stack of the caller** (ExtractColumnsFromRust),
+                //     so it cannot be GC-collected during this call.
+                //   - the CqlColumn[] materialised here is transient, i.e., not stored beyond this call.
+                // 2. array length:
+                //   - the referenced CqlColumn[] array has length equal to the number of columns in the RowSet.
+                //   - columnIndex is within bounds of the columns array.
+                CqlColumn[] columns = Unsafe.Read<CqlColumn[]>((void*)columnsPtr);
                 {
                     if (columnIndex < 0 || columnIndex >= columns.Length) return;
 
@@ -349,15 +355,8 @@ namespace Cassandra
                             Console.Error.WriteLine($"[FFI] BuildTypeInfoFromHandle threw: {ex}");
                         }
                     }
+
                 }
-                else
-                {
-                    throw new InvalidOperationException("GCHandle referenced type mismatch.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[FFI] SetColumnMeta threw exception: {ex}");
             }
         }
 #nullable enable
