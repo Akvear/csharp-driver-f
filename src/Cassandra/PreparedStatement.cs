@@ -14,8 +14,10 @@
 //   limitations under the License.
 //
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using Cassandra.Serialization;
 
 namespace Cassandra
@@ -29,6 +31,9 @@ namespace Cassandra
     /// </summary>
     public class PreparedStatement
     {
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern int prepared_statement_is_lwt(IntPtr prepared_statement);
+
         private readonly RowSetMetadata _variablesRowsMetadata;
         private readonly ISerializerManager _serializerManager = SerializerManager.Default;
         private volatile RoutingKey _routingKey;
@@ -121,6 +126,16 @@ namespace Cassandra
             Cql = cql;
             Keyspace = keyspace;
             _serializerManager = serializer;
+            _isLwt = isLwt;
+        }
+
+        // For use by the Rust interop code.
+        internal PreparedStatement(IntPtr preparedStatementPtr, string cql, RowSetMetadata variablesRowsMetadata)
+        {
+            bool isLwt = prepared_statement_is_lwt(preparedStatementPtr) != 0;
+
+            _variablesRowsMetadata = variablesRowsMetadata;
+            Cql = cql;
             _isLwt = isLwt;
         }
 

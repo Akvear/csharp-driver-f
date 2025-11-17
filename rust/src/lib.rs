@@ -1,5 +1,6 @@
 pub mod ffi;
 mod logging;
+mod prepared_statement;
 mod row_set;
 mod session;
 mod task;

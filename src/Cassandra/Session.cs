@@ -49,6 +49,9 @@ namespace Cassandra
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
 
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void session_prepare(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
+
         private static readonly Logger Logger = new Logger(typeof(Session));
         private readonly ICluster _cluster;
         private int _disposed;
@@ -386,15 +389,30 @@ namespace Cassandra
         public Task<PreparedStatement> PrepareAsync(
             string cqlQuery, string keyspace, IDictionary<string, byte[]> customPayload)
         {
-            // TODO: support custom payload in Rust Driver, then implement this.
+            if (customPayload != null)
+            {
+                throw new NotSupportedException("Custom payload is not yet supported in Prepare");
+            }
+
             if (keyspace != null)
             {
-                // Validate protocol version here and not at PrepareRequest level, as PrepareRequest can be issued
-                // in the background (prepare and retry, prepare on up, ...)
                 throw new NotSupportedException($"Protocol version 4 does not support" +
                                                 " setting the keyspace as part of the PREPARE request");
             }
-            throw new NotImplementedException("PrepareAsync is not yet implemented"); // FIXME: bridge with Rust prepare.
+
+            TaskCompletionSource<IntPtr> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Tcb tcb = Tcb.WithTcs(tcs);
+
+            session_prepare(tcb, handle, cqlQuery);
+
+            return tcs.Task.ContinueWith(t =>
+            {
+                IntPtr preparedStatementPtr = t.Result;
+                // FIXME: Bridge with Rust to get variables metadata.
+                RowSetMetadata variablesRowsMetadata = null;
+                var ps = new PreparedStatement(preparedStatementPtr, cqlQuery, variablesRowsMetadata);
+                return ps;
+            }, TaskContinuationOptions.ExecuteSynchronously);
         }
 
         public void WaitForSchemaAgreement(RowSet rs)
