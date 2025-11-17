@@ -10,7 +10,19 @@ use crate::FfiPtr;
 use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr};
 
 /// The global Tokio runtime used to execute async tasks.
-static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
+static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+    // Logger must be initialized for the logs to be emitted. As a good
+    // heuristic to initialize it early, we do it when creating the global
+    // Tokio runtime, which happens lazily on the first use of async tasks.
+    // This has a downside that if any logs are emitted before the first
+    // async task is spawned, they will be lost.
+    // To make this more robust, we could consider initializing the logger at
+    // the driver startup, but that would require a new call from C# to Rust,
+    // issued somehow early during the C# driver part.
+    crate::logging::init_logging();
+
+    Runtime::new().unwrap()
+});
 
 /// Opaque type representing a C# TaskCompletionSource<T>.
 enum Tcs {}
