@@ -42,6 +42,7 @@ namespace Cassandra
         private readonly CopyOnWriteList<ISession> _connectedSessions = new CopyOnWriteList<ISession>();
 
         private readonly Metadata _metadata;
+        private readonly IEnumerable<string> _contactPoints;
 
         // Disable unused event warnings, because they are part of the public API, so we can't remove them.
 #pragma warning disable CS0067
@@ -143,9 +144,7 @@ namespace Cassandra
             {
                 protocolVersion = Configuration.ProtocolOptions.MaxProtocolVersionValue.Value;
             }
-
-            // FIXME:
-            // var parsedContactPoints = configuration.ContactPointParser.ParseContactPoints(contactPoints);
+            _contactPoints = configuration.ParseContactPoints(contactPoints);
         }
 
         /// <inheritdoc />
@@ -184,13 +183,17 @@ namespace Cassandra
         /// Creates a new session on this cluster and using a keyspace an existing keyspace.
         /// </summary>
         /// <param name="keyspace">Case-sensitive keyspace name to use</param>
-        public Task<ISession> ConnectAsync(string keyspace)
+        public async Task<ISession> ConnectAsync(string keyspace)
         {
-            // Task<ISession> session = null; // FIXME
-            // _connectedSessions.Add(session);
-            // Cluster.Logger.Info("Session connected ({0})", session.GetHashCode());
-            // return session;
-            throw new NotImplementedException("ConnectAsync is not yet implemented"); // FIXME: bridge with Rust.
+            // TODO: Handle multiple contact points (join into a comma-separated list
+            // and then split on the Rust side).
+            string firstContactPoint = _contactPoints.First();
+
+            var session = await Session.CreateAsync(this, firstContactPoint, keyspace).ConfigureAwait(false);
+            
+            _connectedSessions.Add(session);
+            Logger.Info("Session connected ({0})", session.GetHashCode());
+            return session;
         }
 
         /// <summary>

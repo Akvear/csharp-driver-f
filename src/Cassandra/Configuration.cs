@@ -229,5 +229,20 @@ namespace Cassandra
 
             MonitorReportingOptions = monitorReportingOptions ?? new MonitorReportingOptions();
         }
+
+        internal IEnumerable<string> ParseContactPoints(IEnumerable<object> contactPoints)
+        {
+            // FIXME: bring back more sophisticated parsing (endpoints, IPs, etc.).
+            // For now, only strings are supported.
+            return contactPoints.Select(cp =>
+            {
+                if (cp is string s)
+                {
+                    return s;
+                }
+
+                throw new NotImplementedException();
+            });
+        }
     }
 }
