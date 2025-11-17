@@ -38,7 +38,7 @@ namespace Cassandra
         /// <summary>
         /// Gets or sets the columns information
         /// </summary>
-        protected CqlColumn[] Columns { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        protected CqlColumn[] Columns { get; set; }
 
         [Obsolete("This property is deprecated and to be removed in future versions.")]
         protected byte[][] Values { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
@@ -87,6 +87,13 @@ namespace Cassandra
         {
             ProtocolVersion = protocolVersion;
             Values = values;
+            Columns = columns;
+            ColumnIndexes = columnIndexes;
+        }
+
+        internal Row(object[] values, CqlColumn[] columns, Dictionary<string, int> columnIndexes)
+        {
+            _rowValues = values;
             Columns = columns;
             ColumnIndexes = columnIndexes;
         }

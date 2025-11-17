@@ -1,5 +1,6 @@
 pub mod ffi;
 mod logging;
+mod row_set;
 mod session;
 mod task;
 

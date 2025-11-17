@@ -46,6 +46,9 @@ namespace Cassandra
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_free(IntPtr session);
 
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
+
         private static readonly Logger Logger = new Logger(typeof(Session));
         private readonly ICluster _cluster;
         private int _disposed;
@@ -281,6 +284,50 @@ namespace Cassandra
         public Task<RowSet> ExecuteAsync(IStatement statement, string executionProfileName)
         {
             // return this.ExecuteAsync(statement, this.GetRequestOptions(executionProfileName));
+
+            switch (statement)
+            {
+                case RegularStatement s:
+                    string queryString = s.QueryString;
+                    object[] queryValues = s.QueryValues ?? [];
+
+                    TaskCompletionSource<IntPtr> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+                    Tcb tcb = Tcb.WithTcs(tcs);
+
+                    // TODO: support queries with values
+                    if (queryValues.Length > 0)
+                    {
+                        throw new NotImplementedException("Regular statements with values are not yet supported");
+                    }
+                    session_query(tcb, handle, queryString);
+
+                    return tcs.Task.ContinueWith(t =>
+                    {
+                        IntPtr rowSetPtr = t.Result;
+                        var rowSet = new RowSet(rowSetPtr);
+                        return rowSet;
+                    }, TaskContinuationOptions.ExecuteSynchronously);
+
+                case BoundStatement bs:
+                    if (bs.QueryValues.Length == 0)
+                    {
+                        throw new NotImplementedException("Bound statements without values are not yet supported");
+                    }
+                    else
+                    {
+                        throw new NotImplementedException("Bound statements with values are not yet supported");
+                    }
+                // break;
+
+                case BatchStatement s:
+                    throw new NotImplementedException("Batches are not yet supported");
+                // break;
+
+                default:
+                    throw new ArgumentException("Unsupported statement type");
+                    // break;
+            }
+
             throw new NotImplementedException("ExecuteAsync is not yet implemented"); // FIXME: bridge with Rust execution profiles.
         }
         public IDriverMetrics GetMetrics()
