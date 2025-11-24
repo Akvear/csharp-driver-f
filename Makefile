@@ -37,14 +37,20 @@ export SIMULACRON_PATH
 export SCYLLA_VERSION
 
 .PHONY: check
-check:
+check: check-csharp
+
+.PHONY: check-csharp
+check-csharp:
 	dotnet format --verify-no-changes --severity warn --verbosity diagnostic src/Cassandra.IntegrationTests/Cassandra.IntegrationTests.csproj & \
 	dotnet format --verify-no-changes --severity warn --verbosity diagnostic src/Cassandra/Cassandra.csproj & \
 	dotnet format --verify-no-changes --severity warn --verbosity diagnostic src/Cassandra.Tests/Cassandra.Tests.csproj & \
 	wait
 
 .PHONY: fix
-fix:
+fix: fix-csharp
+
+.PHONY: fix-csharp
+fix-csharp:
 	dotnet format --severity warn --verbosity diagnostic src/Cassandra.IntegrationTests/Cassandra.IntegrationTests.csproj & \
 	dotnet format --severity warn --verbosity diagnostic src/Cassandra/Cassandra.csproj & \
 	dotnet format --severity warn --verbosity diagnostic src/Cassandra.Tests/Cassandra.Tests.csproj & \
@@ -160,5 +166,8 @@ publish-nuget-dry-run:
 	$(MAKE) .publish-proj-nuget PROJECT_PATH=src/Extensions/Cassandra.OpenTelemetry/Cassandra.OpenTelemetry.csproj DRY_RUN=1
 
 .PHONY: clean
-clean:
+clean: clean-csharp
+
+.PHONY: clean-csharp
+clean-csharp:
 	find . -name '*.csproj' -print0 | xargs -0 -n1 dotnet clean
