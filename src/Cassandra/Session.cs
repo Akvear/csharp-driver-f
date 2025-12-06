@@ -47,7 +47,7 @@ namespace Cassandra
         unsafe private static extern void session_free(IntPtr session);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
+        unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr exceptionPtr, IntPtr exceptionCtrPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_prepare(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
@@ -111,7 +111,7 @@ namespace Cassandra
              * This is a common pattern to bridge async code between C# and native code.
              */
             TaskCompletionSource<IntPtr> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            Tcb tcb = Tcb.WithTcs(tcs);
+            Tcb tcb = Tcb.WithTcs(tcs, IntPtr.Zero);
 
             // Invoke the native code, which will complete the TCS when done.
             // We need to pass a pointer to CompleteTask because Rust code cannot directly
@@ -180,6 +180,7 @@ namespace Cassandra
             }
             catch (AlreadyExistsException)
             {
+                Console.Error.WriteLine($"[FFI] Keyspace [{keyspaceName}] already exists, skipping creation.");
                 Session.Logger.Info(string.Format("Cannot CREATE keyspace:  {0}  because it already exists.", keyspaceName));
             }
         }
@@ -225,7 +226,7 @@ namespace Cassandra
         {
             var task = (Task<RowSet>)ar;
             // FIXME: Add removed Metrics.
-            TaskHelper.WaitToComplete(task, Configuration.DefaultRequestOptions.QueryAbortTimeout);
+            TaskHelper.WaitToComplete(task, GetQueryAbortTimeout());
             return task.Result;
         }
 
@@ -234,7 +235,7 @@ namespace Cassandra
         {
             var task = (Task<PreparedStatement>)ar;
             // FIXME: Add removed Metrics.
-            TaskHelper.WaitToComplete(task, Configuration.DefaultRequestOptions.QueryAbortTimeout);
+            TaskHelper.WaitToComplete(task, GetQueryAbortTimeout());
             return task.Result;
         }
 
@@ -243,7 +244,7 @@ namespace Cassandra
         {
             var task = ExecuteAsync(statement, executionProfileName);
             // FIXME: Add removed Metrics.
-            TaskHelper.WaitToComplete(task, Configuration.DefaultRequestOptions.QueryAbortTimeout);
+            TaskHelper.WaitToComplete(task, GetQueryAbortTimeout());
             return task.Result;
         }
 
@@ -283,6 +284,8 @@ namespace Cassandra
             return ExecuteAsync(statement, Configuration.DefaultExecutionProfileName);
         }
 
+        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, void> AlreadyExistsConstructorPtr = &AlreadyExistsException.AlreadyExistsExceptionFromRust;
+
         /// <inheritdoc />
         public Task<RowSet> ExecuteAsync(IStatement statement, string executionProfileName)
         {
@@ -295,17 +298,25 @@ namespace Cassandra
                     object[] queryValues = s.QueryValues ?? [];
 
                     TaskCompletionSource<IntPtr> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-                    Tcb tcb = Tcb.WithTcs(tcs);
+                    // Prepare buffer for exception handle
+                    IntPtr[] buffer = new IntPtr[1];
+                    GCHandle pinned = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+                    IntPtr ptrToBuffer = pinned.AddrOfPinnedObject();
+                    Tcb tcb = Tcb.WithTcs(tcs, ptrToBuffer);
 
                     // TODO: support queries with values
                     if (queryValues.Length > 0)
                     {
                         throw new NotImplementedException("Regular statements with values are not yet supported");
                     }
-                    session_query(tcb, handle, queryString);
+
+                    unsafe {
+                        session_query(tcb, handle, queryString, ptrToBuffer, (IntPtr)AlreadyExistsConstructorPtr);
+                    }
 
                     return tcs.Task.ContinueWith(t =>
                     {
+                        pinned.Free();
                         IntPtr rowSetPtr = t.Result;
                         var rowSet = new RowSet(rowSetPtr);
                         return rowSet;
@@ -401,7 +412,7 @@ namespace Cassandra
             }
 
             TaskCompletionSource<IntPtr> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            Tcb tcb = Tcb.WithTcs(tcs);
+            Tcb tcb = Tcb.WithTcs(tcs, IntPtr.Zero);
 
             session_prepare(tcb, handle, cqlQuery);
 
@@ -440,6 +451,41 @@ namespace Cassandra
             }
 
             return profile;
+        }
+
+        /// <summary>
+        /// Temporary workaround: safely obtain query abort timeout when DefaultRequestOptions is not initialized yet.
+        /// </summary>
+        private int GetQueryAbortTimeout()
+        {
+            // Prefer execution-profile-based timeout when available; otherwise fallback to client options default.
+            if (Configuration != null)
+            {
+                var dro = SafeGetDefaultRequestOptions();
+                if (dro != null)
+                {
+                    return dro.QueryAbortTimeout;
+                }
+                if (Configuration.ClientOptions != null)
+                {
+                    return Configuration.ClientOptions.QueryAbortTimeout;
+                }
+            }
+            // Hard fallback to legacy default (20s), matching Builder.DefaultQueryAbortTimeout.
+            return 20000;
+        }
+
+        private Cassandra.ExecutionProfiles.IRequestOptions SafeGetDefaultRequestOptions()
+        {
+            try
+            {
+                // Configuration.DefaultRequestOptions throws when RequestOptions is null; guard against it.
+                return Configuration?.DefaultRequestOptions;
+            }
+            catch
+            {
+                return null;
+            }
         }
     }
 }
