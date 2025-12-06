@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Runtime.InteropServices.Marshalling;
 
 /* PInvoke has an overhead of between 10 and 30 x86 instructions per call.
  * In addition to this fixed cost, marshaling creates additional overhead.
@@ -43,11 +44,20 @@ namespace Cassandra
         /// </summary>
         private readonly IntPtr fail_task;
 
-        private Tcb(IntPtr tcs, IntPtr completeTask, IntPtr failTask)
+        /// <summary>
+        /// Pointer to a GCHandle referencing an Exception to be used when failing the task.
+        /// This shall be allocated by the C# code before calling into Rust,
+        /// and freed by the C# callback executed by the Rust code once the operation
+        /// is completed with an error.
+        /// </summary>
+        private readonly IntPtr exception_buffer_ptr;
+
+        private Tcb(IntPtr tcs, IntPtr completeTask, IntPtr failTask, IntPtr exceptionBuffer)
         {
             this.tcs = tcs;
             this.complete_task = completeTask;
             this.fail_task = failTask;
+            this.exception_buffer_ptr = exceptionBuffer;
         }
 
         // This is the only way to get a function pointer to a method decorated
@@ -63,9 +73,9 @@ namespace Cassandra
         // Note that we can get this pointer because the method is static and
         // decorated with [UnmanagedCallersOnly].
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> completeTaskDel = &RustBridge.CompleteTask;
-        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> failTaskDel = &RustBridge.FailTask;
+        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, void> failTaskDel = &RustBridge.FailTask;
 
-        internal static Tcb WithTcs(TaskCompletionSource<IntPtr> tcs)
+        internal static Tcb WithTcs(TaskCompletionSource<IntPtr> tcs, IntPtr exceptionBuffer)
         {
             /*
              * Although GC knows that it must not collect items during a synchronous P/Invoke call,
@@ -86,7 +96,7 @@ namespace Cassandra
             {
                 IntPtr completeTaskPtr = (IntPtr)completeTaskDel;
                 IntPtr failTaskPtr = (IntPtr)failTaskDel;
-                return new Tcb(tcsPtr, completeTaskPtr, failTaskPtr);
+                return new Tcb(tcsPtr, completeTaskPtr, failTaskPtr, exceptionBuffer);
             }
         }
     }
@@ -136,12 +146,12 @@ namespace Cassandra
         /// This shall be called by Rust code when the operation failed.
         /// </summary>
         //
-        // Signature in Rust: extern "C" fn(tcs: *mut c_void, error_msg: *const c_char)
+        // Signature in Rust: extern "C" fn(tcs: *mut c_void, exception_handle: usize, error_msg: *const c_char)
         //
         // This attribute makes the method callable from native code.
         // It also allows taking a function pointer to the method.
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static void FailTask(IntPtr tcsPtr, IntPtr errorMsgPtr)
+        internal static void FailTask(IntPtr tcsPtr, IntPtr exceptionBufferPtr, IntPtr errorMsgPtr)
         {
             try
             {
@@ -150,9 +160,25 @@ namespace Cassandra
 
                 if (handle.Target is TaskCompletionSource<IntPtr> tcs)
                 {
-                    // Interpret as ANSI C string (nul-terminated)
-                    string errorMsg = Marshal.PtrToStringUTF8(errorMsgPtr)!;
-                    tcs.SetException(new RustException(errorMsg));
+                    Exception exToSet = null;
+                    if (exceptionBufferPtr != IntPtr.Zero)
+                    {
+                        var storedHandlePtr = Marshal.ReadIntPtr(exceptionBufferPtr);
+                        var exHandle = GCHandle.FromIntPtr(storedHandlePtr);
+                        if (exHandle.Target is Exception ex)
+                        {
+                            exToSet = ex;
+                        }
+                    }
+                    if (exToSet != null)
+                    {
+                        tcs.SetException(exToSet);
+                    }
+                    else
+                    {
+                        string errorMsg = Marshal.PtrToStringUTF8(errorMsgPtr)!;
+                        tcs.SetException(new RustException(errorMsg));
+                    }
 
                     // Free the handle so the TCS can be collected once no longer used
                     // by the C# code.

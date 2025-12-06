@@ -47,7 +47,7 @@ namespace Cassandra
         unsafe private static extern void session_free(IntPtr session);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr exceptionPtr, IntPtr exceptionCtrPtr);
+        unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr exceptionPtr, IntPtr alreadyExistsConstructorPtr, IntPtr invalidQueryConstructorPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_prepare(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
@@ -171,16 +171,12 @@ namespace Cassandra
         /// <inheritdoc />
         public void CreateKeyspaceIfNotExists(string keyspaceName, Dictionary<string, string> replication = null, bool durableWrites = true)
         {
-            // Note: This won't work with current Rust error handling, because we always throw RustException on any error,
-            // losing capability to catch specific exceptions like AlreadyExistsException.
-            // FIXME: Design a better error handling mechanism to allow this.
             try
             {
                 CreateKeyspace(keyspaceName, replication, durableWrites);
             }
             catch (AlreadyExistsException)
             {
-                Console.Error.WriteLine($"[FFI] Keyspace [{keyspaceName}] already exists, skipping creation.");
                 Session.Logger.Info(string.Format("Cannot CREATE keyspace:  {0}  because it already exists.", keyspaceName));
             }
         }
@@ -194,9 +190,6 @@ namespace Cassandra
         /// <inheritdoc />
         public void DeleteKeyspaceIfExists(string keyspaceName)
         {
-            // Note: This won't work with current Rust error handling, because we always throw RustException on any error,
-            // losing capability to catch specific exceptions like AlreadyExistsException.
-            // FIXME: Design a better error handling mechanism to allow this.
             try
             {
                 DeleteKeyspace(keyspaceName);
@@ -218,6 +211,10 @@ namespace Cassandra
 
             // FIXME: Actually perform shutdown.
             // Remember to dequeue from Cluster's sessions list.
+
+            // Dispose the session handle which will call session_free in Rust
+            Dispose();
+
             return Task.FromResult<object>(null);
         }
 
@@ -226,7 +223,7 @@ namespace Cassandra
         {
             var task = (Task<RowSet>)ar;
             // FIXME: Add removed Metrics.
-            TaskHelper.WaitToComplete(task, GetQueryAbortTimeout());
+            TaskHelper.WaitToComplete(task, Configuration.DefaultRequestOptions.QueryAbortTimeout);
             return task.Result;
         }
 
@@ -235,7 +232,7 @@ namespace Cassandra
         {
             var task = (Task<PreparedStatement>)ar;
             // FIXME: Add removed Metrics.
-            TaskHelper.WaitToComplete(task, GetQueryAbortTimeout());
+            TaskHelper.WaitToComplete(task, Configuration.DefaultRequestOptions.QueryAbortTimeout);
             return task.Result;
         }
 
@@ -244,7 +241,7 @@ namespace Cassandra
         {
             var task = ExecuteAsync(statement, executionProfileName);
             // FIXME: Add removed Metrics.
-            TaskHelper.WaitToComplete(task, GetQueryAbortTimeout());
+            TaskHelper.WaitToComplete(task, Configuration.DefaultRequestOptions.QueryAbortTimeout);
             return task.Result;
         }
 
@@ -286,6 +283,8 @@ namespace Cassandra
 
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, void> AlreadyExistsConstructorPtr = &AlreadyExistsException.AlreadyExistsExceptionFromRust;
 
+        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> InvalidQueryConstructorPtr = &InvalidQueryException.InvalidQueryExceptionFromRust;
+
         /// <inheritdoc />
         public Task<RowSet> ExecuteAsync(IStatement statement, string executionProfileName)
         {
@@ -311,7 +310,7 @@ namespace Cassandra
                     }
 
                     unsafe {
-                        session_query(tcb, handle, queryString, ptrToBuffer, (IntPtr)AlreadyExistsConstructorPtr);
+                        session_query(tcb, handle, queryString, ptrToBuffer, (IntPtr)AlreadyExistsConstructorPtr, (IntPtr)InvalidQueryConstructorPtr);
                     }
 
                     return tcs.Task.ContinueWith(t =>
@@ -451,41 +450,6 @@ namespace Cassandra
             }
 
             return profile;
-        }
-
-        /// <summary>
-        /// Temporary workaround: safely obtain query abort timeout when DefaultRequestOptions is not initialized yet.
-        /// </summary>
-        private int GetQueryAbortTimeout()
-        {
-            // Prefer execution-profile-based timeout when available; otherwise fallback to client options default.
-            if (Configuration != null)
-            {
-                var dro = SafeGetDefaultRequestOptions();
-                if (dro != null)
-                {
-                    return dro.QueryAbortTimeout;
-                }
-                if (Configuration.ClientOptions != null)
-                {
-                    return Configuration.ClientOptions.QueryAbortTimeout;
-                }
-            }
-            // Hard fallback to legacy default (20s), matching Builder.DefaultQueryAbortTimeout.
-            return 20000;
-        }
-
-        private Cassandra.ExecutionProfiles.IRequestOptions SafeGetDefaultRequestOptions()
-        {
-            try
-            {
-                // Configuration.DefaultRequestOptions throws when RequestOptions is null; guard against it.
-                return Configuration?.DefaultRequestOptions;
-            }
-            catch
-            {
-                return null;
-            }
         }
     }
 }

@@ -1,10 +1,13 @@
+use scylla::client::pager::NextPageError;
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
-use scylla::errors::{NewSessionError, PagerExecutionError, PrepareError};
+use scylla::errors::{
+    DbError, NewSessionError, PagerExecutionError, PrepareError, RequestAttemptError, RequestError,
+};
 
 use crate::CSharpStr;
-use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, FFI, FromArc};
 use crate::FfiPtr;
+use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, FFI, FromArc};
 use crate::prepared_statement::BridgedPreparedStatement;
 use crate::row_set::RowSet;
 use crate::task::{BridgedFuture, Tcb};
@@ -73,6 +76,11 @@ type AlreadyExistsConstructor = unsafe extern "C" fn(
     exception_ptr: ExceptionPtr,
 );
 
+type InvalidQueryConstructor = unsafe extern "C" fn(
+    message_ptr: *const u8,
+    exception_ptr: ExceptionPtr,
+);
+
 #[derive(Clone, Copy)]
 enum Exception {}
 
@@ -94,7 +102,8 @@ pub extern "C" fn session_query(
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
     statement: CSharpStr<'_>,
     out_exception: ExceptionPtr,
-    exception_ctr_ptr: AlreadyExistsConstructor,
+    already_exists_constructor: AlreadyExistsConstructor,
+    invalid_query_constructor: InvalidQueryConstructor,
 ) {
     // Convert the raw C string to a Rust string.
     let statement = statement.as_cstr().unwrap().to_str().unwrap().to_owned();
@@ -110,24 +119,35 @@ pub extern "C" fn session_query(
         let result = bridged_session.inner.query_iter(statement, ()).await;
         if let Err(err) = &result {
             // Build and write the managed exception handle via the provided constructor.
-            println!("[FFI] Query execution failed: {:?}", err);
-            unsafe {
-                // Keyspace is null for some reason?
-                let keyspace = bridged_session.inner.get_keyspace();
-                let keyspace_c = keyspace
-                    .as_ref()
-                    .map(|ks| CString::new(ks.as_str()).unwrap());
-                let keyspace_ptr = keyspace_c
-                    .as_ref()
-                    .map_or(std::ptr::null(), |c| c.as_ptr() as *const u8);
-
-                // No table information available here; pass null.
-                let table_ptr = std::ptr::null();
-
-                exception_ctr_ptr(keyspace_ptr, table_ptr, out_exception);
-                println!("[FFI] Exception constructed");
-                return Err(err.clone());
+            match err {
+                PagerExecutionError::NextPageError(NextPageError::RequestFailure(
+                    RequestError::LastAttemptError(RequestAttemptError::DbError(
+                        DbError::AlreadyExists { keyspace, table },
+                        _,
+                    )),
+                )) => {
+                    let keyspace_c = CString::new(keyspace.as_str()).unwrap();
+                    let table_c = CString::new(table.as_str()).unwrap();
+                    let keyspace_ptr = keyspace_c.as_ptr() as *const u8;
+                    let table_ptr = table_c.as_ptr() as *const u8;
+                    unsafe {
+                        already_exists_constructor(keyspace_ptr, table_ptr, out_exception);
+                    }
+                }
+                PagerExecutionError::NextPageError(NextPageError::RequestFailure(
+                    RequestError::LastAttemptError(RequestAttemptError::DbError(
+                        DbError::Invalid, messsage,
+                    )),
+                )) => {
+                    let message_c = CString::new(messsage.as_str()).unwrap();
+                    let message_ptr = message_c.as_ptr() as *const u8;
+                    unsafe {
+                        invalid_query_constructor(message_ptr, out_exception);
+                    }
+                },
+                _ => {}
             }
+            return Err(err.clone());
         }
 
         let query_pager = result.unwrap();

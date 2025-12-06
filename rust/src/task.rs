@@ -36,8 +36,9 @@ unsafe impl Send for TcsPtr {}
 /// Function pointer type to complete a TaskCompletionSource with a result.
 type CompleteTask = unsafe extern "C" fn(tcs: TcsPtr, result: BridgedOwnedSharedPtr<c_void>);
 
-/// Function pointer type to fail a TaskCompletionSource with an error message.
-type FailTask = unsafe extern "C" fn(tcs: TcsPtr, error_msg: *const c_char);
+/// Function pointer type to fail a TaskCompletionSource with an exception handle and an error message.
+type FailTask =
+    unsafe extern "C" fn(tcs: TcsPtr, exception_handle: usize, error_msg: *const c_char);
 
 /// **Task Control Block** (TCB)
 ///
@@ -50,6 +51,7 @@ pub struct Tcb {
     tcs: TcsPtr,
     complete_task: CompleteTask,
     fail_task: FailTask,
+    exception_handle: usize,
 }
 
 /// A utility struct to bridge Rust tokio futures with C# tasks.
@@ -77,6 +79,7 @@ impl BridgedFuture {
             tcs,
             complete_task,
             fail_task,
+            exception_handle,
         } = tcb;
 
         RUNTIME.spawn(async move {
@@ -99,7 +102,7 @@ impl BridgedFuture {
                 // On error, fail the task with the error message.
                 Ok(Err(err)) => {
                     let error_msg = CString::new(err.to_string()).unwrap();
-                    unsafe { fail_task(tcs, error_msg.as_ptr()) };
+                    unsafe { fail_task(tcs, exception_handle, error_msg.as_ptr()) };
                 }
 
                 // On panic, fail the task with the panic message.
@@ -114,7 +117,7 @@ impl BridgedFuture {
                     };
                     let error_msg = CString::new(panic_msg)
                         .expect("Panic messages should not contain null bytes");
-                    unsafe { fail_task(tcs, error_msg.as_ptr()) };
+                    unsafe { fail_task(tcs, exception_handle, error_msg.as_ptr()) };
                 }
             }
         });
