@@ -15,6 +15,8 @@
 //
 
 using System;
+using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace Cassandra
 {
@@ -31,6 +33,27 @@ namespace Cassandra
         public InvalidQueryException(string message, Exception innerException)
             : base(message, innerException)
         {
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        public static void InvalidQueryExceptionFromRust(IntPtr messageIntPtr, IntPtr bufferPtr)
+        {
+            InvalidQueryException exception;
+            if (messageIntPtr != IntPtr.Zero)
+            {
+                string message = Marshal.PtrToStringUTF8(messageIntPtr) ?? string.Empty;
+                exception = new InvalidQueryException(message);
+            } else {
+                exception = new InvalidQueryException("The query is syntactically correct but invalid.");
+            }
+
+            GCHandle handle = GCHandle.Alloc(exception);
+            IntPtr handlePtr = GCHandle.ToIntPtr(handle);
+
+            if (bufferPtr != IntPtr.Zero)
+            {
+                Marshal.WriteIntPtr(bufferPtr, handlePtr);
+            }
         }
     }
 }

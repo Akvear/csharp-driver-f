@@ -13,6 +13,9 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 //
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace Cassandra
 {
@@ -47,6 +50,23 @@ namespace Cassandra
         {
             Keyspace = string.IsNullOrEmpty(keyspace.Trim()) ? null : keyspace;
             Table = string.IsNullOrEmpty(table.Trim()) ? null : table;
+        }
+    
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        public static void AlreadyExistsExceptionFromRust(IntPtr keyspacePtr, IntPtr tablePtr, IntPtr bufferPtr)
+        {
+            string keyspace = Marshal.PtrToStringUTF8(keyspacePtr) ?? string.Empty;
+            string table = Marshal.PtrToStringUTF8(tablePtr) ?? string.Empty;
+
+            var exception = new AlreadyExistsException(keyspace, table);
+
+            GCHandle handle = GCHandle.Alloc(exception);
+            IntPtr handlePtr = GCHandle.ToIntPtr(handle);
+
+            if (bufferPtr != IntPtr.Zero)
+            {
+                Marshal.WriteIntPtr(bufferPtr, handlePtr);
+            }
         }
 
         private static string MakeMsg(string keyspace, string table)
