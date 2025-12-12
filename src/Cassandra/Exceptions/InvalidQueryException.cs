@@ -15,6 +15,8 @@
 //
 
 using System;
+using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace Cassandra
 {
@@ -31,6 +33,17 @@ namespace Cassandra
         public InvalidQueryException(string message, Exception innerException)
             : base(message, innerException)
         {
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr InvalidQueryExceptionFromRust(FFIString message)
+        {
+            string msg = message.ToManagedString();
+            var exception = new InvalidQueryException(msg);
+            
+            GCHandle handle = GCHandle.Alloc(exception);
+            IntPtr handlePtr = GCHandle.ToIntPtr(handle);
+            return handlePtr;
         }
     }
 }

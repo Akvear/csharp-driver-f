@@ -15,7 +15,9 @@
 //
 
 using System.Net;
-
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 // ReSharper disable once CheckNamespace
 namespace Cassandra
@@ -28,6 +30,19 @@ namespace Cassandra
         public OperationTimedOutException(IPEndPoint address, int timeout) :
             base($"The host {address} did not reply before timeout {timeout}ms")
         {
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr OperationTimedOutExceptionFromRust(FFIString address, int timeout)
+        {
+            string addressString = address.ToManagedString();
+            var addr = IPEndPoint.Parse(addressString);
+
+            var exception = new OperationTimedOutException(addr, timeout);
+
+            GCHandle handle = GCHandle.Alloc(exception);
+            IntPtr handlePtr = GCHandle.ToIntPtr(handle);
+            return handlePtr;
         }
     }
 }

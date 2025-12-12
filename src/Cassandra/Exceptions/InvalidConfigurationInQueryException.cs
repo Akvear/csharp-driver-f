@@ -14,6 +14,10 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
 namespace Cassandra
 {
     /// <summary>
@@ -26,6 +30,16 @@ namespace Cassandra
     {
         public InvalidConfigurationInQueryException(string message) : base(message)
         {
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr InvalidConfigurationInQueryExceptionFromRust(FFIString message)
+        {
+            string msg = message.ToManagedString();
+            var exception = new InvalidConfigurationInQueryException(msg);
+
+            var handle = GCHandle.Alloc(exception);
+            return GCHandle.ToIntPtr(handle);
         }
     }
 }
