@@ -1,5 +1,5 @@
 use futures::FutureExt;
-use std::ffi::{CString, c_char, c_void};
+use std::ffi::c_void;
 use std::fmt::{Debug, Display};
 use std::future::Future;
 use std::panic::AssertUnwindSafe;
@@ -7,6 +7,14 @@ use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 
 use crate::FfiPtr;
+use crate::error_conversion::{
+    AlreadyExistsConstructor, ErrorToException, ExceptionPtr, FunctionFailureExceptionConstructor,
+    InvalidConfigurationInQueryExceptionConstructor, InvalidQueryConstructor,
+    NoHostAvailableExceptionConstructor, OperationTimedOutExceptionConstructor,
+    PreparedQueryNotFoundExceptionConstructor, RequestInvalidExceptionConstructor,
+    RustExceptionConstructor, SyntaxErrorExceptionConstructor, TraceRejectedExceptionConstructor,
+    TruncateExceptionConstructor, UnauthorizedExceptionConstructor,
+};
 use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr};
 
 /// The global Tokio runtime used to execute async tasks.
@@ -36,8 +44,8 @@ unsafe impl Send for TcsPtr {}
 /// Function pointer type to complete a TaskCompletionSource with a result.
 type CompleteTask = unsafe extern "C" fn(tcs: TcsPtr, result: BridgedOwnedSharedPtr<c_void>);
 
-/// Function pointer type to fail a TaskCompletionSource with an error message.
-type FailTask = unsafe extern "C" fn(tcs: TcsPtr, error_msg: *const c_char);
+/// Function pointer type to fail a TaskCompletionSource with an exception handle.
+type FailTask = unsafe extern "C" fn(tcs: TcsPtr, exception_handle: ExceptionPtr);
 
 /// **Task Control Block** (TCB)
 ///
@@ -50,6 +58,27 @@ pub struct Tcb {
     tcs: TcsPtr,
     complete_task: CompleteTask,
     fail_task: FailTask,
+    constructors: &'static ExceptionConstructors,
+}
+
+/// Collection of exception constructors passed from C#.
+/// This struct holds function pointers to create various exception types.
+/// Any changes here must be mirrored on the C# side in the exact same order (alphabetical).
+#[repr(C)]
+pub struct ExceptionConstructors {
+    pub already_exists_constructor: AlreadyExistsConstructor,
+    pub function_failure_exception_constructor: FunctionFailureExceptionConstructor,
+    pub invalid_configuration_in_query_constructor: InvalidConfigurationInQueryExceptionConstructor,
+    pub invalid_query_constructor: InvalidQueryConstructor,
+    pub no_host_available_exception_constructor: NoHostAvailableExceptionConstructor,
+    pub operation_timed_out_exception_constructor: OperationTimedOutExceptionConstructor,
+    pub prepared_query_not_found_exception_constructor: PreparedQueryNotFoundExceptionConstructor,
+    pub request_invalid_exception_constructor: RequestInvalidExceptionConstructor,
+    pub rust_exception_constructor: RustExceptionConstructor,
+    pub syntax_error_exception_constructor: SyntaxErrorExceptionConstructor,
+    pub trace_rejected_exception_constructor: TraceRejectedExceptionConstructor,
+    pub truncate_exception_constructor: TruncateExceptionConstructor,
+    pub unauthorized_exception_constructor: UnauthorizedExceptionConstructor,
 }
 
 /// A utility struct to bridge Rust tokio futures with C# tasks.
@@ -71,12 +100,14 @@ impl BridgedFuture {
         F: Future<Output = Result<T, E>> + Send + 'static,
         T: Send + 'static + ArcFFI, // Must be shareable across FFI boundary. For now we only support ArcFFI.
         T: Debug,                   // Temporarily, for debug prints.
-        E: Display + Debug,         // Temporarily, for debug prints.
+        E: Debug + Display + ErrorToException, // Error must be printable for logging and exception conversion.
+                                               // The ErrorToException trait is used to convert the error to an exception pointer.
     {
         let Tcb {
             tcs,
             complete_task,
             fail_task,
+            constructors,
         } = tcb;
 
         RUNTIME.spawn(async move {
@@ -96,12 +127,11 @@ impl BridgedFuture {
                     unsafe { complete_task(tcs, ArcFFI::into_ptr(arced_res).cast_to_void()) };
                 }
 
-                // On error, fail the task with the error message.
+                // On error, fail the task with exception.
                 Ok(Err(err)) => {
-                    let error_msg = CString::new(err.to_string()).unwrap();
-                    unsafe { fail_task(tcs, error_msg.as_ptr()) };
+                    let exception_ptr = err.to_exception(constructors);
+                    unsafe { fail_task(tcs, exception_ptr) };
                 }
-
                 // On panic, fail the task with the panic message.
                 Err(panic) => {
                     // Panic payloads can be of any type, but `panic!()` macro only uses &str or String.
@@ -112,9 +142,10 @@ impl BridgedFuture {
                     } else {
                         "Weird panic with non-string payload"
                     };
-                    let error_msg = CString::new(panic_msg)
-                        .expect("Panic messages should not contain null bytes");
-                    unsafe { fail_task(tcs, error_msg.as_ptr()) };
+                    let exception_ptr = constructors
+                        .rust_exception_constructor
+                        .construct_from_rust(panic_msg);
+                    unsafe { fail_task(tcs, exception_ptr) };
                 }
             }
         });

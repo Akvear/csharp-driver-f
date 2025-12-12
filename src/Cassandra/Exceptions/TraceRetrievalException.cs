@@ -15,6 +15,8 @@
 //
 
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Cassandra
 {
@@ -31,6 +33,16 @@ namespace Cassandra
         public TraceRetrievalException(string message, Exception cause)
             : base(message, cause)
         {
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr TraceRetrievalExceptionFromRust(FFIString message)
+        {
+            string messageStr = message.ToManagedString();
+            var exception = new TraceRetrievalException(messageStr);
+
+            GCHandle handle = GCHandle.Alloc(exception);
+            return GCHandle.ToIntPtr(handle);
         }
     }
 }

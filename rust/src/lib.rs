@@ -1,3 +1,4 @@
+mod error_conversion;
 pub mod ffi;
 mod logging;
 mod pre_serialized_values;

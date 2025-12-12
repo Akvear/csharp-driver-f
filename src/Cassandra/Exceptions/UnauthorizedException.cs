@@ -14,6 +14,10 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
 namespace Cassandra
 {
     /// <summary>
@@ -23,6 +27,16 @@ namespace Cassandra
     {
         public UnauthorizedException(string message) : base(message)
         {
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr UnauthorizedExceptionFromRust(FFIString message)
+        {
+            string messageStr = message.ToManagedString();
+            var exception = new UnauthorizedException(messageStr);
+
+            GCHandle handle = GCHandle.Alloc(exception);
+            return GCHandle.ToIntPtr(handle);
         }
     }
 }

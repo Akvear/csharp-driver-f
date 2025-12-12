@@ -20,6 +20,8 @@ using System.Collections.Generic;
 using System.Net;
 using System.Runtime.Serialization;
 using System.Text;
+using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 
 namespace Cassandra
 {
@@ -97,6 +99,17 @@ namespace Cassandra
             }
             builder.Append(errors.Count <= MaxTriedInfo ? ")" : "; ...), see Errors property for more info");
             return builder.ToString();
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr NoHostAvailableExceptionFromRust(FFIString message)
+        {
+            string msg = message.ToManagedString();
+            var exception = new NoHostAvailableException(msg);
+            
+            GCHandle handle = GCHandle.Alloc(exception);
+            IntPtr handlePtr = GCHandle.ToIntPtr(handle);
+            return handlePtr;
         }
     }
 }

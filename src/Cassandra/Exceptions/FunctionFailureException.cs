@@ -15,6 +15,8 @@
 //
 
 using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 
 // ReSharper disable once CheckNamespace
@@ -50,6 +52,16 @@ namespace Cassandra
 
         protected FunctionFailureException(SerializationInfo info, StreamingContext context) : base(info, context)
         {
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr FunctionFailureExceptionFromRust(FFIString message)
+        {
+            string msg = message.ToManagedString();
+            var exception = new FunctionFailureException(msg);
+
+            GCHandle handle = GCHandle.Alloc(exception);
+            return GCHandle.ToIntPtr(handle);
         }
     }
 }
