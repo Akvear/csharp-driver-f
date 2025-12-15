@@ -57,8 +57,7 @@ pub extern "C" fn row_set_get_columns_count(
     pager.as_ref().map(|p| p.column_specs().len()).unwrap_or(0)
 }
 
-// TODO: Add specific lifetime parameter to ColumnType
-// Compiler does not recognize that pager outlives the BridgedBorrowedSharedPtr
+// Function pointer type for setting column metadata in C#.
 type SetMetadata = unsafe extern "C" fn(
     columns_ptr: ColumnsPtr,
     value_index: usize,
@@ -68,9 +67,9 @@ type SetMetadata = unsafe extern "C" fn(
     keyspace_len: usize,
     table_ptr: *const u8,
     table_len: usize,
-    type_code: usize,
+    type_code: u8,
     type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
-    is_frozen: usize,
+    is_frozen: u8,
 );
 
 /// Calls back into C# for each column to provide metadata.
@@ -109,9 +108,9 @@ pub extern "C" fn row_set_fill_columns_metadata(
         let table = spec.table_spec().table_name();
         let (table_ptr, table_len) = str_to_ptr_and_len(table);
 
-        let type_code = column_type_to_code(spec.typ()) as usize;
+        let type_code = column_type_to_code(spec.typ());
 
-        let type_info_handle: BridgedBorrowedSharedPtr<ColumnType> = if type_code >= 0x00020 {
+        let type_info_handle: BridgedBorrowedSharedPtr<ColumnType> = if type_code >= 0x20 {
             RefFFI::as_ptr(spec.typ())
         } else {
             RefFFI::null()
@@ -251,13 +250,13 @@ pub extern "C" fn row_set_next_row<'row_set>(
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_type_info_get_code(
     type_info_handle: BridgedBorrowedSharedPtr<ColumnType<'_>>,
-) -> usize {
+) -> u8 {
     if type_info_handle.is_null() {
         return 0;
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
-    column_type_to_code(type_info) as usize
+    column_type_to_code(type_info)
 }
 
 // Specific child accessors
@@ -462,7 +461,6 @@ pub extern "C" fn row_set_type_info_get_udt_field<'typ>(
             };
             unsafe { *out_field_name_ptr = field_name.as_ptr() };
             unsafe { *out_field_name_len = field_name.len() };
-
             let child = field_type;
             let ptr = RefFFI::as_ptr(child);
             unsafe {
@@ -474,40 +472,40 @@ pub extern "C" fn row_set_type_info_get_udt_field<'typ>(
     }
 }
 
-fn column_type_to_code(typ: &ColumnType) -> u16 {
+fn column_type_to_code(typ: &ColumnType) -> u8 {
     match typ {
         ColumnType::Native(nt) => match nt {
-            NativeType::Ascii => 0x0001,
-            NativeType::BigInt => 0x0002,
-            NativeType::Blob => 0x0003,
-            NativeType::Boolean => 0x0004,
-            NativeType::Counter => 0x0005,
-            NativeType::Decimal => 0x0006,
-            NativeType::Double => 0x0007,
-            NativeType::Float => 0x0008,
-            NativeType::Int => 0x0009,
-            NativeType::Text => 0x000A,
-            NativeType::Timestamp => 0x000B,
-            NativeType::Uuid => 0x000C,
-            NativeType::Varint => 0x000E,
-            NativeType::Timeuuid => 0x000F,
-            NativeType::Inet => 0x0010,
-            NativeType::Date => 0x0011,
-            NativeType::Time => 0x0012,
-            NativeType::SmallInt => 0x0013,
-            NativeType::TinyInt => 0x0014,
-            NativeType::Duration => 0x0015,
-            _ => 0x0000,
+            NativeType::Ascii => 0x01,
+            NativeType::BigInt => 0x02,
+            NativeType::Blob => 0x03,
+            NativeType::Boolean => 0x04,
+            NativeType::Counter => 0x05,
+            NativeType::Decimal => 0x06,
+            NativeType::Double => 0x07,
+            NativeType::Float => 0x08,
+            NativeType::Int => 0x09,
+            NativeType::Text => 0x0A,
+            NativeType::Timestamp => 0x0B,
+            NativeType::Uuid => 0x0C,
+            NativeType::Varint => 0x0E,
+            NativeType::Timeuuid => 0x0F,
+            NativeType::Inet => 0x10,
+            NativeType::Date => 0x11,
+            NativeType::Time => 0x12,
+            NativeType::SmallInt => 0x13,
+            NativeType::TinyInt => 0x14,
+            NativeType::Duration => 0x15,
+            _ => 0x00,
         },
         ColumnType::Collection { typ, .. } => match typ {
-            CollectionType::List { .. } => 0x0020,
-            CollectionType::Map { .. } => 0x0021,
-            CollectionType::Set { .. } => 0x0022,
-            _ => 0x0000,
+            CollectionType::List { .. } => 0x20,
+            CollectionType::Map { .. } => 0x21,
+            CollectionType::Set { .. } => 0x22,
+            _ => 0x00,
         },
-        ColumnType::Vector { .. } => 0x0020, // FIXME: handle Vector as custom type
-        ColumnType::UserDefinedType { .. } => 0x0030,
-        ColumnType::Tuple(_) => 0x0031,
-        _ => 0x0000,
+        ColumnType::Vector { .. } => 0x20, // FIXME: handle Vector as custom type
+        ColumnType::UserDefinedType { .. } => 0x30,
+        ColumnType::Tuple(_) => 0x31,
+        _ => 0x00,
     }
 }

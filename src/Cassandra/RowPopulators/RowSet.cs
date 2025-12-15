@@ -67,13 +67,13 @@ namespace Cassandra
         unsafe private static extern int row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern ulong row_set_get_columns_count(IntPtr rowSetPtr);
+        unsafe private static extern nuint row_set_get_columns_count(IntPtr rowSetPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern ulong row_set_type_info_get_code(IntPtr typeInfoHandle);
+        unsafe private static extern byte row_set_type_info_get_code(IntPtr typeInfoHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern int row_set_type_info_get_list_child(IntPtr typeInfoHandle, out IntPtr childHandle);
@@ -82,22 +82,22 @@ namespace Cassandra
         unsafe private static extern int row_set_type_info_get_set_child(IntPtr typeInfoHandle, out IntPtr childHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern int row_set_type_info_get_udt_name(IntPtr typeInfoHandle, out IntPtr namePtr, out nint nameLen, out IntPtr keyspacePtr, out nint keyspaceLen);
+        unsafe private static extern int row_set_type_info_get_udt_name(IntPtr typeInfoHandle, out IntPtr namePtr, out nuint nameLen, out IntPtr keyspacePtr, out nuint keyspaceLen);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern ulong row_set_type_info_get_udt_field_count(IntPtr typeInfoHandle);
+        unsafe private static extern nuint row_set_type_info_get_udt_field_count(IntPtr typeInfoHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern int row_set_type_info_get_udt_field(IntPtr typeInfoHandle, ulong index, out IntPtr fieldNamePtr, out nint fieldNameLen, out IntPtr fieldTypeHandle);
+        unsafe private static extern int row_set_type_info_get_udt_field(IntPtr typeInfoHandle, nuint index, out IntPtr fieldNamePtr, out nuint fieldNameLen, out IntPtr fieldTypeHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern int row_set_type_info_get_map_children(IntPtr typeInfoHandle, out IntPtr keyHandle, out IntPtr valueHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern ulong row_set_type_info_get_tuple_field_count(IntPtr typeInfoHandle);
+        unsafe private static extern nuint row_set_type_info_get_tuple_field_count(IntPtr typeInfoHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern int row_set_type_info_get_tuple_field(IntPtr typeInfoHandle, ulong index, out IntPtr fieldHandle);
+        unsafe private static extern int row_set_type_info_get_tuple_field(IntPtr typeInfoHandle, nuint index, out IntPtr fieldHandle);
 
         private bool _exhausted = false;
 
@@ -213,9 +213,9 @@ namespace Cassandra
                         // For Tuple: get amount of fields and then each field
                         unsafe
                         {
-                            ulong count = row_set_type_info_get_tuple_field_count(handle);
+                            nuint count = row_set_type_info_get_tuple_field_count(handle);
                             var tupleInfo = new TupleColumnInfo();
-                            for (ulong i = 0; i < count; i++)
+                            for (nuint i = 0; i < count; i++)
                             {
                                 if (row_set_type_info_get_tuple_field(handle, i, out IntPtr fieldHandle) != 0)
                                 {
@@ -231,15 +231,15 @@ namespace Cassandra
                         // For UDT: get name+keyspace and then the fields
                         unsafe
                         {
-                            if (row_set_type_info_get_udt_name(handle, out IntPtr udtNamePtr, out nint udtNameLen, out IntPtr udtKsPtr, out nint udtKsLen) != 0)
+                            if (row_set_type_info_get_udt_name(handle, out IntPtr udtNamePtr, out nuint udtNameLen, out IntPtr udtKsPtr, out nuint udtKsLen) != 0)
                             {
                                 var name = (udtNamePtr == IntPtr.Zero || udtNameLen == 0) ? string.Empty : Marshal.PtrToStringUTF8(udtNamePtr, (int)udtNameLen);
                                 var ks = (udtKsPtr == IntPtr.Zero || udtKsLen == 0) ? string.Empty : Marshal.PtrToStringUTF8(udtKsPtr, (int)udtKsLen);
                                 var udtInfo = new UdtColumnInfo(name ?? "");
-                                ulong fcount = row_set_type_info_get_udt_field_count(handle);
-                                for (ulong i = 0; i < fcount; i++)
+                                nuint fcount = row_set_type_info_get_udt_field_count(handle);
+                                for (nuint i = 0; i < fcount; i++)
                                 {
-                                    if (row_set_type_info_get_udt_field(handle, i, out IntPtr fieldNamePtr, out nint fieldNameLen, out IntPtr fieldTypeHandle) != 0)
+                                    if (row_set_type_info_get_udt_field(handle, i, out IntPtr fieldNamePtr, out nuint fieldNameLen, out IntPtr fieldTypeHandle) != 0)
                                     {
                                         var fname = (fieldNamePtr == IntPtr.Zero || fieldNameLen == 0) ? string.Empty : Marshal.PtrToStringUTF8(fieldNamePtr, (int)fieldNameLen);
                                         var fcode = (ColumnTypeCode)row_set_type_info_get_code(fieldTypeHandle);
@@ -279,14 +279,14 @@ namespace Cassandra
         private static CqlColumn[] ExtractColumnsFromRust(IntPtr rowSetPtr)
         {
             // Query Rust for the number of columns
-            var count = (int)row_set_get_columns_count(rowSetPtr);
+            var count = row_set_get_columns_count(rowSetPtr);
             if (count <= 0)
             {
                 return [];
             }
 
             var columns = new CqlColumn[count];
-            for (int i = 0; i < count; i++)
+            for (nuint i = 0; i < count; i++)
             {
                 columns[i] = new CqlColumn();
             }
@@ -305,7 +305,7 @@ namespace Cassandra
             return columns;
         }
 
-        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nint, IntPtr, nint, IntPtr, nint, IntPtr, nint, nint, IntPtr, nint, void> setColumnMetaPtr = &SetColumnMeta;
+        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nuint, IntPtr, nuint, IntPtr, nuint, IntPtr, nuint, byte, IntPtr, byte, void> setColumnMetaPtr = &SetColumnMeta;
 
         /// <summary>
         /// This shall be called by Rust code for each column.
@@ -313,16 +313,16 @@ namespace Cassandra
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
         private static void SetColumnMeta(
             IntPtr columnsPtr,
-            nint columnIndex,
+            nuint columnIndex,
             IntPtr namePtr,
-            nint nameLen,
+            nuint nameLen,
             IntPtr keyspacePtr,
-            nint keyspaceLen,
+            nuint keyspaceLen,
             IntPtr tablePtr,
-            nint tableLen,
-            nint typeCode,
+            nuint tableLen,
+            byte typeCode,
             IntPtr typeInfoPtr,
-            nint isFrozen
+            byte isFrozen
         )
         {
             unsafe
@@ -336,16 +336,17 @@ namespace Cassandra
                 // 2. array length:
                 //   - the referenced CqlColumn[] array has length equal to the number of columns in the RowSet.
                 //   - columnIndex is within bounds of the columns array.
+                int index = (int)columnIndex;
                 CqlColumn[] columns = Unsafe.Read<CqlColumn[]>((void*)columnsPtr);
                 {
-                    if (columnIndex < 0 || columnIndex >= columns.Length) return;
+                    if (index < 0 || index >= columns.Length) return;
 
-                    var col = columns[columnIndex];
+                    var col = columns[index];
                     col.Name = (namePtr == IntPtr.Zero || nameLen == 0) ? string.Empty : Marshal.PtrToStringUTF8(namePtr, (int)nameLen);
                     col.Keyspace = (keyspacePtr == IntPtr.Zero || keyspaceLen == 0) ? string.Empty : Marshal.PtrToStringUTF8(keyspacePtr, (int)keyspaceLen);
                     col.Table = (tablePtr == IntPtr.Zero || tableLen == 0) ? string.Empty : Marshal.PtrToStringUTF8(tablePtr, (int)tableLen);
                     col.TypeCode = (ColumnTypeCode)typeCode;
-                    col.Index = (int)columnIndex;
+                    col.Index = index;
                     col.Type = MapTypeFromCode(col.TypeCode);
                     col.IsFrozen = isFrozen != 0;
 
@@ -413,7 +414,7 @@ namespace Cassandra
             return new Row(values, Columns, columnIndexes);
         }
 
-        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, nint, IntPtr, IntPtr, nint, void> deserializeValue = &DeserializeValue;
+        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, nuint, IntPtr, IntPtr, nuint, void> deserializeValue = &DeserializeValue;
 
         /// <summary>
         /// This shall be called by Rust code for each column in a row.
@@ -422,10 +423,10 @@ namespace Cassandra
         private static void DeserializeValue(
             IntPtr columnsPtr,
             IntPtr valuesPtr,
-            nint valueIndex,
+            nuint valueIndex,
             IntPtr serializerPtr,
             IntPtr frameSlicePtr,
-            nint length
+            nuint length
         )
         {
             try
