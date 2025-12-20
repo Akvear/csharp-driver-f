@@ -1,9 +1,14 @@
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
 use scylla::errors::{NewSessionError, PagerExecutionError, PrepareError};
+use scylla_cql::serialize::row::SerializedValues;
 
 use crate::CSharpStr;
-use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, FFI, FromArc};
+use crate::ffi::{
+    ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr, FFI,
+    FromArc,
+};
+use crate::pre_serialized_values::pre_serialized_values::PreSerializedValues;
 use crate::prepared_statement::BridgedPreparedStatement;
 use crate::row_set::RowSet;
 use crate::task::{BridgedFuture, Tcb};
@@ -74,6 +79,7 @@ pub extern "C" fn session_query(
     // Convert the raw C string to a Rust string.
     let statement = statement.as_cstr().unwrap().to_str().unwrap().to_owned();
     let bridged_session = ArcFFI::cloned_from_ptr(session_ptr).unwrap();
+    //TODO: use safe error propagation mechanism
 
     tracing::trace!(
         "[FFI] Scheduling statement for execution: \"{}\"",
@@ -87,7 +93,52 @@ pub extern "C" fn session_query(
         Ok(RowSet {
             pager: std::sync::Mutex::new(Some(query_pager)),
         })
-    })
+    });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn session_query_with_values(
+    tcb: Tcb,
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+    statement: CSharpStr<'_>,
+    values_ptr: BridgedOwnedExclusivePtr<PreSerializedValues>,
+) {
+    // Take ownership of the pre-serialized values box so we can move it into the async task.
+    // Important: the order of operations here matters. We need to ensure we take ownership of the box first. In case any further operations panic,
+    // we don't want to leak the pointer.
+    // Note: this transfers ownership, so the C# side must not free it!
+    let values_box = BoxFFI::from_ptr(values_ptr).expect("non-null PreSerializedValues pointer");
+
+    // Convert the raw C string to a Rust string.
+    let statement = statement.as_cstr().unwrap().to_str().unwrap().to_owned();
+    let bridged_session = ArcFFI::cloned_from_ptr(session_ptr).unwrap();
+
+    //TODO: use safe error propagation mechanism
+
+    BridgedFuture::spawn::<_, _, PagerExecutionError>(tcb, async move {
+        tracing::debug!(
+            "[FFI] Preparing and executing statement with pre-serialized values \"{}\"",
+            statement
+        );
+
+        // First, prepare the statement.
+        let prepared = bridged_session.inner.prepare(statement).await?;
+
+        // Convert our FFI wrapper into SerializedValues by consuming it.
+        let serialized_values: SerializedValues = values_box.into_serialized_values();
+
+        // Now execute using the internal execute_iter_preserialized helper.
+        let query_pager = bridged_session
+            .inner
+            .execute_iter_preserialized(prepared, serialized_values)
+            .await?;
+
+        tracing::trace!("[FFI] Prepared statement executed with pre-serialized values");
+
+        Ok(RowSet {
+            pager: std::sync::Mutex::new(Some(query_pager)),
+        })
+    });
 }
 
 #[unsafe(no_mangle)]

@@ -49,11 +49,22 @@ namespace Cassandra
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
 
+        /// <summary>
+        /// Executes a query with already-serialized values.
+        /// 
+        /// Note: This method transfers ownership of valuesPtr to native code, thus invalidating the SerializedValues instance after use.
+        /// Values, once passed to this method, should not be used again in managed code, it's the Rust side's responsibility to handle retries
+        /// and to free the memory.
+        /// </summary>
+        
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_use_keyspace(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspace, int isCaseSensitive);
-
+        
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_prepare(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void session_query_with_values(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr valuesPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query_bound(Tcb tcb, IntPtr session, IntPtr preparedStatement);
@@ -337,7 +348,7 @@ namespace Cassandra
                     TaskCompletionSource<IntPtr> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
                     Tcb tcb = Tcb.WithTcs(tcs);
 
-                    if (queryValues == null || queryValues.Length == 0)
+                    if (queryValues.Length == 0)
                     {
                         // Use session_use_keyspace for USE statements and session_query for other statements.
                         // TODO: perform whole logic related to USE statements on the Rust side.
@@ -354,8 +365,14 @@ namespace Cassandra
                     }
                     else
                     {
-                        // TODO: support queries with values.
-                        throw new NotImplementedException("Regular statements with values are not yet supported");
+                        //TODO: abstract value serialization and the Rust-native function out of here
+                        
+                        session_query_with_values(
+                            tcb, 
+                            handle, 
+                            queryString, 
+                            SerializationHandler.InitializeSerializedValues(queryValues).TakeNativeHandle()
+                        );
                     }
 
                     return tcs.Task.ContinueWith(t =>
@@ -408,8 +425,6 @@ namespace Cassandra
                     throw new ArgumentException("Unsupported statement type");
                     // break;
             }
-
-            throw new NotImplementedException("ExecuteAsync is not yet implemented"); // FIXME: bridge with Rust execution profiles.
         }
         public IDriverMetrics GetMetrics()
         {

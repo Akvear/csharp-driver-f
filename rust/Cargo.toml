@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 scylla = { version = "1.4.1", git = "https://github.com/scylladb-zpp-2025-csharp-rs-driver/scylla-rust-driver.git", branch = "main" }
+scylla-cql = { git = "https://github.com/scylladb-zpp-2025-csharp-rs-driver/scylla-rust-driver.git", branch = "main", package = "scylla-cql" }
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 thiserror = "2"

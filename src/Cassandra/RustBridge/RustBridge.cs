@@ -1,7 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
-using System.Threading;
 using System.Threading.Tasks;
 
 /* PInvoke has an overhead of between 10 and 30 x86 instructions per call.
@@ -13,6 +12,59 @@ using System.Threading.Tasks;
 
 namespace Cassandra
 {
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct FfiError
+    {
+        public int Code;
+        public IntPtr Message;
+    }
+
+    internal static class FfiErrorHelpers
+    {
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        private static extern void ffi_error_free_message(IntPtr msg);
+
+        /// <summary>
+        /// Executes a native operation and throws a managed exception if the returned FfiError
+        /// indicates failure. Optionally accepts a human-readable operation name that will be
+        /// included in the thrown message for easier debugging.
+        /// </summary>
+        internal static void ExecuteAndThrowIfFails(Func<FfiError> operation, string operationName = null)
+        {
+            var err = operation();
+            ThrowIfError(err, operationName);
+        }
+
+        private static void ThrowIfError(FfiError error, string operationName = null)
+        {
+            if (error.Code == 0)
+            {
+                return;
+            }
+
+            var message = "Unknown error";
+            if (error.Message != IntPtr.Zero)
+            {
+                var nativeString = Marshal.PtrToStringUTF8(error.Message);
+                if (!string.IsNullOrEmpty(nativeString))
+                {
+                    message = nativeString;
+                }
+                
+                ffi_error_free_message(error.Message);
+            }
+
+            if (string.IsNullOrEmpty(operationName))
+            {
+                throw new InvalidOperationException($"Rust call failed with code {error.Code}: {message}");
+            }
+            else
+            {
+                throw new InvalidOperationException($"Operation '{operationName}' failed with code {error.Code}: {message}");
+            }
+        }
+    }
+
     /// <summary>
     /// Task Control Block groups entities crucial for controlling Task execution
     /// from Rust code. It's intended to:
