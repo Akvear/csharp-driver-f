@@ -112,5 +112,14 @@ namespace Cassandra.IntegrationTests.Core
                 Diagnostics.CassandraTraceSwitch.Level = originalLevel;
             }
         }
+        
+        [Test]
+        public void Session_Keyspace_Does_Not_Exist_On_Change_Throws()
+        {
+            var localCluster = GetNewTemporaryCluster();
+            var localSession = localCluster.Connect();
+            var ex = Assert.Throws<InvalidQueryException>(() => localSession.ChangeKeyspace("THIS_KEYSPACE_DOES_NOT_EXIST_EITHER"));
+            Assert.True(ex.Message.ToLower().Contains("keyspace"));
+        }
     }
 }
