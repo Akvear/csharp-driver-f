@@ -12,6 +12,50 @@ using System.Threading.Tasks;
 
 namespace Cassandra
 {
+    /// <summary>
+    /// Represents a UTF-8 string passed over FFI boundary.
+    /// Used to pass strings from Rust to C#.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal readonly struct FFIString
+    {
+        internal readonly IntPtr ptr;
+        internal readonly nint len;
+
+        internal FFIString(IntPtr ptr, nint len)
+        {
+            this.ptr = ptr;
+            this.len = len;
+        }
+
+        internal string ToManagedString()
+        {
+            return Marshal.PtrToStringUTF8(ptr, (int)len);
+        }
+    }
+
+    /// <summary>
+    /// Represents a byte slice passed over FFI boundary.
+    /// Used to pass byte arrays from Rust to C#.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal readonly struct FFIByteSlice
+    {
+        internal readonly IntPtr ptr;
+        internal readonly nint len;
+
+        internal FFIByteSlice(IntPtr ptr, nint len)
+        {
+            this.ptr = ptr;
+            this.len = len;
+        }
+
+        internal unsafe Span<byte> ToSpan()
+        {
+            return new Span<byte>((void*)ptr, (int)len);
+        }
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     internal struct FfiError
     {
@@ -70,7 +114,7 @@ namespace Cassandra
     /// from Rust code. It's intended to:
     /// - hide some complexity of the interop,
     /// - reduce code duplication,
-    /// - squeeze 3 native function parameters into 1.
+    /// - squeeze 4 native function parameters into 1.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     internal readonly struct Tcb
@@ -95,11 +139,21 @@ namespace Cassandra
         /// </summary>
         private readonly IntPtr fail_task;
 
+        /// <summary>
+        /// Pointer to a static, unmanaged table of exception constructors.
+        /// Rust reads constructors from this table to build managed exceptions.
+        /// </summary>
+        private readonly IntPtr constructors;
+
         private Tcb(IntPtr tcs, IntPtr completeTask, IntPtr failTask)
         {
             this.tcs = tcs;
             this.complete_task = completeTask;
             this.fail_task = failTask;
+            unsafe
+            {
+                this.constructors = (IntPtr)RustBridgeGlobals.ConstructorsPtr;
+            }
         }
 
         // This is the only way to get a function pointer to a method decorated
@@ -116,6 +170,51 @@ namespace Cassandra
         // decorated with [UnmanagedCallersOnly].
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> completeTaskDel = &RustBridge.CompleteTask;
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> failTaskDel = &RustBridge.FailTask;
+
+        // Exception constructors passed to Rust via TCB
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIString, IntPtr> AlreadyExistsConstructorPtr = &AlreadyExistsException.AlreadyExistsExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> FunctionFailureExceptionConstructorPtr = &FunctionFailureException.FunctionFailureExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> InvalidConfigurationInQueryExceptionConstructorPtr = &InvalidConfigurationInQueryException.InvalidConfigurationInQueryExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> InvalidQueryConstructorPtr = &InvalidQueryException.InvalidQueryExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> NoHostAvailableExceptionConstructorPtr = &NoHostAvailableException.NoHostAvailableExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, int, IntPtr> OperationTimedOutExceptionConstructorPtr = &OperationTimedOutException.OperationTimedOutExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIByteSlice, IntPtr> PreparedQueryNotFoundExceptionConstructorPtr = &PreparedQueryNotFoundException.PreparedQueryNotFoundExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> RequestInvalidExceptionConstructorPtr = &RequestInvalidException.RequestInvalidExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> RustExceptionConstructorPtr = &RustException.RustExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> SyntaxErrorExceptionConstructorPtr = &SyntaxError.SyntaxErrorFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> TraceRejectedExceptionConstructorPtr = &TraceRetrievalException.TraceRetrievalExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> TruncateExceptionConstructorPtr = &TruncateException.TruncateExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> UnauthorizedExceptionConstructorPtr = &UnauthorizedException.UnauthorizedExceptionFromRust;
+
+        /// <summary>
+        /// Static holder for the exception constructors table.
+        /// Allocated once and reused for all TCBs.
+        /// Add other global data here as needed.
+        /// </summary>
+        public static unsafe class RustBridgeGlobals
+        {
+            public static readonly Constructors* ConstructorsPtr;
+
+            static RustBridgeGlobals()
+            {
+                ConstructorsPtr = (Constructors*)NativeMemory.Alloc((nuint)sizeof(Constructors));
+                *ConstructorsPtr = new Constructors(
+                    (IntPtr)AlreadyExistsConstructorPtr,
+                    (IntPtr)FunctionFailureExceptionConstructorPtr,
+                    (IntPtr)InvalidConfigurationInQueryExceptionConstructorPtr,
+                    (IntPtr)InvalidQueryConstructorPtr,
+                    (IntPtr)NoHostAvailableExceptionConstructorPtr,
+                    (IntPtr)OperationTimedOutExceptionConstructorPtr,
+                    (IntPtr)PreparedQueryNotFoundExceptionConstructorPtr,
+                    (IntPtr)RequestInvalidExceptionConstructorPtr,
+                    (IntPtr)RustExceptionConstructorPtr,
+                    (IntPtr)SyntaxErrorExceptionConstructorPtr,
+                    (IntPtr)TraceRejectedExceptionConstructorPtr,
+                    (IntPtr)TruncateExceptionConstructorPtr,
+                    (IntPtr)UnauthorizedExceptionConstructorPtr
+                );
+            }
+        }
 
         internal static Tcb WithTcs(TaskCompletionSource<IntPtr> tcs)
         {
@@ -140,6 +239,60 @@ namespace Cassandra
                 IntPtr failTaskPtr = (IntPtr)failTaskDel;
                 return new Tcb(tcsPtr, completeTaskPtr, failTaskPtr);
             }
+        }
+    }
+
+    /// <summary>
+    /// Table of exception constructors passed to Rust via TCB.
+    /// Rust reads constructors from this table to build managed exceptions.
+    /// Any changes to this struct must be mirrored in RustBridgeGlobals 
+    /// and in Rust code in the exact same order (alphabetical).
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal readonly struct Constructors
+    {
+        internal readonly IntPtr already_exists_constructor;
+        internal readonly IntPtr function_failure_exception_constructor;
+        internal readonly IntPtr invalid_configuration_in_query_constructor;
+        internal readonly IntPtr invalid_query_constructor;
+        internal readonly IntPtr no_host_available_exception_constructor;
+        internal readonly IntPtr operation_timed_out_exception_constructor;
+        internal readonly IntPtr prepared_query_not_found_exception_constructor;
+        internal readonly IntPtr request_invalid_exception_constructor;
+        internal readonly IntPtr rust_exception_constructor;
+        internal readonly IntPtr syntax_error_exception_constructor;
+        internal readonly IntPtr trace_rejected_exception_constructor;
+        internal readonly IntPtr truncate_exception_constructor;
+        internal readonly IntPtr unauthorized_exception_constructor;
+
+        internal Constructors(
+            IntPtr alreadyExistsException,
+            IntPtr functionFailureException,
+            IntPtr invalidConfigurationInQueryException,
+            IntPtr invalidQueryException,
+            IntPtr noHostAvailableException,
+            IntPtr operationTimedOutException,
+            IntPtr preparedQueryNotFoundException,
+            IntPtr requestInvalidException,
+            IntPtr rustException,
+            IntPtr syntaxErrorException,
+            IntPtr traceRejectedException,
+            IntPtr truncateException,
+            IntPtr unauthorizedException)
+        {
+            already_exists_constructor = alreadyExistsException;
+            function_failure_exception_constructor = functionFailureException;
+            invalid_configuration_in_query_constructor = invalidConfigurationInQueryException;
+            invalid_query_constructor = invalidQueryException;
+            no_host_available_exception_constructor = noHostAvailableException;
+            operation_timed_out_exception_constructor = operationTimedOutException;
+            prepared_query_not_found_exception_constructor = preparedQueryNotFoundException;
+            request_invalid_exception_constructor = requestInvalidException;
+            rust_exception_constructor = rustException;
+            syntax_error_exception_constructor = syntaxErrorException;
+            trace_rejected_exception_constructor = traceRejectedException;
+            truncate_exception_constructor = truncateException;
+            unauthorized_exception_constructor = unauthorizedException;
         }
     }
 
@@ -188,12 +341,12 @@ namespace Cassandra
         /// This shall be called by Rust code when the operation failed.
         /// </summary>
         //
-        // Signature in Rust: extern "C" fn(tcs: *mut c_void, error_msg: *const c_char)
+        // Signature in Rust: extern "C" fn(tcs: *mut c_void, exception_handle: ExceptionPtr)
         //
         // This attribute makes the method callable from native code.
         // It also allows taking a function pointer to the method.
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static void FailTask(IntPtr tcsPtr, IntPtr errorMsgPtr)
+        internal static void FailTask(IntPtr tcsPtr, IntPtr exceptionPtr)
         {
             try
             {
@@ -202,16 +355,42 @@ namespace Cassandra
 
                 if (handle.Target is TaskCompletionSource<IntPtr> tcs)
                 {
-                    // Interpret as ANSI C string (nul-terminated)
-                    string errorMsg = Marshal.PtrToStringUTF8(errorMsgPtr)!;
-
-                    // Map Rust errors to appropriate C# exceptions
-                    Exception exception = MapRustErrorToException(errorMsg);
-                    tcs.SetException(exception);
-
-                    // Free the handle so the TCS can be collected once no longer used
-                    // by the C# code.
-                    handle.Free();
+                    // Create the exception to pass to the TCS.
+                    Exception exception;
+                    try 
+                    {
+                        if (exceptionPtr != IntPtr.Zero)
+                        {
+                            // Recover the exception from the GCHandle passed from Rust.
+                            var exHandle = GCHandle.FromIntPtr(exceptionPtr);
+                            if (exHandle.Target is Exception ex)
+                            {
+                                exception = ex;
+                            }
+                            else
+                            {
+                                // TODO: Decide whether to abort program or fallback to a generic exception?
+                                Console.Error.WriteLine($"[FFI] FailTask: exceptionPtr did not reference an Exception.");
+                                exception = new RustException("Unknown error from Rust");
+                            }
+                            exHandle.Free();
+                        }
+                        else
+                        {
+                            // Fallback to a generic RustException if no exception was passed.
+                            exception = new RustException("Unknown error from Rust");
+                        }
+                        tcs.SetException(exception);
+                    } 
+                    finally 
+                    {
+                        // Free the handle so the TCS can be collected once no longer used
+                        // by the C# code.
+                        if (handle.IsAllocated)
+                        {
+                            handle.Free();
+                        }
+                    }
 
                     Console.Error.WriteLine($"[FFI] FailTask done.");
                 }
@@ -224,27 +403,6 @@ namespace Cassandra
             {
                 Console.Error.WriteLine($"[FFI] FailTask threw exception: {ex}");
             }
-        }
-
-        // TODO: Remove this method once we have proper error handling in the driver.
-        private static Exception MapRustErrorToException(string errorMsg)
-        {
-            // Check for connection-related errors that should be NoHostAvailableException
-            if (errorMsg.Contains("Connection refused"))
-            {
-                return new NoHostAvailableException(errorMsg);
-            }
-
-            // Check for invalid query errors (e.g., keyspace doesn't exist)
-            var lowerMsg = errorMsg.ToLower();
-            if (lowerMsg.Contains("keyspace") || 
-                lowerMsg.Contains("does not exist"))
-            {
-                return new InvalidQueryException(errorMsg);
-            }
-
-            // Default to RustException for other errors
-            return new RustException(errorMsg);
         }
     }
 }
