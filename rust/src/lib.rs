@@ -25,22 +25,6 @@ impl<'a> CSharpStr<'a> {
     }
 }
 
-/// Represents a string passed over FFI from Rust to C#.
-/// Safety: `ptr` must be a valid pointer to a UTF-8 encoded string of length `len`.
-#[repr(C)]
-pub struct FFIString {
-    pub ptr: *const u8,
-    pub len: usize,
-}
-
-/// Represents a byte slice passed over FFI from Rust to C#.
-/// Safety: `ptr` must be a valid pointer to a byte array of length `len`.
-#[repr(C)]
-pub struct FFIByteSlice {
-    pub ptr: *const u8,
-    pub len: usize,
-}
-
 /// Simple error struct that can be returned over FFI.
 /// TODO: replace with a more general mechanism.
 #[repr(C)]

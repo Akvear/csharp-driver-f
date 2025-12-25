@@ -1,4 +1,5 @@
-use crate::{FFIByteSlice, FFIString, FfiPtr};
+use crate::FfiPtr;
+use crate::ffi::{FFIByteSlice, FFIStr};
 use scylla::errors::{
     ConnectionError, ConnectionPoolError, DbError, MetadataError, NewSessionError, NextPageError,
     PagerExecutionError, PrepareError, RequestAttemptError, RequestError,
@@ -28,7 +29,7 @@ impl<T> Debug for FfiPtr<'static, T> {
 }
 
 #[repr(transparent)]
-pub struct RustExceptionConstructor(unsafe extern "C" fn(message: FFIString) -> ExceptionPtr);
+pub struct RustExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr);
 
 impl RustExceptionConstructor {
     /// Creates a generic C# exception for unexpected Rust errors.
@@ -37,10 +38,7 @@ impl RustExceptionConstructor {
     /// across the FFI boundary to construct the managed exception.
     pub fn construct_from_rust(&self, err: impl Display) -> ExceptionPtr {
         let message = format!("Rust exception: {}", err);
-        let ffi_message = FFIString {
-            ptr: message.as_str().as_ptr(),
-            len: message.len(),
-        };
+        let ffi_message = FFIStr::new(&message);
         unsafe { (self.0)(ffi_message) }
     }
 }
@@ -48,15 +46,12 @@ impl RustExceptionConstructor {
 /// FFI constructor for C# `FunctionFailureException`.
 #[repr(transparent)]
 pub struct FunctionFailureExceptionConstructor(
-    unsafe extern "C" fn(message: FFIString) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
 );
 
 impl FunctionFailureExceptionConstructor {
     pub fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
+        let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
 }
@@ -64,15 +59,12 @@ impl FunctionFailureExceptionConstructor {
 /// FFI constructor for C# `InvalidConfigurationInQueryException`.
 #[repr(transparent)]
 pub struct InvalidConfigurationInQueryExceptionConstructor(
-    unsafe extern "C" fn(message: FFIString) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr) -> ExceptionPtr,
 );
 
 impl InvalidConfigurationInQueryExceptionConstructor {
     pub fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
+        let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
 }
@@ -80,15 +72,12 @@ impl InvalidConfigurationInQueryExceptionConstructor {
 /// FFI constructor for C# `NoHostAvailableException`.
 #[repr(transparent)]
 pub struct NoHostAvailableExceptionConstructor(
-    unsafe extern "C" fn(message: FFIString) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr) -> ExceptionPtr,
 );
 
 impl NoHostAvailableExceptionConstructor {
     pub fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
+        let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
 }
@@ -96,15 +85,12 @@ impl NoHostAvailableExceptionConstructor {
 /// FFI constructor for C# `OperationTimedOutException`.
 #[repr(transparent)]
 pub struct OperationTimedOutExceptionConstructor(
-    unsafe extern "C" fn(address: FFIString, timeout_ms: i32) -> ExceptionPtr,
+    unsafe extern "C" fn(address: FFIStr<'_>, timeout_ms: i32) -> ExceptionPtr,
 );
 
 impl OperationTimedOutExceptionConstructor {
     pub fn construct_from_rust(&self, address: &str, timeout_ms: i32) -> ExceptionPtr {
-        let addr = FFIString {
-            ptr: address.as_ptr(),
-            len: address.len(),
-        };
+        let addr = FFIStr::new(address);
         unsafe { (self.0)(addr, timeout_ms) }
     }
 }
@@ -112,7 +98,7 @@ impl OperationTimedOutExceptionConstructor {
 /// FFI constructor for C# `PreparedQueryNotFoundException`.
 #[repr(transparent)]
 pub struct PreparedQueryNotFoundExceptionConstructor(
-    unsafe extern "C" fn(message: FFIString, unknown_id: FFIByteSlice) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>, unknown_id: FFIByteSlice<'_>) -> ExceptionPtr,
 );
 
 impl PreparedQueryNotFoundExceptionConstructor {
@@ -120,14 +106,8 @@ impl PreparedQueryNotFoundExceptionConstructor {
     ///
     /// `unknown_id` is the raw statement id bytes associated with the error.
     pub fn construct_from_rust(&self, message: &str, unknown_id: &[u8]) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
-        let unknown_id = FFIByteSlice {
-            ptr: unknown_id.as_ptr(),
-            len: unknown_id.len(),
-        };
+        let message = FFIStr::new(message);
+        let unknown_id = FFIByteSlice::new(unknown_id);
         unsafe { (self.0)(message, unknown_id) }
     }
 }
@@ -136,16 +116,13 @@ impl PreparedQueryNotFoundExceptionConstructor {
 /// FFI constructor for C# `RequestInvalidException` (currently unused).
 #[repr(transparent)]
 pub struct RequestInvalidExceptionConstructor(
-    unsafe extern "C" fn(message: FFIString) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
 );
 
 impl RequestInvalidExceptionConstructor {
     #[allow(dead_code)] // Currently unused
     pub fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
+        let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
 }
@@ -153,15 +130,12 @@ impl RequestInvalidExceptionConstructor {
 /// FFI constructor for C# `SyntaxErrorException`.
 #[repr(transparent)]
 pub struct SyntaxErrorExceptionConstructor(
-    unsafe extern "C" fn(message: FFIString) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
 );
 
 impl SyntaxErrorExceptionConstructor {
     pub fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
+        let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
 }
@@ -170,30 +144,24 @@ impl SyntaxErrorExceptionConstructor {
 /// FFI constructor for C# `TraceRejectedException` (currently unused).
 #[repr(transparent)]
 pub struct TraceRejectedExceptionConstructor(
-    unsafe extern "C" fn(message: FFIString) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
 );
 
 impl TraceRejectedExceptionConstructor {
     #[allow(dead_code)] // Currently unused
     pub fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
+        let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
 }
 
 /// FFI constructor for C# `TruncateException`.
 #[repr(transparent)]
-pub struct TruncateExceptionConstructor(unsafe extern "C" fn(message: FFIString) -> ExceptionPtr);
+pub struct TruncateExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr);
 
 impl TruncateExceptionConstructor {
     pub fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
+        let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
 }
@@ -201,15 +169,12 @@ impl TruncateExceptionConstructor {
 /// FFI constructor for C# `UnauthorizedException`.
 #[repr(transparent)]
 pub struct UnauthorizedExceptionConstructor(
-    unsafe extern "C" fn(message: FFIString) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
 );
 
 impl UnauthorizedExceptionConstructor {
     pub fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
+        let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
 }
@@ -217,34 +182,25 @@ impl UnauthorizedExceptionConstructor {
 /// FFI constructor for C# `AlreadyExistsException`.
 #[repr(transparent)]
 pub struct AlreadyExistsConstructor(
-    unsafe extern "C" fn(keyspace: FFIString, table: FFIString) -> ExceptionPtr,
+    unsafe extern "C" fn(keyspace: FFIStr<'_>, table: FFIStr<'_>) -> ExceptionPtr,
 );
 
 impl AlreadyExistsConstructor {
     /// Builds an `AlreadyExistsException` from keyspace and table names.
     pub fn construct_from_rust(&self, keyspace: &str, table: &str) -> ExceptionPtr {
-        let ks = FFIString {
-            ptr: keyspace.as_ptr(),
-            len: keyspace.len(),
-        };
-        let tb = FFIString {
-            ptr: table.as_ptr(),
-            len: table.len(),
-        };
+        let ks = FFIStr::new(keyspace);
+        let tb = FFIStr::new(table);
         unsafe { (self.0)(ks, tb) }
     }
 }
 
 /// FFI constructor for C# `InvalidQueryException`.
 #[repr(transparent)]
-pub struct InvalidQueryConstructor(unsafe extern "C" fn(message: FFIString) -> ExceptionPtr);
+pub struct InvalidQueryConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr);
 
 impl InvalidQueryConstructor {
     pub fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
-        let message = FFIString {
-            ptr: message.as_ptr(),
-            len: message.len(),
-        };
+        let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
 }
