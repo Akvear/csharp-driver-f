@@ -222,6 +222,7 @@ build-rust:
 build-rust-asan:
 	cd rust; \
 	RUSTFLAGS="\
+		${RUSTFLAGS} \
 		-Zsanitizer=address \
 		-C link-arg=-Wl,--whole-archive \
 		-C link-arg=/usr/lib/clang/20/lib/x86_64-redhat-linux-gnu/libclang_rt.asan_static.a" \
