@@ -132,7 +132,7 @@ namespace Cassandra
     /// from Rust code. It's intended to:
     /// - hide some complexity of the interop,
     /// - reduce code duplication,
-    /// - squeeze 3 native function parameters into 1.
+    /// - squeeze multiple native function parameters into 1.
     /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     internal readonly struct Tcb
@@ -157,11 +157,21 @@ namespace Cassandra
         /// </summary>
         private readonly IntPtr fail_task;
 
+        /// <summary>
+        /// Pointer to a static, unmanaged table of exception constructors.
+        /// Rust reads constructors from this table to build managed exceptions.
+        /// </summary>
+        private readonly IntPtr constructors;
+
         private Tcb(IntPtr tcs, IntPtr completeTask, IntPtr failTask)
         {
             this.tcs = tcs;
             this.complete_task = completeTask;
             this.fail_task = failTask;
+            unsafe
+            {
+                this.constructors = (IntPtr)RustBridgeGlobals.ConstructorsPtr;
+            }
         }
 
         // This is the only way to get a function pointer to a method decorated
@@ -178,6 +188,52 @@ namespace Cassandra
         // decorated with [UnmanagedCallersOnly].
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> completeTaskDel = &RustBridge.CompleteTask;
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> failTaskDel = &RustBridge.FailTask;
+
+        // Exception constructors passed to Rust via TCB
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIString, IntPtr> AlreadyExistsConstructorPtr = &AlreadyExistsException.AlreadyExistsExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> FunctionFailureExceptionConstructorPtr = &FunctionFailureException.FunctionFailureExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> InvalidConfigurationInQueryExceptionConstructorPtr = &InvalidConfigurationInQueryException.InvalidConfigurationInQueryExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> InvalidQueryConstructorPtr = &InvalidQueryException.InvalidQueryExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> NoHostAvailableExceptionConstructorPtr = &NoHostAvailableException.NoHostAvailableExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, int, IntPtr> OperationTimedOutExceptionConstructorPtr = &OperationTimedOutException.OperationTimedOutExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIByteSlice, IntPtr> PreparedQueryNotFoundExceptionConstructorPtr = &PreparedQueryNotFoundException.PreparedQueryNotFoundExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> RequestInvalidExceptionConstructorPtr = &RequestInvalidException.RequestInvalidExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> RustExceptionConstructorPtr = &RustException.RustExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> SyntaxErrorExceptionConstructorPtr = &SyntaxError.SyntaxErrorFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> TraceRetrievalExceptionConstructorPtr = &TraceRetrievalException.TraceRetrievalExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> TruncateExceptionConstructorPtr = &TruncateException.TruncateExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> UnauthorizedExceptionConstructorPtr = &UnauthorizedException.UnauthorizedExceptionFromRust;
+
+        /// <summary>
+        /// Static holder for the exception constructors table.
+        /// Allocated once and reused for all TCBs.
+        /// Add other global data here as needed.
+        /// </summary>
+        public static unsafe class RustBridgeGlobals
+        {
+            public static readonly Constructors* ConstructorsPtr;
+
+            static RustBridgeGlobals()
+            {
+                // Intentionally never freed: this is a single, process-lifetime constructors table
+                ConstructorsPtr = (Constructors*)NativeMemory.Alloc((nuint)sizeof(Constructors));
+                *ConstructorsPtr = new Constructors(
+                    (IntPtr)AlreadyExistsConstructorPtr,
+                    (IntPtr)FunctionFailureExceptionConstructorPtr,
+                    (IntPtr)InvalidConfigurationInQueryExceptionConstructorPtr,
+                    (IntPtr)InvalidQueryConstructorPtr,
+                    (IntPtr)NoHostAvailableExceptionConstructorPtr,
+                    (IntPtr)OperationTimedOutExceptionConstructorPtr,
+                    (IntPtr)PreparedQueryNotFoundExceptionConstructorPtr,
+                    (IntPtr)RequestInvalidExceptionConstructorPtr,
+                    (IntPtr)RustExceptionConstructorPtr,
+                    (IntPtr)SyntaxErrorExceptionConstructorPtr,
+                    (IntPtr)TraceRetrievalExceptionConstructorPtr,
+                    (IntPtr)TruncateExceptionConstructorPtr,
+                    (IntPtr)UnauthorizedExceptionConstructorPtr
+                );
+            }
+        }
 
         internal static Tcb WithTcs(TaskCompletionSource<IntPtr> tcs)
         {
@@ -202,6 +258,60 @@ namespace Cassandra
                 IntPtr failTaskPtr = (IntPtr)failTaskDel;
                 return new Tcb(tcsPtr, completeTaskPtr, failTaskPtr);
             }
+        }
+    }
+
+    /// <summary>
+    /// Table of exception constructors passed to Rust via TCB.
+    /// Rust reads constructors from this table to build managed exceptions.
+    /// Any changes to this struct must be mirrored in RustBridgeGlobals 
+    /// and in Rust code in the exact same order (alphabetical).
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal readonly struct Constructors
+    {
+        internal readonly IntPtr already_exists_constructor;
+        internal readonly IntPtr function_failure_exception_constructor;
+        internal readonly IntPtr invalid_configuration_in_query_constructor;
+        internal readonly IntPtr invalid_query_constructor;
+        internal readonly IntPtr no_host_available_exception_constructor;
+        internal readonly IntPtr operation_timed_out_exception_constructor;
+        internal readonly IntPtr prepared_query_not_found_exception_constructor;
+        internal readonly IntPtr request_invalid_exception_constructor;
+        internal readonly IntPtr rust_exception_constructor;
+        internal readonly IntPtr syntax_error_exception_constructor;
+        internal readonly IntPtr trace_retrieval_exception_constructor;
+        internal readonly IntPtr truncate_exception_constructor;
+        internal readonly IntPtr unauthorized_exception_constructor;
+
+        internal Constructors(
+            IntPtr alreadyExistsException,
+            IntPtr functionFailureException,
+            IntPtr invalidConfigurationInQueryException,
+            IntPtr invalidQueryException,
+            IntPtr noHostAvailableException,
+            IntPtr operationTimedOutException,
+            IntPtr preparedQueryNotFoundException,
+            IntPtr requestInvalidException,
+            IntPtr rustException,
+            IntPtr syntaxErrorException,
+            IntPtr traceRetrievalException,
+            IntPtr truncateException,
+            IntPtr unauthorizedException)
+        {
+            already_exists_constructor = alreadyExistsException;
+            function_failure_exception_constructor = functionFailureException;
+            invalid_configuration_in_query_constructor = invalidConfigurationInQueryException;
+            invalid_query_constructor = invalidQueryException;
+            no_host_available_exception_constructor = noHostAvailableException;
+            operation_timed_out_exception_constructor = operationTimedOutException;
+            prepared_query_not_found_exception_constructor = preparedQueryNotFoundException;
+            request_invalid_exception_constructor = requestInvalidException;
+            rust_exception_constructor = rustException;
+            syntax_error_exception_constructor = syntaxErrorException;
+            trace_retrieval_exception_constructor = traceRetrievalException;
+            truncate_exception_constructor = truncateException;
+            unauthorized_exception_constructor = unauthorizedException;
         }
     }
 

@@ -7,6 +7,14 @@ use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 
 use crate::FfiPtr;
+use crate::error_conversion::{
+    AlreadyExistsConstructor, FunctionFailureExceptionConstructor,
+    InvalidConfigurationInQueryExceptionConstructor, InvalidQueryConstructor,
+    NoHostAvailableExceptionConstructor, OperationTimedOutExceptionConstructor,
+    PreparedQueryNotFoundExceptionConstructor, RequestInvalidExceptionConstructor,
+    RustExceptionConstructor, SyntaxErrorExceptionConstructor, TraceRetrievalExceptionConstructor,
+    TruncateExceptionConstructor, UnauthorizedExceptionConstructor,
+};
 use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr};
 
 /// The global Tokio runtime used to execute async tasks.
@@ -50,6 +58,29 @@ pub struct Tcb {
     tcs: TcsPtr,
     complete_task: CompleteTask,
     fail_task: FailTask,
+    // SAFETY: The memory is a leaked unmanaged allocation on the C# side.
+    // This guarantees that the pointer remains valid and is not moved or deallocated.
+    constructors: &'static ExceptionConstructors,
+}
+
+/// Collection of exception constructors passed from C#.
+/// This struct holds function pointers to create various exception types.
+/// Any changes here must be mirrored on the C# side in the exact same order (alphabetical).
+#[repr(C)]
+pub struct ExceptionConstructors {
+    pub already_exists_constructor: AlreadyExistsConstructor,
+    pub function_failure_exception_constructor: FunctionFailureExceptionConstructor,
+    pub invalid_configuration_in_query_constructor: InvalidConfigurationInQueryExceptionConstructor,
+    pub invalid_query_constructor: InvalidQueryConstructor,
+    pub no_host_available_exception_constructor: NoHostAvailableExceptionConstructor,
+    pub operation_timed_out_exception_constructor: OperationTimedOutExceptionConstructor,
+    pub prepared_query_not_found_exception_constructor: PreparedQueryNotFoundExceptionConstructor,
+    pub request_invalid_exception_constructor: RequestInvalidExceptionConstructor,
+    pub rust_exception_constructor: RustExceptionConstructor,
+    pub syntax_error_exception_constructor: SyntaxErrorExceptionConstructor,
+    pub trace_retrieval_exception_constructor: TraceRetrievalExceptionConstructor,
+    pub truncate_exception_constructor: TruncateExceptionConstructor,
+    pub unauthorized_exception_constructor: UnauthorizedExceptionConstructor,
 }
 
 /// A utility struct to bridge Rust tokio futures with C# tasks.
@@ -77,6 +108,7 @@ impl BridgedFuture {
             tcs,
             complete_task,
             fail_task,
+            constructors,
         } = tcb;
 
         RUNTIME.spawn(async move {
