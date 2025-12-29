@@ -14,6 +14,10 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
 namespace Cassandra
 {
     public class PreparedQueryNotFoundException : QueryValidationException
@@ -24,6 +28,18 @@ namespace Cassandra
             : base(message)
         {
             UnknownId = unknownId;
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr PreparedQueryNotFoundExceptionFromRust(FFIString message, FFIByteSlice unknownId)
+        {
+            string msg = message.ToManagedString();
+            byte[] unknownIdBytes = unknownId.ToSpan().ToArray();
+            var exception = new PreparedQueryNotFoundException(msg, unknownIdBytes);
+
+            GCHandle handle = GCHandle.Alloc(exception);
+            IntPtr handlePtr = GCHandle.ToIntPtr(handle);
+            return handlePtr;
         }
     }
 }

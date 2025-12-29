@@ -13,7 +13,9 @@
 //   See the License for the specific language governing permissions and
 //   limitations under the License.
 //
-
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Cassandra
 {
@@ -25,6 +27,16 @@ namespace Cassandra
         public RequestInvalidException(string message) : base(message)
         {
 
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr RequestInvalidExceptionFromRust(FFIString message)
+        {
+            string msg = message.ToManagedString();
+            var exception = new RequestInvalidException(msg);
+
+            GCHandle handle = GCHandle.Alloc(exception);
+            return GCHandle.ToIntPtr(handle);
         }
     }
 }
