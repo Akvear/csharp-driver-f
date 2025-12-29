@@ -582,3 +582,43 @@ mod tests {
     /// ```
     fn _test_arc_ffi_cannot_dereference_borrowed_after_drop() {}
 }
+
+/*
+ * Compound FFI types with length - byte slices and strings.
+ */
+
+/// Represents a byte slice passed over FFI from Rust to C#.
+/// SAFETY: `ptr` must be a valid pointer to a byte array of length `len`.
+#[repr(C)]
+pub struct FFIByteSlice<'a> {
+    ptr: BridgedBorrowedSharedPtr<'a, u8>,
+    len: usize,
+}
+
+impl<'a> FFIByteSlice<'a> {
+    pub(crate) fn new(slice: impl AsRef<[u8]>) -> Self {
+        let s = slice.as_ref();
+        let ptr = unsafe {
+            // SAFETY: slice.as_ptr() returns a valid reference to a byte slice.
+            // Lifetime is inherited from the slice reference, so it's safe to create
+            // a borrowed pointer with the same lifetime.
+            BridgedBorrowedSharedPtr::from_raw(s.as_ptr())
+        };
+        FFIByteSlice { ptr, len: s.len() }
+    }
+}
+
+/// Represents a string passed over FFI from Rust to C#.
+/// SAFETY: `slice` must be a valid pointer a UTF-8 encoded string with correctly set length.
+#[repr(transparent)]
+pub struct FFIStr<'a> {
+    slice: FFIByteSlice<'a>,
+}
+
+impl<'a> FFIStr<'a> {
+    pub(crate) fn new(s: impl AsRef<str>) -> Self {
+        Self {
+            slice: FFIByteSlice::new(s.as_ref().as_bytes()),
+        }
+    }
+}
