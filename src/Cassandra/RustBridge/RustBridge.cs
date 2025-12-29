@@ -360,12 +360,12 @@ namespace Cassandra
         /// This shall be called by Rust code when the operation failed.
         /// </summary>
         //
-        // Signature in Rust: extern "C" fn(tcs: *mut c_void, error_msg: *const c_char)
+        // Signature in Rust: extern "C" fn(tcs: *mut c_void, exception_handle: ExceptionPtr)
         //
         // This attribute makes the method callable from native code.
         // It also allows taking a function pointer to the method.
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static void FailTask(IntPtr tcsPtr, IntPtr errorMsgPtr)
+        internal static void FailTask(IntPtr tcsPtr, IntPtr exceptionPtr)
         {
             try
             {
@@ -374,16 +374,51 @@ namespace Cassandra
 
                 if (handle.Target is TaskCompletionSource<IntPtr> tcs)
                 {
-                    // Interpret as ANSI C string (nul-terminated)
-                    string errorMsg = Marshal.PtrToStringUTF8(errorMsgPtr)!;
-
-                    // Map Rust errors to appropriate C# exceptions
-                    Exception exception = MapRustErrorToException(errorMsg);
-                    tcs.SetException(exception);
-
-                    // Free the handle so the TCS can be collected once no longer used
-                    // by the C# code.
-                    handle.Free();
+                    // Create the exception to pass to the TCS.
+                    Exception exception;
+                    try
+                    {
+                        if (exceptionPtr != IntPtr.Zero)
+                        {
+                            // Recover the exception from the GCHandle passed from Rust.
+                            var exHandle = GCHandle.FromIntPtr(exceptionPtr);
+                            try
+                            {
+                                if (exHandle.Target is Exception ex)
+                                {
+                                    exception = ex;
+                                }
+                                else
+                                {
+                                    // This should never happen when everything is working correctly.
+                                    Environment.FailFast("Failed to recover Exception from GCHandle passed from Rust.");
+                                    exception = new RustException("Failed to recover Exception from GCHandle passed from Rust."); // Unreachable, required for compilation
+                                }
+                            }
+                            finally
+                            {
+                                if (exHandle.IsAllocated)
+                                {
+                                    exHandle.Free();
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Fallback to a generic RustException if no exception was passed.
+                            exception = new RustException("Unknown error from Rust");
+                        }
+                        tcs.SetException(exception);
+                    }
+                    finally
+                    {
+                        // Free the handle so the TCS can be collected once no longer used
+                        // by the C# code.
+                        if (handle.IsAllocated)
+                        {
+                            handle.Free();
+                        }
+                    }
 
                     Console.Error.WriteLine($"[FFI] FailTask done.");
                 }
@@ -396,27 +431,6 @@ namespace Cassandra
             {
                 Console.Error.WriteLine($"[FFI] FailTask threw exception: {ex}");
             }
-        }
-
-        // TODO: Remove this method once we have proper error handling in the driver.
-        private static Exception MapRustErrorToException(string errorMsg)
-        {
-            // Check for connection-related errors that should be NoHostAvailableException
-            if (errorMsg.Contains("Connection refused"))
-            {
-                return new NoHostAvailableException(errorMsg);
-            }
-
-            // Check for invalid query errors (e.g., keyspace doesn't exist)
-            var lowerMsg = errorMsg.ToLower();
-            if (lowerMsg.Contains("keyspace") || 
-                lowerMsg.Contains("does not exist"))
-            {
-                return new InvalidQueryException(errorMsg);
-            }
-
-            // Default to RustException for other errors
-            return new RustException(errorMsg);
         }
     }
 }
