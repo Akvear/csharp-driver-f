@@ -29,6 +29,19 @@ impl<'a, T> Debug for FfiPtr<'a, T> {
     }
 }
 
+impl<'a, T> FfiPtr<'a, T> {
+    pub(crate) fn null() -> Self {
+        FfiPtr {
+            ptr: None,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub(crate) fn is_null(&self) -> bool {
+        self.ptr.is_none()
+    }
+}
+
 type CSharpStr<'a> = FfiPtr<'a, c_char>;
 impl<'a> CSharpStr<'a> {
     fn as_cstr(&self) -> Option<&CStr> {
