@@ -64,40 +64,40 @@ namespace Cassandra
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         // bool does not work well with C FFI, use int instead (0 = false, non-0 = true).
-        unsafe private static extern int row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr);
+        unsafe private static extern RustBridge.FfiExceptionPackage row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr, out int numColumns, IntPtr constructorsPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern nuint row_set_get_columns_count(IntPtr rowSetPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter);
+        unsafe private static extern RustBridge.FfiExceptionPackage row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter, IntPtr constructorsPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern byte row_set_type_info_get_code(IntPtr typeInfoHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern int row_set_type_info_get_list_child(IntPtr typeInfoHandle, out IntPtr childHandle);
+        unsafe private static extern void row_set_type_info_get_list_child(IntPtr typeInfoHandle, out IntPtr childHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern int row_set_type_info_get_set_child(IntPtr typeInfoHandle, out IntPtr childHandle);
+        unsafe private static extern void row_set_type_info_get_set_child(IntPtr typeInfoHandle, out IntPtr childHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern int row_set_type_info_get_udt_name(IntPtr typeInfoHandle, out FFIString name, out FFIString keyspace);
+        unsafe private static extern void row_set_type_info_get_udt_name(IntPtr typeInfoHandle, out FFIString name, out FFIString keyspace);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern nuint row_set_type_info_get_udt_field_count(IntPtr typeInfoHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern int row_set_type_info_get_udt_field(IntPtr typeInfoHandle, nuint index, out FFIString fieldName, out IntPtr fieldTypeHandle);
+        unsafe private static extern void row_set_type_info_get_udt_field(IntPtr typeInfoHandle, nuint index, out FFIString fieldName, out IntPtr fieldTypeHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern int row_set_type_info_get_map_children(IntPtr typeInfoHandle, out IntPtr keyHandle, out IntPtr valueHandle);
+        unsafe private static extern void row_set_type_info_get_map_children(IntPtr typeInfoHandle, out IntPtr keyHandle, out IntPtr valueHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern nuint row_set_type_info_get_tuple_field_count(IntPtr typeInfoHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern int row_set_type_info_get_tuple_field(IntPtr typeInfoHandle, nuint index, out IntPtr fieldHandle);
+        unsafe private static extern void row_set_type_info_get_tuple_field(IntPtr typeInfoHandle, nuint index, out IntPtr fieldHandle);
 
         private bool _exhausted = false;
 
@@ -174,6 +174,7 @@ namespace Cassandra
             AutoPage = true;
         }
 
+        // This function is called from UnmanagedCallersOnly context - it must not throw exceptions.
         private static IColumnInfo BuildTypeInfoFromHandle(IntPtr handle, ColumnTypeCode code)
         {
             if (handle == IntPtr.Zero) return null;
@@ -185,30 +186,24 @@ namespace Cassandra
                         // For List: ask Rust for the child handle and build recursively
                         unsafe
                         {
-                            if (row_set_type_info_get_list_child(handle, out IntPtr child) != 0)
-                            {
-                                var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
-                                var childInfo = BuildTypeInfoFromHandle(child, childCode);
-                                var listInfo = new ListColumnInfo { ValueTypeCode = childCode, ValueTypeInfo = childInfo };
-                                return listInfo;
-                            }
+                            row_set_type_info_get_list_child(handle, out IntPtr child);
+                            var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
+                            var childInfo = BuildTypeInfoFromHandle(child, childCode);
+                            var listInfo = new ListColumnInfo { ValueTypeCode = childCode, ValueTypeInfo = childInfo };
+                            return listInfo;
                         }
-                        return null;
                     case ColumnTypeCode.Map:
                         // For Map: ask Rust for key/value handles
                         unsafe
                         {
-                            if (row_set_type_info_get_map_children(handle, out IntPtr keyHandle, out IntPtr valueHandle) != 0)
-                            {
-                                var keyCode = (ColumnTypeCode)row_set_type_info_get_code(keyHandle);
-                                var valueCode = (ColumnTypeCode)row_set_type_info_get_code(valueHandle);
-                                var keyInfo = BuildTypeInfoFromHandle(keyHandle, keyCode);
-                                var valueInfo = BuildTypeInfoFromHandle(valueHandle, valueCode);
-                                var mapInfo = new MapColumnInfo { KeyTypeCode = keyCode, KeyTypeInfo = keyInfo, ValueTypeCode = valueCode, ValueTypeInfo = valueInfo };
-                                return mapInfo;
-                            }
+                            row_set_type_info_get_map_children(handle, out IntPtr keyHandle, out IntPtr valueHandle);
+                            var keyCode = (ColumnTypeCode)row_set_type_info_get_code(keyHandle);
+                            var valueCode = (ColumnTypeCode)row_set_type_info_get_code(valueHandle);
+                            var keyInfo = BuildTypeInfoFromHandle(keyHandle, keyCode);
+                            var valueInfo = BuildTypeInfoFromHandle(valueHandle, valueCode);
+                            var mapInfo = new MapColumnInfo { KeyTypeCode = keyCode, KeyTypeInfo = keyInfo, ValueTypeCode = valueCode, ValueTypeInfo = valueInfo };
+                            return mapInfo;
                         }
-                        return null;
                     case ColumnTypeCode.Tuple:
                         // For Tuple: get amount of fields and then each field
                         unsafe
@@ -217,13 +212,11 @@ namespace Cassandra
                             var tupleInfo = new TupleColumnInfo();
                             for (nuint i = 0; i < count; i++)
                             {
-                                if (row_set_type_info_get_tuple_field(handle, i, out IntPtr fieldHandle) != 0)
-                                {
-                                    var fCode = (ColumnTypeCode)row_set_type_info_get_code(fieldHandle);
-                                    var fInfo = BuildTypeInfoFromHandle(fieldHandle, fCode);
-                                    var desc = new ColumnDesc { TypeCode = fCode, TypeInfo = fInfo };
-                                    tupleInfo.Elements.Add(desc);
-                                }
+                                row_set_type_info_get_tuple_field(handle, i, out IntPtr fieldHandle);
+                                var fCode = (ColumnTypeCode)row_set_type_info_get_code(fieldHandle);
+                                var fInfo = BuildTypeInfoFromHandle(fieldHandle, fCode);
+                                var desc = new ColumnDesc { TypeCode = fCode, TypeInfo = fInfo };
+                                tupleInfo.Elements.Add(desc);
                             }
                             return tupleInfo;
                         }
@@ -231,32 +224,29 @@ namespace Cassandra
                         // For UDT: get name+keyspace and then the fields
                         unsafe
                         {
-                            if (row_set_type_info_get_udt_name(handle, out FFIString udtName, out FFIString udtKs) != 0)
+                            row_set_type_info_get_udt_name(handle, out FFIString udtName, out FFIString udtKs);
+                            var name = udtName.ToManagedString();
+                            var ks = udtKs.ToManagedString();
+                            var udtInfo = new UdtColumnInfo(name ?? "");
+                            nuint fcount = row_set_type_info_get_udt_field_count(handle);
+                            for (nuint i = 0; i < fcount; i++)
                             {
-                                var name = udtName.ToManagedString();
-                                var ks = udtKs.ToManagedString();
-                                var udtInfo = new UdtColumnInfo(name ?? "");
-                                nuint fcount = row_set_type_info_get_udt_field_count(handle);
-                                for (nuint i = 0; i < fcount; i++)
+                                row_set_type_info_get_udt_field(handle, i, out FFIString fieldName, out IntPtr fieldTypeHandle);
                                 {
-                                    if (row_set_type_info_get_udt_field(handle, i, out FFIString fieldName, out IntPtr fieldTypeHandle) != 0)
-                                    {
-                                        var fname = fieldName.ToManagedString();
-                                        var fcode = (ColumnTypeCode)row_set_type_info_get_code(fieldTypeHandle);
-                                        var fInfo = BuildTypeInfoFromHandle(fieldTypeHandle, fcode);
-                                        var desc = new ColumnDesc { Name = fname, TypeCode = fcode, TypeInfo = fInfo };
-                                        udtInfo.Fields.Add(desc);
-                                    }
+                                    var fname = fieldName.ToManagedString();
+                                    var fcode = (ColumnTypeCode)row_set_type_info_get_code(fieldTypeHandle);
+                                    var fInfo = BuildTypeInfoFromHandle(fieldTypeHandle, fcode);
+                                    var desc = new ColumnDesc { Name = fname, TypeCode = fcode, TypeInfo = fInfo };
+                                    udtInfo.Fields.Add(desc);
                                 }
-                                return udtInfo;
                             }
+                            return udtInfo;
                         }
-                        return null;
                     case ColumnTypeCode.Set:
                         // For Set: ask Rust for the single element child
                         unsafe
                         {
-                            if (row_set_type_info_get_set_child(handle, out IntPtr child) != 0)
+                            row_set_type_info_get_set_child(handle, out IntPtr child);
                             {
                                 var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
                                 var childInfo = BuildTypeInfoFromHandle(child, childCode);
@@ -264,14 +254,14 @@ namespace Cassandra
                                 return setInfo;
                             }
                         }
-                        return null;
                     default:
                         return null;
                 }
             }
             catch (Exception e)
             {
-                Console.Error.WriteLine($"[FFI] BuildTypeInfoFromHandle threw: {e}");
+                // Realistically nothing throws exceptions here so there shouldn't be any exceptions to catch.
+                Environment.FailFast($"Unexpected exception in BuildTypeInfoFromHandle: {e}");
                 return null;
             }
         }
@@ -294,7 +284,9 @@ namespace Cassandra
             unsafe
             {
                 void* columnsPtr = Unsafe.AsPointer(ref columns);
-                row_set_fill_columns_metadata(rowSetPtr, (IntPtr)columnsPtr, (IntPtr)setColumnMetaPtr);
+                var res = row_set_fill_columns_metadata(rowSetPtr, (IntPtr)columnsPtr, (IntPtr)setColumnMetaPtr, (IntPtr)Tcb.RustBridgeGlobals.ConstructorsPtr);
+                // TODO: There should probably a mechanism that executes and throws if exception, similar to FFIErrorHelper.ExecuteAndThrowIfFails
+                RustBridge.ThrowIfException(res);
             }
 
             // This was recommended by ChatGPT in the general case to ensure the raw pointer is still valid.
@@ -305,13 +297,13 @@ namespace Cassandra
             return columns;
         }
 
-        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nuint, FFIString, FFIString, FFIString, byte, IntPtr, byte, void> setColumnMetaPtr = &SetColumnMeta;
+        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nuint, FFIString, FFIString, FFIString, byte, IntPtr, byte, RustBridge.FfiExceptionPackage> setColumnMetaPtr = &SetColumnMeta;
 
         /// <summary>
         /// This shall be called by Rust code for each column.
         /// </summary>
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static void SetColumnMeta(
+        private static RustBridge.FfiExceptionPackage SetColumnMeta(
             IntPtr columnsPtr,
             nuint columnIndex,
             FFIString name,
@@ -334,9 +326,15 @@ namespace Cassandra
                 //   - the referenced CqlColumn[] array has length equal to the number of columns in the RowSet.
                 //   - columnIndex is within bounds of the columns array.
                 int index = (int)columnIndex;
+                
                 CqlColumn[] columns = Unsafe.Read<CqlColumn[]>((void*)columnsPtr);
                 {
-                    if (index < 0 || index >= columns.Length) return;
+                    if (index < 0 || index >= columns.Length)
+                    {
+                        return RustBridge.FfiExceptionPackage.FromException(
+                            new RustException($"Column index {index} is out of range (0..{columns.Length - 1})")
+                        );
+                    } 
 
                     var col = columns[index];
                     col.Name = name.ToManagedString();
@@ -350,17 +348,10 @@ namespace Cassandra
                     // If a non-null type-info handle was provided by Rust, build the corresponding IColumnInfo
                     if (typeInfoPtr != IntPtr.Zero)
                     {
-                        try
-                        {
-                            col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode);
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.Error.WriteLine($"[FFI] BuildTypeInfoFromHandle threw: {ex}");
-                        }
+                        col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode);
                     }
-
                 }
+                return RustBridge.FfiExceptionPackage.Ok();
             }
         }
 #nullable enable
@@ -383,8 +374,8 @@ namespace Cassandra
             {
                 unsafe
                 {
-                    bool has_row = row_set_next_row(handle, (IntPtr)deserializeValue, columnsPtr, valuesPtr, serializerPtr) != 0;
-                    if (!has_row)
+                    var FfiExceptionPackage = row_set_next_row(handle, (IntPtr)deserializeValue, columnsPtr, valuesPtr, serializerPtr, out int numColumns, (IntPtr)Tcb.RustBridgeGlobals.ConstructorsPtr);
+                    if (numColumns == 0)
                     {
                         _exhausted = true;
                         return null;

@@ -1,14 +1,17 @@
+use core::panic;
+
 use scylla::client::pager::QueryPager;
 use scylla::cluster::metadata::CollectionType;
-use scylla::errors::DeserializationError;
 use scylla::frame::response::result::{ColumnType, NativeType};
 
 use crate::FfiPtr;
+use crate::error_conversion::FfiExceptionPackage;
 use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, FFI, FFIByteSlice, FFIStr, FromArc,
     FromRef, RefFFI,
 };
 use crate::task::BridgedFuture;
+use crate::task::ExceptionConstructors;
 
 // TO DO: Don't use mock RowSet - remove Option<> from the pager field
 #[derive(Debug)]
@@ -68,7 +71,7 @@ type SetMetadata = unsafe extern "C" fn(
     type_code: u8,
     type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
     is_frozen: u8,
-);
+) -> FfiExceptionPackage;
 
 /// Calls back into C# for each column to provide metadata.
 /// `metadata_setter` is a function pointer supplied by C# - it will be called synchronously for each column.
@@ -80,11 +83,16 @@ pub extern "C" fn row_set_fill_columns_metadata(
     row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
     columns_ptr: ColumnsPtr,
     set_metadata: SetMetadata,
-) {
+    constructors: &ExceptionConstructors,
+) -> FfiExceptionPackage {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
     let pager_guard = row_set.pager.lock().unwrap();
     let Some(pager) = pager_guard.as_ref() else {
-        return;
+        // Return a RustException built via constructors as a quick workaround.
+        let ex = constructors
+            .rust_exception_constructor
+            .construct_from_rust("RowSet has no pager to get metadata from");
+        return FfiExceptionPackage::from_exception(ex);
     };
 
     // Iterate column specs and call the metadata setter
@@ -120,7 +128,7 @@ pub extern "C" fn row_set_fill_columns_metadata(
         };
 
         unsafe {
-            set_metadata(
+            let ffi_exception_package = set_metadata(
                 columns_ptr,
                 i,
                 name,
@@ -130,8 +138,13 @@ pub extern "C" fn row_set_fill_columns_metadata(
                 type_info_handle,
                 is_frozen,
             );
+            // If there is an exception returned from callback, throw it as soon as possible
+            if ffi_exception_package.has_exception() {
+                return ffi_exception_package;
+            }
         }
     }
+    FfiExceptionPackage::ok()
 }
 
 #[derive(Clone, Copy)]
@@ -170,69 +183,105 @@ pub extern "C" fn row_set_next_row<'row_set>(
     columns_ptr: ColumnsPtr,
     values_ptr: ValuesPtr,
     serializer_ptr: SerializerPtr,
-) -> i32 {
+    out_num_columns: *mut i32,
+    constructors: &ExceptionConstructors,
+) -> FfiExceptionPackage {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
     let mut pager_guard = row_set.pager.lock().unwrap();
     let Some(pager) = pager_guard.as_mut() else {
-        return 0; // Empty RowSet has no rows
+        unsafe {
+            *out_num_columns = 0;
+        }
+        return FfiExceptionPackage::ok(); // Empty RowSet has no rows
     };
     let num_columns = pager.column_specs().len();
 
     let deserialize_fut = async {
+        // Returns Ok(true) when a row was read and deserialized,
+        // Ok(false) when there are no more rows,
+        // Err(FfiExceptionPackage) when an error occurs and should be propagated to C#.
         // TODO: consider how to handle possibility of the metadata to change between pages.
         // While unlikely, it's not impossible.
         // For now, we just assume it won't happen and ignore `_new_page_began`.
         // The problem is that C# assumes the same metadata for the whole RowSet,
         // and they are passed through `ColumnsPtr`. Currently, if the metadata changes,
         // C# code will attempt to deserialize columns with wrong types, likely leading to exceptions.
-        if let Some(Ok((mut column_iterator, _new_page_began))) = pager.next_column_iterator().await
-        {
-            // For each column in the row, we call `deserialize_value()`.
-            for value_index in 0..num_columns {
-                let raw_column = column_iterator.next().unwrap_or_else(|| {
-                    // FIXME: handle error properly, passing it to C#.
-                    #[expect(unreachable_code)]
-                    Err(DeserializationError::new(todo!(
-                        "Implement error type for too few columns - server provided less columns than claimed in the metadata"
-                    )))
-                }).unwrap(); // FIXME: handle error properly, passing it to C#.
-
-                if let Some(frame_slice) = raw_column.slice {
-                    unsafe {
-                        deserialize_value(
-                            columns_ptr,
-                            values_ptr,
-                            value_index,
-                            serializer_ptr,
-                            FFIByteSlice::new(frame_slice.as_slice()),
-                        );
+        match pager.next_column_iterator().await {
+            Some(Ok((mut column_iterator, _new_page_began))) => {
+                // For each column in the row, we call `deserialize_value()`.
+                for value_index in 0..num_columns {
+                    match column_iterator.next() {
+                        Some(Ok(raw_column)) => {
+                            if let Some(frame_slice) = raw_column.slice {
+                                unsafe {
+                                    // TODO: Check for exceptions from C# side
+                                    deserialize_value(
+                                        columns_ptr,
+                                        values_ptr,
+                                        value_index,
+                                        serializer_ptr,
+                                        FFIByteSlice::new(frame_slice.as_slice()),
+                                    );
+                                }
+                            } else {
+                                // The value is null, so we skip deserialization.
+                                // We can do that because `object[] values` in C# is initialized with nulls.
+                                continue;
+                            }
+                        }
+                        Some(Err(err)) => {
+                            // Error while fetching the column value
+                            return Err(FfiExceptionPackage::from_error(err, constructors));
+                        }
+                        None => {
+                            // TODO: Implement error type for too few columns - server provided less columns than claimed in the metadata
+                            let ex = constructors.rust_exception_constructor.construct_from_rust(
+                                format!(
+                                    "Row contains fewer columns ({} of {}) than metadata claims",
+                                    value_index, num_columns
+                                ),
+                            );
+                            return Err(FfiExceptionPackage::from_exception(ex));
+                        }
                     }
-                } else {
-                    // The value is null, so we skip deserialization.
-                    // We can do that because `object[] values` in C# is initialized with nulls.
-                    continue;
                 }
+                Ok(true)
             }
-            true
-        } else {
-            tracing::trace!("[FFI] No more rows available!");
-            false
+            Some(Err(err)) => Err(FfiExceptionPackage::from_error(err, constructors)),
+            None => {
+                tracing::trace!("[FFI] No more rows available!");
+                Ok(false)
+            }
         }
     };
 
     // This is inherently inefficient, but necessary due to blocking C# API upon page boundaries.
     // TODO: implement async C# API (IAsyncEnumerable) to avoid this.
-    BridgedFuture::block_on(deserialize_fut) as i32
+    match BridgedFuture::block_on(deserialize_fut) {
+        Ok(has_row) => {
+            unsafe {
+                *out_num_columns = has_row as i32;
+            }
+            FfiExceptionPackage::ok()
+        }
+        Err(exception_package) => {
+            unsafe {
+                *out_num_columns = 0;
+            }
+            exception_package
+        }
+    }
 }
 
-// TODO: Below change all unwrap() to unwrap_or_else() with proper error handling
+// There are a lot of panics below - not sure if it's supposed to be like that.
+// Some of these checks are probably redundant (looking at passing a null pointer).
 
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_type_info_get_code(
     type_info_handle: BridgedBorrowedSharedPtr<ColumnType<'_>>,
 ) -> u8 {
     if type_info_handle.is_null() {
-        return 0;
+        panic!("Null pointer passed to row_set_type_info_get_code");
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
@@ -245,9 +294,12 @@ pub extern "C" fn row_set_type_info_get_code(
 pub extern "C" fn row_set_type_info_get_list_child<'typ>(
     type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
     out_child_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
-) -> i32 {
+) {
     if type_info_handle.is_null() {
-        return 0;
+        panic!("Null pointer passed to row_set_type_info_get_list_child");
+    }
+    if out_child_handle.is_null() {
+        panic!("Null pointer passed to row_set_type_info_get_list_child");
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
@@ -256,16 +308,12 @@ pub extern "C" fn row_set_type_info_get_list_child<'typ>(
             typ: CollectionType::List(inner),
             ..
         } => {
-            if out_child_handle.is_null() {
-                return 0;
-            }
             let child = inner.as_ref();
             unsafe {
                 out_child_handle.write(RefFFI::as_ptr(child));
             }
-            1
         }
-        _ => 0,
+        _ => panic!("row_set_type_info_get_list_child called on non-List ColumnType"),
     }
 }
 
@@ -273,9 +321,12 @@ pub extern "C" fn row_set_type_info_get_list_child<'typ>(
 pub extern "C" fn row_set_type_info_get_set_child<'typ>(
     type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
     out_child_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
-) -> i32 {
+) {
     if type_info_handle.is_null() {
-        return 0;
+        panic!("Null pointer passed to row_set_type_info_get_set_child");
+    }
+    if out_child_handle.is_null() {
+        panic!("Null pointer passed to row_set_type_info_get_set_child");
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
@@ -284,16 +335,12 @@ pub extern "C" fn row_set_type_info_get_set_child<'typ>(
             typ: CollectionType::Set(inner),
             ..
         } => {
-            if out_child_handle.is_null() {
-                return 0;
-            }
             let child = inner.as_ref();
             unsafe {
                 out_child_handle.write(RefFFI::as_ptr(child));
             }
-            1
         }
-        _ => 0,
+        _ => panic!("row_set_type_info_get_set_child called on non-Set ColumnType"),
     }
 }
 
@@ -302,9 +349,12 @@ pub extern "C" fn row_set_type_info_get_map_children<'typ>(
     type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
     out_key_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
     out_value_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
-) -> i32 {
+) {
     if type_info_handle.is_null() {
-        return 0;
+        panic!("Null pointer passed to row_set_type_info_get_map_children");
+    }
+    if out_key_handle.is_null() || out_value_handle.is_null() {
+        panic!("Null pointer passed to row_set_type_info_get_map_children");
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
@@ -313,9 +363,6 @@ pub extern "C" fn row_set_type_info_get_map_children<'typ>(
             typ: CollectionType::Map(key, value),
             ..
         } => {
-            if out_key_handle.is_null() || out_value_handle.is_null() {
-                return 0;
-            }
             let key_child = key.as_ref();
             let value_child = value.as_ref();
             let k_ptr = RefFFI::as_ptr(key_child);
@@ -324,9 +371,8 @@ pub extern "C" fn row_set_type_info_get_map_children<'typ>(
                 *out_key_handle = k_ptr;
                 *out_value_handle = v_ptr;
             }
-            1
         }
-        _ => 0,
+        _ => panic!("row_set_type_info_get_map_children called on non-Map ColumnType"),
     }
 }
 
@@ -335,13 +381,13 @@ pub extern "C" fn row_set_type_info_get_tuple_field_count(
     type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
 ) -> usize {
     if type_info_handle.is_null() {
-        return 0;
+        panic!("Null pointer passed to row_set_type_info_get_tuple_field_count");
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::Tuple(fields) => fields.len(),
-        _ => 0,
+        _ => panic!("row_set_type_info_get_tuple_field_count called on non-Tuple ColumnType"),
     }
 }
 
@@ -350,27 +396,24 @@ pub extern "C" fn row_set_type_info_get_tuple_field<'typ>(
     type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
     index: usize,
     out_field_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
-) -> i32 {
-    if type_info_handle.is_null() {
-        return 0;
+) {
+    if type_info_handle.is_null() || out_field_handle.is_null() {
+        // Not sure whether to check out parameters
+        panic!("Null pointer passed to row_set_type_info_get_tuple_field");
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::Tuple(fields) => {
-            if out_field_handle.is_null() {
-                return 0;
-            }
             let Some(field) = fields.get(index) else {
-                return 0;
+                panic!("Index out of bounds in row_set_type_info_get_tuple_field");
             };
             let ptr = RefFFI::as_ptr(field);
             unsafe {
                 *out_field_handle = ptr;
             }
-            1
         }
-        _ => 0,
+        _ => panic!("row_set_type_info_get_tuple_field called on non-Tuple ColumnType"),
     }
 }
 
@@ -381,9 +424,9 @@ pub extern "C" fn row_set_type_info_get_udt_name(
     type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
     out_name: *mut FFIStr<'_>,
     out_keyspace: *mut FFIStr<'_>,
-) -> i32 {
+) {
     if type_info_handle.is_null() {
-        return 0;
+        panic!("Null pointer passed to row_set_type_info_get_udt_name");
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
@@ -395,9 +438,8 @@ pub extern "C" fn row_set_type_info_get_udt_name(
                 out_name.write(FFIStr::new(name));
                 out_keyspace.write(FFIStr::new(ks));
             }
-            1
         }
-        _ => 0,
+        _ => panic!("row_set_type_info_get_udt_name called on non-UDT ColumnType"),
     }
 }
 
@@ -406,13 +448,13 @@ pub extern "C" fn row_set_type_info_get_udt_field_count(
     type_info_handle: BridgedBorrowedSharedPtr<ColumnType<'_>>,
 ) -> usize {
     if type_info_handle.is_null() {
-        return 0;
+        panic!("Null pointer passed to row_set_type_info_get_udt_field_count");
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::UserDefinedType { definition, .. } => definition.field_types.len(),
-        _ => 0,
+        _ => panic!("row_set_type_info_get_udt_field_count called on non-UDT ColumnType"),
     }
 }
 
@@ -422,19 +464,19 @@ pub extern "C" fn row_set_type_info_get_udt_field<'typ>(
     index: usize,
     out_field_name: *mut FFIStr<'typ>,
     out_field_type_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
-) -> i32 {
+) {
     if type_info_handle.is_null() {
-        return 0;
+        panic!("Null pointer passed to row_set_type_info_get_udt_field");
+    }
+    if out_field_type_handle.is_null() || out_field_name.is_null() {
+        panic!("Null pointer passed to row_set_type_info_get_udt_field");
     }
 
     let type_info = RefFFI::as_ref(type_info_handle).unwrap();
     match type_info {
         ColumnType::UserDefinedType { definition, .. } => {
-            if out_field_type_handle.is_null() || out_field_name.is_null() {
-                return 0;
-            }
             let Some((field_name, field_type)) = definition.field_types.get(index) else {
-                return 0;
+                panic!("Index out of bounds in row_set_type_info_get_udt_field");
             };
             unsafe {
                 out_field_name.write(FFIStr::new(field_name.as_ref()));
@@ -444,9 +486,8 @@ pub extern "C" fn row_set_type_info_get_udt_field<'typ>(
             unsafe {
                 *out_field_type_handle = ptr;
             }
-            1
         }
-        _ => 0,
+        _ => panic!("row_set_type_info_get_udt_field called on non-UDT ColumnType"),
     }
 }
 
