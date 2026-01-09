@@ -1,8 +1,9 @@
 use crate::FfiPtr;
 use crate::ffi::{FFIByteSlice, FFIStr};
 use scylla::errors::{
-    ConnectionError, ConnectionPoolError, DbError, MetadataError, NewSessionError, NextPageError,
-    PagerExecutionError, PrepareError, RequestAttemptError, RequestError,
+    ConnectionError, ConnectionPoolError, DbError, DeserializationError, MetadataError,
+    NewSessionError, NextPageError, NextRowError, PagerExecutionError, PrepareError,
+    RequestAttemptError, RequestError,
 };
 use std::fmt::{Debug, Display};
 
@@ -17,6 +18,46 @@ enum Exception {}
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct ExceptionPtr(FfiPtr<'static, Exception>);
+
+impl ExceptionPtr {
+    pub(crate) fn null() -> Self {
+        ExceptionPtr(FfiPtr::null())
+    }
+}
+
+/// This struct packages an exception pointer along with a flag indicating whether an exception occurred.
+/// It is used to communicate exceptions across the FFI boundary between Rust and C# in synchronous contexts.
+// I am open to better names for this struct.
+#[repr(C)]
+pub struct FfiExceptionPackage {
+    /// Valid when `has_exception != 0`, otherwise it holds a null FfiPtr.
+    pub exception: ExceptionPtr,
+}
+
+impl FfiExceptionPackage {
+    pub(crate) fn ok() -> Self {
+        // ExceptionPtr is opaque; use helper to create a null handle.
+        Self {
+            exception: ExceptionPtr::null(),
+        }
+    }
+
+    pub(crate) fn from_exception(exception: ExceptionPtr) -> Self {
+        Self { exception }
+    }
+
+    pub(crate) fn from_error<E>(error: E, constructors: &ExceptionConstructors) -> Self
+    where
+        E: ErrorToException,
+    {
+        let exception_ptr = error.to_exception(constructors);
+        Self::from_exception(exception_ptr)
+    }
+
+    pub(crate) fn has_exception(&self) -> bool {
+        !self.exception.0.is_null()
+    }
+}
 
 #[repr(transparent)]
 pub struct RustExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr);
@@ -303,5 +344,17 @@ impl ErrorToException for (&DbError, &str) {
                 .rust_exception_constructor
                 .construct_from_rust(db_error),
         }
+    }
+}
+
+impl ErrorToException for DeserializationError {
+    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+        ctors.rust_exception_constructor.construct_from_rust(self) // TODO: convert errors to specific exceptions
+    }
+}
+
+impl ErrorToException for NextRowError {
+    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+        ctors.rust_exception_constructor.construct_from_rust(self) // TODO: convert errors to specific exceptions
     }
 }

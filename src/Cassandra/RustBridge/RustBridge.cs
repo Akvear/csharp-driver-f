@@ -432,5 +432,66 @@ namespace Cassandra
                 Console.Error.WriteLine($"[FFI] FailTask threw exception: {ex}");
             }
         }
+
+        /// <summary>
+        /// This struct is used to represent the result of an FFI call that may have encountered an error or exception.
+        /// and the `exception` field holds a pointer to the exception handle if one exists.
+        /// ThrowIfException should only be called if we are not in a UnmanagedCallersOnly context. 
+        /// </summary>
+        // I am open to better names for this struct.
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct FfiExceptionPackage
+        {
+            internal IntPtr exception;
+
+            internal static FfiExceptionPackage FromException(Exception ex)
+            {
+                var handle = GCHandle.Alloc(ex);
+                IntPtr handlePtr = GCHandle.ToIntPtr(handle);
+                return new FfiExceptionPackage
+                {
+                    exception = handlePtr
+                };
+            }
+
+            internal static FfiExceptionPackage Ok()
+            {
+                return new FfiExceptionPackage
+                {
+                    exception = IntPtr.Zero
+                };
+            }
+        }
+
+        internal static void ThrowIfException(FfiExceptionPackage res)
+        {
+            if (res.exception == IntPtr.Zero)
+            {
+                return;
+            }
+
+            Exception exception;
+            var exHandle = GCHandle.FromIntPtr(res.exception);
+            try
+            {
+                if (exHandle.Target is Exception ex)
+                {
+                    exception = ex;
+                }
+                else
+                {
+                    Environment.FailFast("Failed to recover Exception from GCHandle passed from Rust (sync).");
+                    return; // Unreachable
+                }
+            }
+            finally
+            {
+                if (exHandle.IsAllocated)
+                {
+                    exHandle.Free();
+                }
+            }
+            throw exception;
+        }
     }
 }
