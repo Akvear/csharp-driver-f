@@ -1,10 +1,10 @@
-use crate::FfiPtr;
 use crate::ffi::{FFIByteSlice, FFIStr};
 use scylla::errors::{
     ConnectionError, ConnectionPoolError, DbError, MetadataError, NewSessionError, NextPageError,
     PagerExecutionError, PrepareError, RequestAttemptError, RequestError,
 };
 use std::fmt::{Debug, Display};
+use std::ptr::NonNull;
 use thiserror::Error;
 
 use crate::task::ExceptionConstructors;
@@ -17,7 +17,7 @@ enum Exception {}
 /// This is used across the FFI boundary to represent exceptions created on the C# side.
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
-pub struct ExceptionPtr(FfiPtr<'static, Exception>);
+pub struct ExceptionPtr(NonNull<Exception>);
 
 #[repr(transparent)]
 pub struct RustExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr);
