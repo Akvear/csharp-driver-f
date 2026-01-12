@@ -188,7 +188,7 @@ namespace Cassandra
         // decorated with [UnmanagedCallersOnly].
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> completeTaskDel = &RustBridge.CompleteTask;
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> failTaskDel = &RustBridge.FailTask;
-
+        
         internal static Tcb WithTcs(TaskCompletionSource<IntPtr> tcs)
         {
             /*
@@ -233,6 +233,7 @@ namespace Cassandra
         unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIByteSlice, IntPtr> PreparedQueryNotFoundExceptionConstructorPtr = &PreparedQueryNotFoundException.PreparedQueryNotFoundExceptionFromRust;
         unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> RequestInvalidExceptionConstructorPtr = &RequestInvalidException.RequestInvalidExceptionFromRust;
         unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> RustExceptionConstructorPtr = &RustException.RustExceptionFromRust;
+        unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> SerializationExceptionConstructorPtr = &SerializationException.SerializationExceptionFromRust;
         unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> SyntaxErrorExceptionConstructorPtr = &SyntaxError.SyntaxErrorFromRust;
         unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> TraceRetrievalExceptionConstructorPtr = &TraceRetrievalException.TraceRetrievalExceptionFromRust;
         unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, IntPtr> TruncateExceptionConstructorPtr = &TruncateException.TruncateExceptionFromRust;
@@ -257,6 +258,7 @@ namespace Cassandra
             internal readonly IntPtr prepared_query_not_found_exception_constructor;
             internal readonly IntPtr request_invalid_exception_constructor;
             internal readonly IntPtr rust_exception_constructor;
+            internal readonly IntPtr serialization_exception_constructor;
             internal readonly IntPtr syntax_error_exception_constructor;
             internal readonly IntPtr trace_retrieval_exception_constructor;
             internal readonly IntPtr truncate_exception_constructor;
@@ -273,6 +275,7 @@ namespace Cassandra
                 IntPtr preparedQueryNotFoundException,
                 IntPtr requestInvalidException,
                 IntPtr rustException,
+                IntPtr serializationException,
                 IntPtr syntaxErrorException,
                 IntPtr traceRetrievalException,
                 IntPtr truncateException,
@@ -288,6 +291,7 @@ namespace Cassandra
                 prepared_query_not_found_exception_constructor = preparedQueryNotFoundException;
                 request_invalid_exception_constructor = requestInvalidException;
                 rust_exception_constructor = rustException;
+                serialization_exception_constructor = serializationException;
                 syntax_error_exception_constructor = syntaxErrorException;
                 trace_retrieval_exception_constructor = traceRetrievalException;
                 truncate_exception_constructor = truncateException;
@@ -312,6 +316,7 @@ namespace Cassandra
                 (IntPtr)PreparedQueryNotFoundExceptionConstructorPtr,
                 (IntPtr)RequestInvalidExceptionConstructorPtr,
                 (IntPtr)RustExceptionConstructorPtr,
+                (IntPtr)SerializationExceptionConstructorPtr,
                 (IntPtr)SyntaxErrorExceptionConstructorPtr,
                 (IntPtr)TraceRetrievalExceptionConstructorPtr,
                 (IntPtr)TruncateExceptionConstructorPtr,

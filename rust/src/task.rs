@@ -12,7 +12,8 @@ use crate::error_conversion::{
     FunctionFailureExceptionConstructor, InvalidConfigurationInQueryExceptionConstructor,
     InvalidQueryConstructor, NoHostAvailableExceptionConstructor,
     OperationTimedOutExceptionConstructor, PreparedQueryNotFoundExceptionConstructor,
-    RequestInvalidExceptionConstructor, RustExceptionConstructor, SyntaxErrorExceptionConstructor,
+    RequestInvalidExceptionConstructor, RustExceptionConstructor,
+    SerializationExceptionConstructor, SyntaxErrorExceptionConstructor,
     TraceRetrievalExceptionConstructor, TruncateExceptionConstructor,
     UnauthorizedExceptionConstructor,
 };
@@ -79,6 +80,7 @@ pub struct ExceptionConstructors {
     pub prepared_query_not_found_exception_constructor: PreparedQueryNotFoundExceptionConstructor,
     pub request_invalid_exception_constructor: RequestInvalidExceptionConstructor,
     pub rust_exception_constructor: RustExceptionConstructor,
+    pub serialization_exception_constructor: SerializationExceptionConstructor,
     pub syntax_error_exception_constructor: SyntaxErrorExceptionConstructor,
     pub trace_retrieval_exception_constructor: TraceRetrievalExceptionConstructor,
     pub truncate_exception_constructor: TruncateExceptionConstructor,
