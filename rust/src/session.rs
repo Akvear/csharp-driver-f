@@ -68,12 +68,6 @@ pub extern "C" fn session_create(tcb: Tcb, uri: CSharpStr<'_>) {
     })
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn session_free(session_ptr: BridgedOwnedSharedPtr<BridgedSession>) {
-    ArcFFI::free(session_ptr);
-    tracing::debug!("[FFI] Session freed");
-}
-
 /// Shuts down the session by acquiring a write lock and clearing the connected state.
 /// This blocks all future queries. Once shutdown, the session cannot be used for queries anymore.
 #[unsafe(no_mangle)]
