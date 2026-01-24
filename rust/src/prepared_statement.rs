@@ -1,6 +1,9 @@
 use scylla::statement::prepared::PreparedStatement;
 
-use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, FFI, FromArc};
+use crate::{
+    error_conversion::FfiException,
+    ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FromArc},
+};
 
 #[derive(Debug)]
 pub struct BridgedPreparedStatement {
@@ -12,19 +15,15 @@ impl FFI for BridgedPreparedStatement {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn prepared_statement_free(
-    prepared_statement_ptr: BridgedOwnedSharedPtr<BridgedPreparedStatement>,
-) {
-    ArcFFI::free(prepared_statement_ptr);
-    tracing::trace!("[FFI] Prepared statement freed");
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn prepared_statement_is_lwt(
     prepared_statement_ptr: BridgedBorrowedSharedPtr<'_, BridgedPreparedStatement>,
-) -> bool {
-    ArcFFI::as_ref(prepared_statement_ptr)
-        .unwrap()
-        .inner
-        .is_confirmed_lwt()
+    is_lwt: *mut bool,
+) -> FfiException {
+    unsafe {
+        *is_lwt = ArcFFI::as_ref(prepared_statement_ptr)
+            .unwrap()
+            .inner
+            .is_confirmed_lwt();
+    }
+    FfiException::ok()
 }

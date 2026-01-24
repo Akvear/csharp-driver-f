@@ -133,9 +133,9 @@ namespace Cassandra
         /// Prepares a statement on the session.
         /// </summary>
         /// <param name="preparedStatement">CQL statement to be prepared on the session.</param>
-        internal Task<IntPtr> Prepare(string preparedStatement)
+        internal Task<ManuallyDestructible> Prepare(string preparedStatement)
         {
-            return RunAsyncWithIncrement<IntPtr>((tcb, ptr) => session_prepare(tcb, ptr, preparedStatement));
+            return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_prepare(tcb, ptr, preparedStatement));
         }
 
         /// <summary>

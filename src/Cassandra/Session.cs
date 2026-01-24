@@ -332,13 +332,13 @@ namespace Cassandra
                 case BoundStatement bs:
                     // Only support bound statements without values for now.
 
-                    // The managed PreparedStatement object (and the BoundStatement that
-                    // references it) is rooted here by the local variable `bs`. Because there's an
-                    // active reference in this scope, the GC will not collect the managed object
-                    // while this method is executing — so the native resource under the pointer
-                    // is guaranteed to still exist for the duration of this call.
-                    IntPtr queryPrepared = bs.PreparedStatement.DangerousGetHandle();
-                    object[] queryValuesBound = bs.QueryValues ?? [];
+                        // The managed PreparedStatement object (and the BoundStatement that
+                        // references it) is rooted here by the local variable `bs`. Because there's an
+                        // active reference in this scope, the GC will not collect the managed object
+                        // while this method is executing — so the native resource under the pointer
+                        // is guaranteed to still exist for the duration of this call.
+                        IntPtr queryPrepared = bs.PreparedStatement.bridgedPreparedStatement.DangerousGetHandle();
+                        object[] queryValuesBound = bs.QueryValues ?? [];
 
                     Task<ManuallyDestructible> boundTask;
                     if (queryValuesBound.Length == 0)
@@ -431,14 +431,14 @@ namespace Cassandra
                                                 " setting the keyspace as part of the PREPARE request");
             }
 
-            Task<IntPtr> task = bridgedSession.Prepare(cqlQuery);
+            Task<ManuallyDestructible> task = bridgedSession.Prepare(cqlQuery);
 
             return task.ContinueWith(t =>
             {
-                IntPtr preparedStatementPtr = t.Result;
+                ManuallyDestructible mdPreparedStatement = t.Result;
                 // FIXME: Bridge with Rust to get variables metadata.
                 RowSetMetadata variablesRowsMetadata = null;
-                var ps = new PreparedStatement(preparedStatementPtr, cqlQuery, variablesRowsMetadata);
+                var ps = new PreparedStatement(mdPreparedStatement, cqlQuery, variablesRowsMetadata);
                 return ps;
             }, TaskContinuationOptions.ExecuteSynchronously);
         }
