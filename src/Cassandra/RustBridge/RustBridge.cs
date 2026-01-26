@@ -153,31 +153,6 @@ namespace Cassandra
         // decorated with [UnmanagedCallersOnly].
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, ManuallyDestructible, void> completeTaskDel = &RustBridge.CompleteTask;
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> failTaskDel = &RustBridge.FailTask;
-        
-        internal static Tcb WithTcs(TaskCompletionSource<IntPtr> tcs)
-        {
-            /*
-             * Although GC knows that it must not collect items during a synchronous P/Invoke call,
-             * it doesn't know that the native code will still require the TCS after the P/Invoke
-             * call returns.
-             * And tokio task in Rust will likely still run after the P/Invoke call returns.
-             * So, since we are passing the TCS to asynchronous native code, we need to pin it
-             * so it doesn't get collected by the GC.
-             * We must remember to free the handle later when the TCS is completed (see CompleteTask
-             * method).
-             */
-            var handle = GCHandle.Alloc(tcs);
-
-            IntPtr tcsPtr = GCHandle.ToIntPtr(handle);
-
-            // `unsafe` is required to get a function pointer to a static method.
-            unsafe
-            {
-                IntPtr completeTaskPtr = (IntPtr)completeTaskDel;
-                IntPtr failTaskPtr = (IntPtr)failTaskDel;
-                return new Tcb(tcsPtr, completeTaskPtr, failTaskPtr);
-            }
-        }
 
         /// <summary>
         /// Creates a TCB for a TaskCompletionSource&lt;ManuallyDestructible&gt;.
@@ -189,6 +164,16 @@ namespace Cassandra
         /// <returns></returns>
         internal static Tcb WithTcs(TaskCompletionSource<ManuallyDestructible> tcs)
         {
+            /*
+             * Although GC knows that it must not collect items during a synchronous P/Invoke call,
+             * it doesn't know that the native code will still require the TCS after the P/Invoke
+             * call returns.
+             * And tokio task in Rust will likely still run after the P/Invoke call returns.
+             * So, since we are passing the TCS to asynchronous native code, we need to pin it
+             * so it doesn't get collected by the GC.
+             * We must remember to free the handle later when the TCS is completed (see CompleteTask
+             * method).
+             */
             var handle = GCHandle.Alloc(tcs);
 
             IntPtr tcsPtr = GCHandle.ToIntPtr(handle);
@@ -348,22 +333,9 @@ namespace Cassandra
 
                     Console.Error.WriteLine($"[FFI] CompleteTask done.");
                 }
-                else if (handle.Target is TaskCompletionSource<IntPtr> tcsIntPtr)
-                {
-                    // Simply pass the opaque pointer back as the result.
-                    // The Rust code is responsible for interpreting the pointer's contents
-                    // and freeing it when no longer needed.
-                    tcsIntPtr.SetResult(manuallyDestructible.Ptr);
-
-                    // Free the handle so the TCS can be collected once no longer used
-                    // by the C# code.
-                    handle.Free();
-
-                    Console.Error.WriteLine($"[FFI] CompleteTask done.");
-                }
                 else
                 {
-                    throw new InvalidOperationException("GCHandle did not reference a TaskCompletionSource<IntPtr> or TaskCompletionSource<ManuallyDestructible>.");
+                    throw new InvalidOperationException("GCHandle did not reference a TaskCompletionSource<ManuallyDestructible>.");
                 }
             }
             catch (Exception ex)
@@ -388,58 +360,7 @@ namespace Cassandra
                 // Recover the GCHandle that was allocated for the TaskCompletionSource.
                 var handle = GCHandle.FromIntPtr(tcsPtr);
 
-                if (handle.Target is TaskCompletionSource<IntPtr> tcs)
-                {
-                    // Create the exception to pass to the TCS.
-                    Exception exception;
-                    try
-                    {
-                        if (exceptionPtr != IntPtr.Zero)
-                        {
-                            // Recover the exception from the GCHandle passed from Rust.
-                            var exHandle = GCHandle.FromIntPtr(exceptionPtr);
-                            try
-                            {
-                                if (exHandle.Target is Exception ex)
-                                {
-                                    exception = ex;
-                                }
-                                else
-                                {
-                                    // This should never happen when everything is working correctly.
-                                    Environment.FailFast("Failed to recover Exception from GCHandle passed from Rust.");
-                                    exception = new RustException("Failed to recover Exception from GCHandle passed from Rust."); // Unreachable, required for compilation
-                                }
-                            }
-                            finally
-                            {
-                                if (exHandle.IsAllocated)
-                                {
-                                    exHandle.Free();
-                                }
-                            }
-                        }
-                        else
-                        {
-                            // Fallback to a generic RustException if no exception was passed.
-                            exception = new RustException("Unknown error from Rust");
-                        }
-                        tcs.SetException(exception);
-                    }
-                    finally
-                    {
-                        // Free the handle so the TCS can be collected once no longer used
-                        // by the C# code.
-                        if (handle.IsAllocated)
-                        {
-                            handle.Free();
-                        }
-                    }
-
-                    Console.Error.WriteLine($"[FFI] FailTask done.");
-                }
-                // Temporary - until all TCS usages are migrated from IntPtr to ManuallyDestructible
-                else if (handle.Target is TaskCompletionSource<ManuallyDestructible> tcsMd)
+                if (handle.Target is TaskCompletionSource<ManuallyDestructible> tcsMd)
                 {
                     // Create the exception to pass to the TCS.
                     Exception exception;
@@ -492,7 +413,7 @@ namespace Cassandra
                 }
                 else
                 {
-                    throw new InvalidOperationException("GCHandle did not reference a TaskCompletionSource<IntPtr> or TaskCompletionSource<ManuallyDestructible>.");
+                    throw new InvalidOperationException("GCHandle did not reference a TaskCompletionSource<ManuallyDestructible>.");
                 }
             }
             catch (Exception ex)

@@ -31,7 +31,7 @@ namespace Cassandra
             _destructor = md.Destructor;
         }
 
-        public override bool IsInvalid => handle == IntPtr.Zero;
+        public sealed override bool IsInvalid => handle == IntPtr.Zero;
 
         /// <summary>  
         /// Releases the underlying native resource by invoking the Rust-provided destructor.  
@@ -64,46 +64,31 @@ namespace Cassandra
         /// <param name="invoke"></param>
         /// <returns></returns>
         /// <exception cref="NotSupportedException"></exception>
-        internal virtual Task<T> RunAsyncWithIncrement<T>(Action<Tcb, IntPtr> invoke)
+        internal virtual Task<ManuallyDestructible> RunAsyncWithIncrement<T>(Action<Tcb, IntPtr> invoke)
         {
             bool refAdded = false;
             try
             {
                 DangerousAddRef(ref refAdded);
 
-                // Choose the appropriate TCB based on result type
-                if (typeof(T) == typeof(IntPtr))
-                {
-                    /*
-                    * TaskCompletionSource is a way to programatically control a Task.
-                    * We create one here and pass it to Rust code, which will complete it.
-                    * This is a common pattern to bridge async code between C# and native code.
-                    */
-                    var tcs = new TaskCompletionSource<IntPtr>(TaskCreationOptions.RunContinuationsAsynchronously);
+                /*
+                * TaskCompletionSource is a way to programatically control a Task.
+                * We create one here and pass it to Rust code, which will complete it.
+                * This is a common pattern to bridge async code between C# and native code.
+                */
+                var tcs = new TaskCompletionSource<ManuallyDestructible>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-                    // Invoke the native code, which will complete the TCS when done.
-                    // We need to pass a pointer to CompleteTask because Rust code cannot directly
-                    // call C# methods.
-                    // Even though Rust code statically knows the name of the method, it cannot
-                    // directly call it because the .NET runtime does not expose the method
-                    // in a way that Rust can call it.
-                    // So we pass a pointer to the method and Rust code will call it via that pointer.
-                    // This is a common pattern to call C# code from native code ("reversed P/Invoke").
-                    var tcb = Tcb.WithTcs(tcs);
-                    invoke(tcb, handle);
-                    return (Task<T>)(object)tcs.Task;
-                }
-                else if (typeof(T) == typeof(ManuallyDestructible))
-                {
-                    var tcs = new TaskCompletionSource<ManuallyDestructible>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    var tcb = Tcb.WithTcs(tcs);
-                    invoke(tcb, handle);
-                    return (Task<T>)(object)tcs.Task;
-                }
-                else
-                {
-                    throw new NotSupportedException($"Unsupported result type for Rust async helper: {typeof(T)}");
-                }
+                // Invoke the native code, which will complete the TCS when done.
+                // We need to pass a pointer to CompleteTask because Rust code cannot directly
+                // call C# methods.
+                // Even though Rust code statically knows the name of the method, it cannot
+                // directly call it because the .NET runtime does not expose the method
+                // in a way that Rust can call it.
+                // So we pass a pointer to the method and Rust code will call it via that pointer.
+                // This is a common pattern to call C# code from native code ("reversed P/Invoke").
+                var tcb = Tcb.WithTcs(tcs);
+                invoke(tcb, handle);
+                return (Task<ManuallyDestructible>)(object)tcs.Task;
             }
             finally
             {
