@@ -62,16 +62,10 @@ pub extern "C" fn session_create(tcb: Tcb, uri: CSharpStr<'_>) {
             "[FFI] Contacted node's address: {}",
             session.get_cluster_state().get_nodes_info()[0].address
         );
-        Ok(RwLock::new(BridgedSessionInner {
+        Ok(Some(RwLock::new(BridgedSessionInner {
             session: Some(session),
-        }))
+        })))
     })
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn session_free(session_ptr: BridgedOwnedSharedPtr<BridgedSession>) {
-    ArcFFI::free(session_ptr);
-    tracing::debug!("[FFI] Session freed");
 }
 
 /// Shuts down the session by acquiring a write lock and clearing the connected state.
@@ -102,7 +96,7 @@ pub extern "C" fn session_shutdown(
         tracing::info!("[FFI] Session shutdown complete");
 
         // Return an EmptyBridgedResult to satisfy the return type
-        Ok(EmptyBridgedResult)
+        Ok(None::<EmptyBridgedResult>)
     })
 }
 
@@ -150,7 +144,7 @@ pub extern "C" fn session_prepare(
 
         tracing::trace!("[FFI] Statement prepared");
 
-        Ok(BridgedPreparedStatement { inner: ps })
+        Ok(Some(BridgedPreparedStatement { inner: ps }))
     })
 }
 
@@ -199,9 +193,9 @@ pub extern "C" fn session_query(
 
         tracing::trace!("[FFI] Statement executed");
 
-        Ok(RowSet {
+        Ok(Some(RowSet {
             pager: std::sync::Mutex::new(Some(query_pager)),
-        })
+        }))
     });
 }
 
@@ -263,9 +257,9 @@ pub extern "C" fn session_query_with_values(
 
         tracing::trace!("[FFI] Prepared statement executed with pre-serialized values");
 
-        Ok(RowSet {
+        Ok(Some(RowSet {
             pager: std::sync::Mutex::new(Some(query_pager)),
-        })
+        }))
     });
 }
 
@@ -309,9 +303,9 @@ pub extern "C" fn session_query_bound(
 
         tracing::trace!("[FFI] Prepared statement executed");
 
-        Ok(RowSet {
+        Ok(Some(RowSet {
             pager: std::sync::Mutex::new(Some(query_pager)),
-        })
+        }))
     })
 }
 
@@ -386,6 +380,6 @@ pub extern "C" fn session_use_keyspace(
             })?;
 
         tracing::trace!("[FFI] use_keyspace executed successfully");
-        Ok(RowSet::empty())
+        Ok(Some(RowSet::empty()))
     })
 }

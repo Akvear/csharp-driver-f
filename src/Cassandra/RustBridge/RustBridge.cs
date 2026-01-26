@@ -75,6 +75,24 @@ namespace Cassandra
     }
 
     /// <summary>
+    /// Struct used to pass a native pointer along with its destructor function pointer.
+    /// This is used to transfer ownership of Rust resources to C# code.
+    /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public readonly struct ManuallyDestructible
+    {
+        internal readonly IntPtr Ptr;
+        internal readonly IntPtr Destructor;
+
+        internal ManuallyDestructible(IntPtr ptr, IntPtr destructor)
+        {
+            Ptr = ptr;
+            Destructor = destructor;
+        }
+    }
+
+    /// <summary>
     /// Task Control Block groups entities crucial for controlling Task execution
     /// from Rust code. It's intended to:
     /// - hide some complexity of the interop,
@@ -133,10 +151,18 @@ namespace Cassandra
         // `unsafe` is required to get a function pointer to a static method.
         // Note that we can get this pointer because the method is static and
         // decorated with [UnmanagedCallersOnly].
-        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> completeTaskDel = &RustBridge.CompleteTask;
+        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, ManuallyDestructible, void> completeTaskDel = &RustBridge.CompleteTask;
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> failTaskDel = &RustBridge.FailTask;
-        
-        internal static Tcb WithTcs(TaskCompletionSource<IntPtr> tcs)
+
+        /// <summary>
+        /// Creates a TCB for a TaskCompletionSource&lt;ManuallyDestructible&gt;.
+        /// This is used when the result of the operation is a Rust resource
+        /// that needs to be managed in C#. ManuallyDestructible is a struct that
+        /// holds the native pointer and the destructor function pointer.
+        /// </summary>
+        /// <param name="tcs"></param>
+        /// <returns></returns>
+        internal static Tcb WithTcs(TaskCompletionSource<ManuallyDestructible> tcs)
         {
             /*
              * Although GC knows that it must not collect items during a synchronous P/Invoke call,
@@ -287,19 +313,19 @@ namespace Cassandra
         // This attribute makes the method callable from native code.
         // It also allows taking a function pointer to the method.
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static void CompleteTask(IntPtr tcsPtr, IntPtr resPtr)
+        internal static void CompleteTask(IntPtr tcsPtr, ManuallyDestructible manuallyDestructible)
         {
             try
             {
                 // Recover the GCHandle that was allocated for the TaskCompletionSource.
                 var handle = GCHandle.FromIntPtr(tcsPtr);
 
-                if (handle.Target is TaskCompletionSource<IntPtr> tcs)
+                if (handle.Target is TaskCompletionSource<ManuallyDestructible> tcs)
                 {
-                    // Simply pass the opaque pointer back as the result.
+                    // Pass the ManuallyDestructible struct back as the result.
                     // The Rust code is responsible for interpreting the pointer's contents
-                    // and freeing it when no longer needed.
-                    tcs.SetResult(resPtr);
+                    // memory is freed when the C# RustResource releases it.
+                    tcs.SetResult(manuallyDestructible);
 
                     // Free the handle so the TCS can be collected once no longer used
                     // by the C# code.
@@ -309,7 +335,7 @@ namespace Cassandra
                 }
                 else
                 {
-                    throw new InvalidOperationException("GCHandle did not reference a TaskCompletionSource<IntPtr>.");
+                    throw new InvalidOperationException("GCHandle did not reference a TaskCompletionSource<ManuallyDestructible>.");
                 }
             }
             catch (Exception ex)
@@ -334,7 +360,7 @@ namespace Cassandra
                 // Recover the GCHandle that was allocated for the TaskCompletionSource.
                 var handle = GCHandle.FromIntPtr(tcsPtr);
 
-                if (handle.Target is TaskCompletionSource<IntPtr> tcs)
+                if (handle.Target is TaskCompletionSource<ManuallyDestructible> tcsMd)
                 {
                     // Create the exception to pass to the TCS.
                     Exception exception;
@@ -370,7 +396,7 @@ namespace Cassandra
                             // Fallback to a generic RustException if no exception was passed.
                             exception = new RustException("Unknown error from Rust");
                         }
-                        tcs.SetException(exception);
+                        tcsMd.SetException(exception);
                     }
                     finally
                     {
@@ -383,10 +409,11 @@ namespace Cassandra
                     }
 
                     Console.Error.WriteLine($"[FFI] FailTask done.");
+
                 }
                 else
                 {
-                    throw new InvalidOperationException("GCHandle did not reference a TaskCompletionSource<IntPtr>.");
+                    throw new InvalidOperationException("GCHandle did not reference a TaskCompletionSource<ManuallyDestructible>.");
                 }
             }
             catch (Exception ex)

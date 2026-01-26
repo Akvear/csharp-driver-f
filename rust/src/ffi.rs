@@ -106,6 +106,15 @@ impl<'a, T: Sized, P: Properties> BridgedPtr<'a, T, P> {
             _phantom: PhantomData,
         }
     }
+
+    /// Casts the pointer to a pointer to `S`.
+    /// Used to cast from `c_void` back to concrete type.
+    pub(crate) unsafe fn cast<S>(self) -> BridgedPtr<'a, S, P> {
+        BridgedPtr {
+            ptr: self.ptr.map(|p| p.cast()),
+            _phantom: PhantomData,
+        }
+    }
 }
 
 /// Owned shared pointer.
@@ -153,7 +162,7 @@ impl<T: Sized, P: Properties> BridgedPtr<'_, T, P> {
 
 /// Conversion to raw pointer.
 impl<T: Sized, P: Properties> BridgedPtr<'_, T, P> {
-    fn to_raw(&self) -> Option<*mut T> {
+    pub(crate) fn to_raw(&self) -> Option<*mut T> {
         self.ptr.map(|ptr| ptr.as_ptr())
     }
 }

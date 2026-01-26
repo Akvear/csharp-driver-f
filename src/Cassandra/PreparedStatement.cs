@@ -29,23 +29,9 @@ namespace Cassandra
     ///  pair of a prepared statement and values for its bound variables is a
     ///  BoundStatement and can be executed (by <link>Session#Execute</link>).</p>
     /// </summary>
-    public class PreparedStatement : SafeHandle
+    public class PreparedStatement
     {
-        public override bool IsInvalid => handle == IntPtr.Zero;
-
-        protected override bool ReleaseHandle()
-        {
-            prepared_statement_free(handle);
-            return true;
-        }
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        [return: MarshalAs(UnmanagedType.U1)]
-        unsafe private static extern bool prepared_statement_is_lwt(IntPtr prepared_statement);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void prepared_statement_free(IntPtr prepared_statement);
-
+        internal readonly BridgedPreparedStatement bridgedPreparedStatement;
         private readonly RowSetMetadata _variablesRowsMetadata;
         private readonly ISerializerManager _serializerManager = SerializerManager.Default;
         private volatile RoutingKey _routingKey;
@@ -123,7 +109,7 @@ namespace Cassandra
         public bool IsLwt => _isLwt;
 
         internal PreparedStatement(RowSetMetadata variablesRowsMetadata, byte[] id, string cql,
-                                   string keyspace, ISerializerManager serializer, bool isLwt) : base(IntPtr.Zero, true)
+                                   string keyspace, ISerializerManager serializer, bool isLwt)
         {
             _variablesRowsMetadata = variablesRowsMetadata;
             Id = id;
@@ -134,11 +120,10 @@ namespace Cassandra
         }
 
         // For use by the Rust interop code.
-        internal PreparedStatement(IntPtr preparedStatementPtr, string cql, RowSetMetadata variablesRowsMetadata) : base(IntPtr.Zero, true)
+        internal PreparedStatement(ManuallyDestructible mdPreparedStatement, string cql, RowSetMetadata variablesRowsMetadata)
         {
-            handle = preparedStatementPtr;
-            bool isLwt = prepared_statement_is_lwt(preparedStatementPtr);
-
+            bridgedPreparedStatement = new BridgedPreparedStatement(mdPreparedStatement);
+            bool isLwt = bridgedPreparedStatement.IsLwt();
             _variablesRowsMetadata = variablesRowsMetadata;
             Cql = cql;
             _isLwt = isLwt;

@@ -49,56 +49,21 @@ namespace Cassandra
     /// </para>
     /// </summary>
     /// <remarks>Parallel enumerations are supported and thread-safe.</remarks>
-    public class RowSet : SafeHandle, IEnumerable<Row>, IDisposable
+    public class RowSet : IEnumerable<Row>, IDisposable
     {
-        public override bool IsInvalid => handle == IntPtr.Zero;
-
-        protected override bool ReleaseHandle()
-        {
-            row_set_free(handle);
-            return true;
-        }
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void row_set_free(IntPtr rowSetPtr);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern RustBridge.FfiException row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr, [MarshalAs(UnmanagedType.U1)] out bool hasRow, IntPtr constructorsPtr);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern nuint row_set_get_columns_count(IntPtr rowSetPtr);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern RustBridge.FfiException row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter, IntPtr constructorsPtr);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern byte row_set_type_info_get_code(IntPtr typeInfoHandle);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void row_set_type_info_get_list_child(IntPtr typeInfoHandle, out IntPtr childHandle);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void row_set_type_info_get_set_child(IntPtr typeInfoHandle, out IntPtr childHandle);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void row_set_type_info_get_udt_name(IntPtr typeInfoHandle, out FFIString name);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern nuint row_set_type_info_get_udt_field_count(IntPtr typeInfoHandle);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void row_set_type_info_get_udt_field(IntPtr typeInfoHandle, nuint index, out FFIString fieldName, out IntPtr fieldTypeHandle);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void row_set_type_info_get_map_children(IntPtr typeInfoHandle, out IntPtr keyHandle, out IntPtr valueHandle);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern nuint row_set_type_info_get_tuple_field_count(IntPtr typeInfoHandle);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void row_set_type_info_get_tuple_field(IntPtr typeInfoHandle, nuint index, out IntPtr fieldHandle);
-
         private bool _exhausted = false;
+
+        private readonly BridgedRowSet bridgedRowSet;
+
+        /// <summary>
+        /// Disposes the underlying Rust-allocated bridged row set.
+        /// </summary>
+        // bridgedRowSet can be null for RowSet instances created without an underlying Rust bridge  
+        // (for example, when constructed using a parameterless constructor or for in-memory-only usage).  
+        public void Dispose()
+        {
+            bridgedRowSet?.Dispose();
+        }
 
         /// <summary>
         /// Determines if when dequeuing, it will automatically fetch the following result pages.
@@ -156,250 +121,46 @@ namespace Cassandra
         /// <summary>
         /// Creates a new instance of RowSet.
         /// </summary>
-        public RowSet(IntPtr rowSetPtr) : base(IntPtr.Zero, true)
+        public RowSet(ManuallyDestructible mdRowSet)
         {
-            handle = rowSetPtr;
-            Columns = ExtractColumnsFromRust(rowSetPtr);
+            bridgedRowSet = new BridgedRowSet(mdRowSet);
+            Columns = bridgedRowSet.ExtractColumnsFromRust();
             Info = new ExecutionInfo();
         }
 
         /// <summary>
         /// Creates a new instance of RowSet.
         /// </summary>
-        public RowSet() : base(IntPtr.Zero, true)
+        public RowSet()
         {
+            bridgedRowSet = null;
             Info = new ExecutionInfo();
             Columns = new CqlColumn[0];
             AutoPage = true;
         }
 
-        // This function is called from UnmanagedCallersOnly context - it must not throw exceptions.
-        private static IColumnInfo BuildTypeInfoFromHandle(IntPtr handle, ColumnTypeCode code)
-        {
-            if (handle == IntPtr.Zero) return null;
-            try
-            {
-                switch (code)
-                {
-                    case ColumnTypeCode.List:
-                        // For List: ask Rust for the child handle and build recursively
-                        unsafe
-                        {
-                            row_set_type_info_get_list_child(handle, out IntPtr child);
-                            var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
-                            var childInfo = BuildTypeInfoFromHandle(child, childCode);
-                            var listInfo = new ListColumnInfo { ValueTypeCode = childCode, ValueTypeInfo = childInfo };
-                            return listInfo;
-                        }
-                    case ColumnTypeCode.Map:
-                        // For Map: ask Rust for key/value handles
-                        unsafe
-                        {
-                            row_set_type_info_get_map_children(handle, out IntPtr keyHandle, out IntPtr valueHandle);
-                            var keyCode = (ColumnTypeCode)row_set_type_info_get_code(keyHandle);
-                            var valueCode = (ColumnTypeCode)row_set_type_info_get_code(valueHandle);
-                            var keyInfo = BuildTypeInfoFromHandle(keyHandle, keyCode);
-                            var valueInfo = BuildTypeInfoFromHandle(valueHandle, valueCode);
-                            var mapInfo = new MapColumnInfo { KeyTypeCode = keyCode, KeyTypeInfo = keyInfo, ValueTypeCode = valueCode, ValueTypeInfo = valueInfo };
-                            return mapInfo;
-                        }
-                    case ColumnTypeCode.Tuple:
-                        // For Tuple: get amount of fields and then each field
-                        unsafe
-                        {
-                            nuint count = row_set_type_info_get_tuple_field_count(handle);
-                            var tupleInfo = new TupleColumnInfo();
-                            for (nuint i = 0; i < count; i++)
-                            {
-                                row_set_type_info_get_tuple_field(handle, i, out IntPtr fieldHandle);
-                                var fCode = (ColumnTypeCode)row_set_type_info_get_code(fieldHandle);
-                                var fInfo = BuildTypeInfoFromHandle(fieldHandle, fCode);
-                                var desc = new ColumnDesc { TypeCode = fCode, TypeInfo = fInfo };
-                                tupleInfo.Elements.Add(desc);
-                            }
-                            return tupleInfo;
-                        }
-                    case ColumnTypeCode.Udt:
-                        // For UDT: get name+keyspace and then the fields
-                        unsafe
-                        {
-                            row_set_type_info_get_udt_name(handle, out FFIString udtName);
-                            var name = udtName.ToManagedString();
-                            var udtInfo = new UdtColumnInfo(name ?? "");
-                            nuint fcount = row_set_type_info_get_udt_field_count(handle);
-                            for (nuint i = 0; i < fcount; i++)
-                            {
-                                row_set_type_info_get_udt_field(handle, i, out FFIString fieldName, out IntPtr fieldTypeHandle);
-                                {
-                                    var fname = fieldName.ToManagedString();
-                                    var fcode = (ColumnTypeCode)row_set_type_info_get_code(fieldTypeHandle);
-                                    var fInfo = BuildTypeInfoFromHandle(fieldTypeHandle, fcode);
-                                    var desc = new ColumnDesc { Name = fname, TypeCode = fcode, TypeInfo = fInfo };
-                                    udtInfo.Fields.Add(desc);
-                                }
-                            }
-                            return udtInfo;
-                        }
-                    case ColumnTypeCode.Set:
-                        // For Set: ask Rust for the single element child
-                        unsafe
-                        {
-                            row_set_type_info_get_set_child(handle, out IntPtr child);
-                            {
-                                var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
-                                var childInfo = BuildTypeInfoFromHandle(child, childCode);
-                                var setInfo = new SetColumnInfo { KeyTypeCode = childCode, KeyTypeInfo = childInfo };
-                                return setInfo;
-                            }
-                        }
-                    default:
-                        return null;
-                }
-            }
-            catch (Exception e)
-            {
-                // Realistically nothing throws exceptions here so there shouldn't be any exceptions to catch.
-                Environment.FailFast($"Unexpected exception in BuildTypeInfoFromHandle: {e}");
-                return null;
-            }
-        }
-
-        private static CqlColumn[] ExtractColumnsFromRust(IntPtr rowSetPtr)
-        {
-            // Query Rust for the number of columns
-            var count = row_set_get_columns_count(rowSetPtr);
-            if (count <= 0)
-            {
-                return [];
-            }
-
-            var columns = new CqlColumn[count];
-            for (nuint i = 0; i < count; i++)
-            {
-                columns[i] = new CqlColumn();
-            }
-
-            unsafe
-            {
-                void* columnsPtr = Unsafe.AsPointer(ref columns);
-                var res = row_set_fill_columns_metadata(rowSetPtr, (IntPtr)columnsPtr, (IntPtr)setColumnMetaPtr, (IntPtr)RustBridgeGlobals.ConstructorsPtr);
-                try
-                {
-                    RustBridge.ThrowIfException(ref res);
-                }
-                finally
-                {
-                    RustBridge.FreeExceptionHandle(ref res);
-                }
-            }
-
-            // This was recommended by ChatGPT in the general case to ensure the raw pointer is still valid.
-            // I believe it's not needed in this particular case, because `columns` are returned from this function,
-            // so they must live at least until `return`.
-            // GC.KeepAlive(columns);
-
-            return columns;
-        }
-
-        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nuint, FFIString, FFIString, FFIString, byte, IntPtr, byte, RustBridge.FfiException> setColumnMetaPtr = &SetColumnMeta;
-
-        /// <summary>
-        /// This shall be called by Rust code for each column.
-        /// </summary>
-        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static RustBridge.FfiException SetColumnMeta(
-            IntPtr columnsPtr,
-            nuint columnIndex,
-            FFIString name,
-            FFIString keyspace,
-            FFIString table,
-            byte typeCode,
-            IntPtr typeInfoPtr,
-            byte isFrozen
-        )
-        {
-            unsafe
-            {
-                // Safety:
-                // 1. pointer validity:
-                //   - columnsPtr is a valid pointer to an array of CqlColumn.
-                //   - the referenced CqlColumn[] array lives **on the stack of the caller** (ExtractColumnsFromRust),
-                //     so it cannot be GC-collected during this call.
-                //   - the CqlColumn[] materialised here is transient, i.e., not stored beyond this call.
-                // 2. array length:
-                //   - the referenced CqlColumn[] array has length equal to the number of columns in the RowSet.
-                //   - columnIndex is within bounds of the columns array.
-                int index = (int)columnIndex;
-                
-                CqlColumn[] columns = Unsafe.Read<CqlColumn[]>((void*)columnsPtr);
-                {
-                    if (index < 0 || index >= columns.Length)
-                    {
-                        // I am not sure whether this warrant panicking or returning an error.
-                        return RustBridge.FfiException.FromException(
-                            new IndexOutOfRangeException($"Column index {index} is out of range (0..{columns.Length - 1})")
-                        );
-                    } 
-
-                    var col = columns[index];
-                    col.Name = name.ToManagedString();
-                    col.Keyspace = keyspace.ToManagedString();
-                    col.Table = table.ToManagedString();
-                    col.TypeCode = (ColumnTypeCode)typeCode;
-                    col.Index = index;
-                    col.Type = MapTypeFromCode(col.TypeCode);
-                    col.IsFrozen = isFrozen != 0;
-
-                    // If a non-null type-info handle was provided by Rust, build the corresponding IColumnInfo
-                    if (typeInfoPtr != IntPtr.Zero)
-                    {
-                        col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode);
-                    }
-                }
-                return RustBridge.FfiException.Ok();
-            }
-        }
 #nullable enable
         private Row? DeserializeRow()
 #nullable disable
         {
+            if (bridgedRowSet == null)
+            {
+                return null;
+            }
             object[] values = new object[Columns.Length];
-            var valuesHandle = GCHandle.Alloc(values);
-            IntPtr valuesPtr = GCHandle.ToIntPtr(valuesHandle);
-
-            var columnsHandle = GCHandle.Alloc(Columns);
-            IntPtr columnsPtr = GCHandle.ToIntPtr(columnsHandle);
 
             // TODO: reuse the serializer instance. Perhaps a static instance? Then no need to pass it around by pointer.
             IGenericSerializer serializer = (IGenericSerializer)new GenericSerializer();
-            var serializerHandle = GCHandle.Alloc(serializer);
-            IntPtr serializerPtr = GCHandle.ToIntPtr(serializerHandle);
 
-            RustBridge.FfiException res = default;
-            try
+            unsafe
             {
-                unsafe
+                var hasRow = bridgedRowSet.NextRow(ref values, Columns, ref serializer);
+                if (!hasRow)
                 {
-                    res = row_set_next_row(handle, (IntPtr)deserializeValue, columnsPtr, valuesPtr, serializerPtr, out bool hasRow, (IntPtr)RustBridgeGlobals.ConstructorsPtr);
-                    // First, surface any exception and free the underlying handle
-                    RustBridge.ThrowIfException(ref res);
-
-                    if (!hasRow)
-                    {
-                        _exhausted = true;
-                        return null;
-                    }
+                    _exhausted = true;
+                    return null;
                 }
             }
-            finally
-            {
-                // Ensure the exception handle is freed even if an unrelated exception occurs
-                RustBridge.FreeExceptionHandle(ref res);
-                valuesHandle.Free();
-                columnsHandle.Free();
-                serializerHandle.Free();
-            }
-
             var columnIndexes = new Dictionary<string, int>(StringComparer.Ordinal);
             for (int i = 0; i < Columns.Length; ++i)
             {
@@ -412,49 +173,6 @@ namespace Cassandra
 
             return new Row(values, Columns, columnIndexes);
         }
-
-        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, nuint, IntPtr, FFIByteSlice, RustBridge.FfiException> deserializeValue = &DeserializeValue;
-
-        /// <summary>
-        /// This shall be called by Rust code for each column in a row.
-        /// </summary>
-        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static RustBridge.FfiException DeserializeValue(
-            IntPtr columnsPtr,
-            IntPtr valuesPtr,
-            nuint valueIndex,
-            IntPtr serializerPtr,
-            FFIByteSlice FFIframeSlice
-        )
-        {
-            try
-            {
-                var valuesHandle = GCHandle.FromIntPtr(valuesPtr);
-                var columnsHandle = GCHandle.FromIntPtr(columnsPtr);
-                var serializerHandle = GCHandle.FromIntPtr(serializerPtr);
-
-                if (valuesHandle.Target is object[] values && columnsHandle.Target is CqlColumn[] columns && serializerHandle.Target is IGenericSerializer serializer)
-                {
-                    CqlColumn column = columns[valueIndex];
-
-                    // TODO: reuse the frameSlice buffer.
-                    var frameSlice = FFIframeSlice.ToSpan().ToArray();
-                    int length = frameSlice.Length;
-                    values[valueIndex] = serializer.Deserialize(ProtocolVersion.V4, frameSlice, 0, length, column.TypeCode, column.TypeInfo);
-                }
-                else
-                {
-                    throw new InvalidOperationException("GCHandle referenced type mismatch.");
-                }
-                return RustBridge.FfiException.Ok();
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[FFI] DeserializeValue threw exception: {ex}");
-                return RustBridge.FfiException.FromException(ex);
-            }
-        }
-
 
         /// <summary>
         /// Forces the fetching the next page of results for this <see cref="RowSet"/>.
@@ -532,40 +250,6 @@ namespace Cassandra
                 throw new InvalidOperationException("Can not append a Row to a RowSet instance created for VOID results");
             }
             RowQueue.Enqueue(row);
-        }
-
-        private static Type MapTypeFromCode(ColumnTypeCode code)
-        {
-            return code switch
-            {
-                ColumnTypeCode.Ascii => typeof(string),
-                ColumnTypeCode.Bigint => typeof(long),
-                ColumnTypeCode.Blob => typeof(byte[]),
-                ColumnTypeCode.Boolean => typeof(bool),
-                ColumnTypeCode.Counter => typeof(long),
-                ColumnTypeCode.Decimal => typeof(decimal),
-                ColumnTypeCode.Double => typeof(double),
-                ColumnTypeCode.Float => typeof(float),
-                ColumnTypeCode.Int => typeof(int),
-                ColumnTypeCode.Text => typeof(string),
-                ColumnTypeCode.Timestamp => typeof(DateTime),
-                ColumnTypeCode.Uuid => typeof(Guid),
-                ColumnTypeCode.Varchar => typeof(string),
-                ColumnTypeCode.Varint => typeof(System.Numerics.BigInteger),
-                ColumnTypeCode.Timeuuid => typeof(Guid),
-                ColumnTypeCode.Inet => typeof(System.Net.IPAddress),
-                ColumnTypeCode.Date => typeof(DateOnly),
-                ColumnTypeCode.Time => typeof(TimeOnly),
-                ColumnTypeCode.SmallInt => typeof(short),
-                ColumnTypeCode.TinyInt => typeof(sbyte),
-                ColumnTypeCode.Duration => typeof(TimeSpan),
-                ColumnTypeCode.List => typeof(object),
-                ColumnTypeCode.Map => typeof(object),
-                ColumnTypeCode.Set => typeof(object),
-                ColumnTypeCode.Udt => typeof(object),
-                ColumnTypeCode.Tuple => typeof(object),
-                _ => typeof(object)
-            };
         }
     }
 }

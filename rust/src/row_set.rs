@@ -5,8 +5,7 @@ use scylla::frame::response::result::{ColumnType, NativeType};
 use crate::FfiPtr;
 use crate::error_conversion::FfiException;
 use crate::ffi::{
-    ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, FFI, FFIByteSlice, FFIStr, FromArc,
-    FromRef, RefFFI,
+    ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIStr, FromArc, FromRef, RefFFI,
 };
 use crate::task::BridgedFuture;
 use crate::task::ExceptionConstructors;
@@ -45,18 +44,19 @@ impl FFI for ColumnType<'_> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn row_set_free(row_set_ptr: BridgedOwnedSharedPtr<RowSet>) {
-    ArcFFI::free(row_set_ptr);
-    tracing::trace!("[FFI] RowSet freed");
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn row_set_get_columns_count(
     row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
-) -> usize {
+    out_num_fields: *mut usize,
+) -> FfiException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
     let pager = row_set.pager.lock().unwrap();
-    pager.as_ref().map(|p| p.column_specs().len()).unwrap_or(0)
+    unsafe {
+        *out_num_fields = match pager.as_ref() {
+            Some(pager) => pager.column_specs().len(),
+            None => 0,
+        };
+    }
+    FfiException::ok()
 }
 
 // Function pointer type for setting column metadata in C#.
