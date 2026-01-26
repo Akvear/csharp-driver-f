@@ -32,9 +32,6 @@ namespace Cassandra
         unsafe private static extern void session_shutdown(Tcb tcb, IntPtr session);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void empty_bridged_result_free(IntPtr phantomResult);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
 
         /// <summary>
@@ -86,17 +83,12 @@ namespace Cassandra
         /// <summary>
         /// Shuts down the session.
         /// </summary>
-        internal Task<IntPtr> Shutdown()
+        internal Task<ManuallyDestructible> Shutdown()
         {
-            TaskCompletionSource<IntPtr> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCompletionSource<ManuallyDestructible> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
             Tcb tcb = Tcb.WithTcs(tcs);
             session_shutdown(tcb, handle);
             return tcs.Task;
-        }
-
-        internal void free_empty_result(IntPtr phantomResult)
-        {
-            empty_bridged_result_free(phantomResult);
         }
 
         /// <summary>

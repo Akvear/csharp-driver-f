@@ -205,11 +205,12 @@ namespace Cassandra
 
             // First, we shutdown the session in Rust - this acquires a write lock,
             // waits for all ongoing queries to complete, and blocks future queries.
-            Task<IntPtr> shutdownTask = bridgedSession.Shutdown();
-            IntPtr emptyBridgedResult = await shutdownTask.ConfigureAwait(false);
+            Task<ManuallyDestructible> shutdownTask = bridgedSession.Shutdown();
+            ManuallyDestructible emptyBridgedResult = await shutdownTask.ConfigureAwait(false);
+            EmptyRustResource emptyResource = new EmptyRustResource(emptyBridgedResult);
 
             // Free the empty bridged result returned by shutdown
-            bridgedSession.free_empty_result(emptyBridgedResult);
+            emptyResource.Dispose();
 
             // Then we dispose the bridged session synchronously (calls session_free in Rust).
             bridgedSession.Dispose();
