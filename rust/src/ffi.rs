@@ -635,4 +635,13 @@ impl<'a> FFIStr<'a> {
             slice: FFIByteSlice::new(s.as_ref().as_bytes()),
         }
     }
+
+    pub(crate) fn null() -> Self {
+        Self {
+            slice: FFIByteSlice {
+                ptr: BridgedBorrowedSharedPtr::null(),
+                len: 0,
+            },
+        }
+    }
 }
