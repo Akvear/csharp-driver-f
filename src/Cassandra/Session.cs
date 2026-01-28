@@ -316,10 +316,10 @@ namespace Cassandra
                         );
                     }
 
-                        return task.ContinueWith(t =>
-                        {
-                            ManuallyDestructible mdRowSet = t.Result;
-                            var rowSet = new RowSet(mdRowSet);
+                    return task.ContinueWith(t =>
+                    {
+                        ManuallyDestructible mdRowSet = t.Result;
+                        var rowSet = new RowSet(mdRowSet);
 
                         // TODO: Fix this logic once we have proper USE statement handling in the driver. Make sure no race conditions occur when updating the keyspace
                         if (isUseStatement)
@@ -333,13 +333,13 @@ namespace Cassandra
                 case BoundStatement bs:
                     // Only support bound statements without values for now.
 
-                        // The managed PreparedStatement object (and the BoundStatement that
-                        // references it) is rooted here by the local variable `bs`. Because there's an
-                        // active reference in this scope, the GC will not collect the managed object
-                        // while this method is executing — so the native resource under the pointer
-                        // is guaranteed to still exist for the duration of this call.
-                        IntPtr queryPrepared = bs.PreparedStatement.bridgedPreparedStatement.DangerousGetHandle();
-                        object[] queryValuesBound = bs.QueryValues ?? [];
+                    // The managed PreparedStatement object (and the BoundStatement that
+                    // references it) is rooted here by the local variable `bs`. Because there's an
+                    // active reference in this scope, the GC will not collect the managed object
+                    // while this method is executing — so the native resource under the pointer
+                    // is guaranteed to still exist for the duration of this call.
+                    IntPtr queryPrepared = bs.PreparedStatement.bridgedPreparedStatement.DangerousGetHandle();
+                    object[] queryValuesBound = bs.QueryValues ?? [];
 
                     Task<ManuallyDestructible> boundTask;
                     if (queryValuesBound.Length == 0)
@@ -351,11 +351,11 @@ namespace Cassandra
                         throw new NotImplementedException("Bound statements with values are not yet supported");
                     }
 
-                        return boundTask.ContinueWith(t =>
-                        {
-                            ManuallyDestructible mdRowSet = t.Result;
-                            return new RowSet(mdRowSet);
-                        }, TaskContinuationOptions.ExecuteSynchronously);
+                    return boundTask.ContinueWith(t =>
+                    {
+                        ManuallyDestructible mdRowSet = t.Result;
+                        return new RowSet(mdRowSet);
+                    }, TaskContinuationOptions.ExecuteSynchronously);
 
                 case BatchStatement s:
                     throw new NotImplementedException("Batches are not yet supported");
