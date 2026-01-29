@@ -83,8 +83,8 @@ impl Debug for ManuallyDestructible {
 
         f.debug_struct("ManuallyDestructible")
             .field("ptr", &raw_ptr)
-            .field("destructor", &destructor_ptr)
             .field("is_null", &self.ptr.is_null())
+            .field("destructor", &destructor_ptr)
             .finish()
     }
 }
