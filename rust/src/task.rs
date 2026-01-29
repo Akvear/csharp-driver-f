@@ -67,6 +67,12 @@ impl ManuallyDestructible {
             destructor: None,
         }
     }
+
+    pub(crate) fn from_destructible<T: Destructible>(value: Arc<T>) -> Self {
+        let ptr = ArcFFI::into_ptr(value).cast_to_void();
+        let destructor = Some(T::void_destructor());
+        ManuallyDestructible::new(ptr, destructor)
+    }
 }
 
 impl Debug for ManuallyDestructible {

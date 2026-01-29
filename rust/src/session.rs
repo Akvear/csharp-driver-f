@@ -2,12 +2,13 @@ use std::convert::Infallible;
 
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
+use scylla::cluster::ClusterState;
 use scylla::errors::{NewSessionError, PagerExecutionError, PrepareError};
 use scylla_cql::serialize::row::SerializedValues;
 use tokio::sync::RwLock;
 
 use crate::CSharpStr;
-use crate::error_conversion::MaybeShutdownError;
+use crate::error_conversion::{FfiException, MaybeShutdownError};
 use crate::ffi::{
     ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr, FFI,
     FromArc,
@@ -15,7 +16,7 @@ use crate::ffi::{
 use crate::pre_serialized_values::pre_serialized_values::PreSerializedValues;
 use crate::prepared_statement::BridgedPreparedStatement;
 use crate::row_set::RowSet;
-use crate::task::{BridgedFuture, Tcb};
+use crate::task::{BridgedFuture, ExceptionConstructors, ManuallyDestructible, Tcb};
 
 /// Internal representation of a session bridged to C#.
 /// It contains optional connected session state to allow for shutdown.
@@ -382,4 +383,45 @@ pub extern "C" fn session_use_keyspace(
         tracing::trace!("[FFI] use_keyspace executed successfully");
         Ok(Some(RowSet::empty()))
     })
+}
+
+/// Sets `out_cluster_state` to the current cluster state as a ManuallyDestructible resource.
+/// This function provides access to the cluster topology information from the session.
+/// The returned ClusterState is a snapshot at the time of the call.
+///
+/// # Safety
+/// - The session pointer must be valid and not freed
+#[unsafe(no_mangle)]
+pub extern "C" fn session_get_cluster_state(
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+    out_cluster_state: *mut ManuallyDestructible,
+    constructors: &ExceptionConstructors,
+) -> FfiException {
+    let session_arc =
+        ArcFFI::as_ref(session_ptr).expect("valid and non-null BridgedSession pointer");
+
+    // Try to acquire a read lock synchronously.
+    let Ok(session_guard) = session_arc.try_read() else {
+        // Session is currently shutting down.
+        let ex = constructors
+            .already_shutdown_exception_constructor
+            .construct_from_rust("Session has been shut down and can no longer execute operations");
+        return FfiException::from_exception(ex);
+    };
+
+    // Check if session is connected or if it has been shut down.
+    let Some(session) = session_guard.session.as_ref() else {
+        let ex = constructors
+            .already_shutdown_exception_constructor
+            .construct_from_rust("Session has been shut down and can no longer execute operations");
+        return FfiException::from_exception(ex);
+    };
+
+    // Get the cluster state from the session and convert it into an ArcFFI-wrapped pointer.
+    let cluster_state = session.get_cluster_state();
+    let md = ManuallyDestructible::from_destructible::<ClusterState>(cluster_state);
+    unsafe {
+        *out_cluster_state = md;
+    }
+    FfiException::ok()
 }

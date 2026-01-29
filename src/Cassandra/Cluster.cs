@@ -137,7 +137,7 @@ namespace Cassandra
         private Cluster(IEnumerable<object> contactPoints, Configuration configuration)
         {
             Configuration = configuration;
-            _metadata = new Metadata(configuration);
+            _metadata = new Metadata(configuration, GetActiveSessionOrThrow);
             var protocolVersion = _maxProtocolVersion;
             if (Configuration.ProtocolOptions.MaxProtocolVersionValue != null &&
                 Configuration.ProtocolOptions.MaxProtocolVersionValue.Value.IsSupported(configuration))
@@ -147,10 +147,25 @@ namespace Cassandra
             _contactPoints = configuration.ParseContactPoints(contactPoints);
         }
 
+        private Session GetActiveSessionOrThrow()
+        {
+            // Check for a first active session in the cluster and try to increase the reference count on it.
+            // If successful, return the session with guarantee that it won't be disposed while in use.
+            // The caller is responsible for releasing the session and lowering the reference count.
+            // If TryIncreaseReferenceCount fails, it means the session is disposed, so we skip it.
+            foreach (var session in _connectedSessions.OfType<Session>().Where(s => s.TryIncreaseReferenceCount()))
+            {
+                return session;
+            }
+
+            // If no active sessions are found, throw an exception.
+            throw new InvalidOperationException(
+                "No active sessions available in cluster. Create a session (for example, by calling Cluster.Connect()) before accessing metadata.");
+        }
+
         /// <inheritdoc />
         public ICollection<Host> AllHosts()
         {
-            //Do not connect at first
             return _metadata.AllHosts();
         }
 

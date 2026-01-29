@@ -87,6 +87,22 @@ namespace Cassandra
         }
 
         /// <summary>
+        /// Creates a new instance of <see cref="Host"/> from raw metadata.
+        /// This constructor is used internally by the FFI bridge when populating
+        /// host topology from Rust's ClusterState.
+        /// </summary>
+        /// <remarks>
+        /// This constructor should only be called by the AddHostCallback (AddHostToList) FFI callback in BridgedClusterState.cs.
+        /// </remarks>
+        internal Host(IPEndPoint address, Guid hostId, string datacenter, string rack)
+        {
+            Address = address;
+            HostId = hostId;
+            Datacenter = datacenter;
+            Rack = rack;
+        }
+
+        /// <summary>
         /// Sets the Host as Down.
         /// Returns false if it was already considered as Down by the driver.
         /// </summary>

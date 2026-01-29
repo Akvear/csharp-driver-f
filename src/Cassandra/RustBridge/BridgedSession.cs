@@ -34,6 +34,9 @@ namespace Cassandra
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
 
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        private static extern RustBridge.FfiException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
+
         /// <summary>
         /// Executes a query with already-serialized values.
         /// 
@@ -137,6 +140,19 @@ namespace Cassandra
         internal Task<ManuallyDestructible> QueryBound(IntPtr preparedStatement)
         {
             return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query_bound(tcb, ptr, preparedStatement));
+        }
+
+        /// <summary>
+        /// Gets the cluster state associated with this session.
+        /// </summary>
+        internal BridgedClusterState GetClusterState()
+        {
+            ManuallyDestructible mdClusterState = default;
+            unsafe
+            {
+                RunWithIncrement(handle => session_get_cluster_state(handle, out mdClusterState, (IntPtr)RustBridgeGlobals.ConstructorsPtr));
+            }
+            return new BridgedClusterState(mdClusterState);
         }
     }
 }
