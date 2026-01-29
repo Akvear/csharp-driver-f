@@ -2,7 +2,6 @@ using System;
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Windows.Markup;
 using Cassandra.Serialization;
 
 namespace Cassandra
@@ -255,7 +254,7 @@ namespace Cassandra
                 //   - the referenced CqlColumn[] array has length equal to the number of columns in the RowSet.
                 //   - columnIndex is within bounds of the columns array.
                 int index = (int)columnIndex;
-                
+
                 CqlColumn[] columns = Unsafe.Read<CqlColumn[]>((void*)columnsPtr);
                 {
                     if (index < 0 || index >= columns.Length)
@@ -264,7 +263,7 @@ namespace Cassandra
                         return RustBridge.FfiException.FromException(
                             new IndexOutOfRangeException($"Column index {index} is out of range (0..{columns.Length - 1})")
                         );
-                    } 
+                    }
 
                     var col = columns[index];
                     col.Name = name.ToManagedString();
