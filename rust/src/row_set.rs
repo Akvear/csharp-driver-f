@@ -180,7 +180,7 @@ pub extern "C" fn row_set_next_row<'row_set>(
                 // TODO: Implement error type for too few columns - server provided less columns than claimed in the metadata
                 let ex = constructors
                     .rust_exception_constructor
-                    .construct_from_rust(format!(
+                    .construct_from_rust(format_args!(
                         "Row contains fewer columns ({} of {}) than metadata claims",
                         value_index, num_columns
                     ));
