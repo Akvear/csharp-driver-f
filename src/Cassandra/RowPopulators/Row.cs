@@ -246,7 +246,9 @@ namespace Cassandra
                     }
                     return value;
                 case ColumnTypeCode.Custom:
-                    return column.TypeInfo is VectorColumnInfo ? TryConvertToCollection(value, column, targetType) : value;
+                    return value;
+                case ColumnTypeCode.Vector:
+                    return TryConvertToCollection(value, column, targetType);
 
                 default:
                     return value;

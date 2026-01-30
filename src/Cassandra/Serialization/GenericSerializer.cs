@@ -98,10 +98,6 @@ namespace Cassandra.Serialization
             {
                 case ColumnTypeCode.Custom:
                     {
-                        if (typeInfo is VectorColumnInfo)
-                        {
-                            return _vectorSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
-                        }
                         if (_customDeserializers.Count == 0 || !_customDeserializers.TryGetValue(typeInfo, out typeSerializer))
                         {
                             // Use byte[] by default
@@ -109,6 +105,8 @@ namespace Cassandra.Serialization
                         }
                         return typeSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
                     }
+                case ColumnTypeCode.Vector:
+                    return _vectorSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
                 case ColumnTypeCode.Udt:
                     return _udtSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
                 case ColumnTypeCode.List:
@@ -143,10 +141,6 @@ namespace Cassandra.Serialization
 
         public Type GetClrTypeForCustom(IColumnInfo typeInfo)
         {
-            if (typeInfo is VectorColumnInfo vectorColumnInfo)
-            {
-                return _vectorSerializer.GetClrType(vectorColumnInfo);
-            }
             var customTypeInfo = (CustomColumnInfo)typeInfo;
             if (customTypeInfo.CustomTypeName == null || !customTypeInfo.CustomTypeName.StartsWith(DataTypeParser.UdtTypeName))
             {
@@ -204,7 +198,7 @@ namespace Cassandra.Serialization
                         ValueTypeInfo = vectorSubtypeInfo,
                         Dimensions = null // can't know the dimensions just from the CLR type
                     };
-                    return ColumnTypeCode.Custom;
+                    return ColumnTypeCode.Vector;
                 }
                 if (typeof(IEnumerable).GetTypeInfo().IsAssignableFrom(type))
                 {
@@ -292,6 +286,7 @@ namespace Cassandra.Serialization
                 _defaultTypes.Add(kv.Key, _ => clrType);
             }
             _defaultTypes.Add(ColumnTypeCode.Custom, GetClrTypeForCustom);
+            _defaultTypes.Add(ColumnTypeCode.Vector, columnInfo => _vectorSerializer.GetClrType((VectorColumnInfo)columnInfo));
             _defaultTypes.Add(ColumnTypeCode.List, _collectionSerializer.GetClrTypeForList);
             _defaultTypes.Add(ColumnTypeCode.Set, _collectionSerializer.GetClrTypeForSet);
             _defaultTypes.Add(ColumnTypeCode.Map, _dictionarySerializer.GetClrType);
@@ -560,11 +555,18 @@ namespace Cassandra.Serialization
                     break;
                 case ColumnTypeCode.Custom:
                     requiresCheck = true;
-                    if (!(typeInfo is CustomColumnInfo) && !(typeInfo is VectorColumnInfo))
+                    if (!(typeInfo is CustomColumnInfo))
                     {
                         msg = "custom column type requires a column info object of type CustomColumnInfo.";
                     }
 
+                    break;
+                case ColumnTypeCode.Vector:
+                    requiresCheck = true;
+                    if (!(typeInfo is VectorColumnInfo))
+                    {
+                        msg = "vector column type requires a column info object of type VectorColumnInfo.";
+                    }
                     break;
                 case ColumnTypeCode.Udt:
                     requiresCheck = true;
@@ -637,7 +639,7 @@ namespace Cassandra.Serialization
                 case ColumnTypeCode.Tuple:
                     return -1;
 
-                case ColumnTypeCode.Custom:
+                case ColumnTypeCode.Vector:
                     if (typeInfo is VectorColumnInfo vectorTypeInfo)
                     {
                         var subTypeValueLength = GetValueLengthIfFixed(vectorTypeInfo.ValueTypeCode, vectorTypeInfo.ValueTypeInfo);
