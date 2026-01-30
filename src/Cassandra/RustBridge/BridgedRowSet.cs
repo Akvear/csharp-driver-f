@@ -167,6 +167,12 @@ namespace Cassandra
         unsafe private static extern void row_set_type_info_get_set_child(IntPtr typeInfoHandle, out IntPtr childHandle);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void row_set_type_info_get_vector_child(IntPtr typeInfoHandle, out IntPtr childHandle);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern ushort row_set_type_info_get_vector_dimensions(IntPtr typeInfoHandle);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void row_set_type_info_get_udt_name(IntPtr typeInfoHandle, out FFIString name);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
@@ -275,6 +281,17 @@ namespace Cassandra
                                 return setInfo;
                             }
                         }
+                    case ColumnTypeCode.Vector:
+                        // For Vector: ask Rust for the element child and dimensions
+                        unsafe
+                        {
+                            row_set_type_info_get_vector_child(handle, out IntPtr child);
+                            var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
+                            var childInfo = BuildTypeInfoFromHandle(child, childCode);
+                            var dims = (int)row_set_type_info_get_vector_dimensions(handle);
+                            var vectorInfo = new VectorColumnInfo { ValueTypeCode = childCode, ValueTypeInfo = childInfo, Dimensions = dims };
+                            return vectorInfo;
+                        }
                     default:
                         return null;
                 }
@@ -357,6 +374,7 @@ namespace Cassandra
                 ColumnTypeCode.List => typeof(object),
                 ColumnTypeCode.Map => typeof(object),
                 ColumnTypeCode.Set => typeof(object),
+                ColumnTypeCode.Vector => typeof(object),
                 ColumnTypeCode.Udt => typeof(object),
                 ColumnTypeCode.Tuple => typeof(object),
                 _ => typeof(object)

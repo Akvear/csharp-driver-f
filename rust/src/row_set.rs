@@ -460,6 +460,42 @@ pub extern "C" fn row_set_type_info_get_udt_field<'typ>(
     }
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn row_set_type_info_get_vector_child<'typ>(
+    type_info_handle: BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
+    out_child_handle: *mut BridgedBorrowedSharedPtr<'typ, ColumnType<'typ>>,
+) {
+    if out_child_handle.is_null() {
+        panic!("Null pointer passed to row_set_type_info_get_vector_child");
+    }
+
+    let Some(type_info) = RefFFI::as_ref(type_info_handle) else {
+        panic!("Null pointer passed to row_set_type_info_get_vector_child");
+    };
+    match type_info {
+        ColumnType::Vector { typ, .. } => {
+            let child = typ.as_ref();
+            unsafe {
+                out_child_handle.write(RefFFI::as_ptr(child));
+            }
+        }
+        _ => panic!("row_set_type_info_get_vector_child called on non-Vector ColumnType"),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn row_set_type_info_get_vector_dimensions(
+    type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
+) -> u16 {
+    let Some(type_info) = RefFFI::as_ref(type_info_handle) else {
+        panic!("Null pointer passed to row_set_type_info_get_vector_dimensions");
+    };
+    match type_info {
+        ColumnType::Vector { dimensions, .. } => *dimensions,
+        _ => panic!("row_set_type_info_get_vector_dimensions called on non-Vector ColumnType"),
+    }
+}
+
 pub(crate) fn column_type_to_code(typ: &ColumnType) -> u8 {
     match typ {
         ColumnType::Native(nt) => match nt {
@@ -491,7 +527,7 @@ pub(crate) fn column_type_to_code(typ: &ColumnType) -> u8 {
             CollectionType::Set { .. } => 0x22,
             _ => 0x00,
         },
-        ColumnType::Vector { .. } => 0x20, // FIXME: handle Vector as custom type
+        ColumnType::Vector { .. } => 0x23,
         ColumnType::UserDefinedType { .. } => 0x30,
         ColumnType::Tuple(_) => 0x31,
         _ => 0x00,
