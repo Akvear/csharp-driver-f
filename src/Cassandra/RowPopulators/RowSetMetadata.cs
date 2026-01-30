@@ -60,6 +60,7 @@ namespace Cassandra
         List = 0x0020,
         Map = 0x0021,
         Set = 0x0022,
+        Vector = 0x0023,
         /// <summary>
         /// User defined type
         /// </summary>
