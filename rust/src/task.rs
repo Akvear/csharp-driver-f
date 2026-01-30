@@ -113,6 +113,25 @@ pub trait Destructible: ArcFFI + Sized + 'static {
 // Blanket impl: any ArcFFI type is destructible via the generic c_void destructor.
 impl<T> Destructible for T where T: ArcFFI + Sized + 'static {}
 
+// Blanket From impl to convert Arc<T> into ManuallyDestructible that stores T.
+impl<T: Destructible> From<Arc<T>> for ManuallyDestructible {
+    fn from(value: Arc<T>) -> Self {
+        Self::from_destructible(value)
+    }
+}
+
+// TEMPORARY blanket From impl to convert Option<Arc<T>> into ManuallyDestructible that stores T.
+// This will be deleted, because we'll no longer need ManuallyDestructible to represent trivial values
+// after we make Tcb generic over the result type.
+impl<T: Destructible> From<Option<Arc<T>>> for ManuallyDestructible {
+    fn from(value: Option<Arc<T>>) -> Self {
+        match value {
+            Some(v) => Self::from_destructible(v),
+            None => ManuallyDestructible::new_null(),
+        }
+    }
+}
+
 /// **Task Control Block** (TCB)
 ///
 /// Contains the necessary information to manually control a Task execution from Rust.
@@ -187,9 +206,10 @@ impl BridgedFuture {
     /// and the Err variant is sent back as an exception message.
     pub(crate) fn spawn<F, T, E>(tcb: Tcb<ManuallyDestructible>, future: F)
     where
-        F: Future<Output = Result<Option<T>, E>> + Send + 'static,
-        T: Send + 'static + ArcFFI + Destructible, // Must be shareable across FFI boundary. For now we only support ArcFFI.
-        T: Debug,                                  // Temporarily, for debug prints.
+        F: Future<Output = Result<T, E>> + Send + 'static,
+        T: Send + 'static, // Result type must be Send to cross threads in tokio runtime.
+        T: Debug,          // Temporarily, for debug prints.
+        ManuallyDestructible: From<T>, // Result type must be convertible to ManuallyDestructible for FFI.
         E: Debug + ErrorToException, // Error must be printable for logging and exception conversion.
                                      // The ErrorToException trait is used to convert the error to an exception pointer.
     {
@@ -206,15 +226,7 @@ impl BridgedFuture {
             match result {
                 // On success, complete the task with the result.
                 Ok(Ok(res)) => {
-                    let md_void = match res {
-                        Some(inner) => {
-                            let arced_res = Arc::new(inner);
-                            ManuallyDestructible::from_destructible(arced_res)
-                        }
-                        None => ManuallyDestructible::new_null(),
-                    };
-
-                    tcb.complete_task(md_void);
+                    tcb.complete_task(res.into());
                 }
 
                 // On error, fail the task with exception.

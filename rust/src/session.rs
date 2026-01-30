@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::sync::Arc;
 
 use scylla::client::session::Session;
 use scylla::client::session_builder::SessionBuilder;
@@ -63,7 +64,7 @@ pub extern "C" fn session_create(tcb: Tcb<ManuallyDestructible>, uri: CSharpStr<
             "[FFI] Contacted node's address: {}",
             session.get_cluster_state().get_nodes_info()[0].address
         );
-        Ok(Some(RwLock::new(BridgedSessionInner {
+        Ok(Arc::new(RwLock::new(BridgedSessionInner {
             session: Some(session),
         })))
     })
@@ -96,8 +97,9 @@ pub extern "C" fn session_shutdown(
         session_guard.session = None;
         tracing::info!("[FFI] Session shutdown complete");
 
-        // Return an EmptyBridgedResult to satisfy the return type
-        Ok(None::<EmptyBridgedResult>)
+        // Return None, providing BridgedSession just to satisfy the type constraints.
+        // This is temporary and will be replaced with a proper non-allocating empty result type.
+        Ok(None::<Arc<BridgedSession>>)
     })
 }
 
@@ -145,7 +147,7 @@ pub extern "C" fn session_prepare(
 
         tracing::trace!("[FFI] Statement prepared");
 
-        Ok(Some(BridgedPreparedStatement { inner: ps }))
+        Ok(Arc::new(BridgedPreparedStatement { inner: ps }))
     })
 }
 
@@ -193,7 +195,7 @@ pub extern "C" fn session_query(
 
         tracing::trace!("[FFI] Statement executed");
 
-        Ok(Some(RowSet {
+        Ok(Arc::new(RowSet {
             pager: std::sync::Mutex::new(Some(query_pager)),
         }))
     });
@@ -257,7 +259,7 @@ pub extern "C" fn session_query_with_values(
 
         tracing::trace!("[FFI] Prepared statement executed with pre-serialized values");
 
-        Ok(Some(RowSet {
+        Ok(Arc::new(RowSet {
             pager: std::sync::Mutex::new(Some(query_pager)),
         }))
     });
@@ -303,7 +305,7 @@ pub extern "C" fn session_query_bound(
 
         tracing::trace!("[FFI] Prepared statement executed");
 
-        Ok(Some(RowSet {
+        Ok(Arc::new(RowSet {
             pager: std::sync::Mutex::new(Some(query_pager)),
         }))
     })
@@ -381,7 +383,7 @@ pub extern "C" fn session_use_keyspace(
             })?;
 
         tracing::trace!("[FFI] use_keyspace executed successfully");
-        Ok(Some(RowSet::empty()))
+        Ok(Arc::new(RowSet::empty()))
     })
 }
 
