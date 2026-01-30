@@ -21,7 +21,7 @@ pub(crate) struct RowSet {
     // and it's possible that C# code will call row_set_next_row concurrently,
     // because RowSet claims it supports parallel enumeration, and does not enforce any locking
     // on its own.
-    pub(crate) pager: std::sync::Mutex<QueryPager>,
+    pub(crate) pager: tokio::sync::Mutex<QueryPager>,
 }
 
 impl FFI for RowSet {
@@ -38,7 +38,7 @@ pub extern "C" fn row_set_get_columns_count(
     out_num_fields: *mut usize,
 ) -> FFIMaybeException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
-    let pager = row_set.pager.lock().unwrap();
+    let pager = row_set.pager.blocking_lock();
     unsafe {
         *out_num_fields = pager.column_specs().len();
     }
@@ -69,7 +69,7 @@ pub extern "C" fn row_set_fill_columns_metadata(
     set_metadata: SetMetadata,
 ) -> FFIMaybeException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
-    let pager = row_set.pager.lock().unwrap();
+    let pager = row_set.pager.blocking_lock();
 
     // Iterate column specs and call the metadata setter
     for (i, spec) in pager.column_specs().iter().enumerate() {
@@ -149,7 +149,7 @@ pub extern "C" fn row_set_next_row<'row_set>(
     constructors: &'static ExceptionConstructors,
 ) -> FFIMaybeException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
-    let mut pager = row_set.pager.lock().unwrap();
+    let mut pager = row_set.pager.blocking_lock();
     let num_columns = pager.column_specs().len();
 
     let deserialize_fut = async {
