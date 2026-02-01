@@ -158,7 +158,6 @@ pub extern "C" fn session_query(
     // Convert the raw C string to a Rust string.
     let statement = statement.as_cstr().unwrap().to_str().unwrap().to_owned();
     let session_arc = ArcFFI::cloned_from_ptr(session_ptr).unwrap();
-    //TODO: use safe error propagation mechanism
 
     tracing::trace!(
         "[FFI] Scheduling statement for execution: \"{}\"",
@@ -331,6 +330,7 @@ pub extern "C" fn session_use_keyspace(
     // If the operation fails, treat it as session shutting down.
     let session_guard_res = session_arc.try_read_owned();
 
+    // TODO: replace PagerExecutionError with UseKeyspaceError.
     BridgedFuture::spawn::<_, _, MaybeShutdownError<PagerExecutionError>>(tcb, async move {
         tracing::debug!("[FFI] Executing use_keyspace \"{}\"", keyspace);
 
