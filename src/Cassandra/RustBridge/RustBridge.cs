@@ -155,7 +155,7 @@ namespace Cassandra
             // Note that we can get this pointer because the method is static and
             // decorated with [UnmanagedCallersOnly].
             unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, ManuallyDestructible, void> completeTaskDel = &CompleteTask;
-            unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, void> failTaskDel = &FailTask;
+            unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, FFIException, void> failTaskDel = &FailTask;
 
             /// <summary>
             /// Creates a TCB for a TaskCompletionSource&lt;ManuallyDestructible&gt;.
@@ -353,7 +353,7 @@ namespace Cassandra
         // This attribute makes the method callable from native code.
         // It also allows taking a function pointer to the method.
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static void FailTask(IntPtr tcsPtr, IntPtr exceptionPtr)
+        internal static void FailTask(IntPtr tcsPtr, FFIException exceptionPtr)
         {
             try
             {
@@ -366,10 +366,10 @@ namespace Cassandra
                     Exception exception;
                     try
                     {
-                        if (exceptionPtr != IntPtr.Zero)
+                        if (exceptionPtr.exception != IntPtr.Zero)
                         {
                             // Recover the exception from the GCHandle passed from Rust.
-                            var exHandle = GCHandle.FromIntPtr(exceptionPtr);
+                            var exHandle = GCHandle.FromIntPtr(exceptionPtr.exception);
                             try
                             {
                                 if (exHandle.Target is Exception ex)
