@@ -72,7 +72,7 @@ namespace Cassandra
         private Session(
             ICluster cluster,
             string keyspace,
-            ManuallyDestructible mdSession)
+            RustBridge.ManuallyDestructible mdSession)
         {
             _cluster = cluster;
             Configuration = cluster.Configuration;
@@ -85,9 +85,9 @@ namespace Cassandra
             string contactPointUris,
             string keyspace)
         {
-            Task<ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris);
+            Task<RustBridge.ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris);
 
-            ManuallyDestructible mdSession = await mdSessionTask.ConfigureAwait(false);
+            RustBridge.ManuallyDestructible mdSession = await mdSessionTask.ConfigureAwait(false);
             var session = new Session(cluster, keyspace, mdSession);
 
             // If a keyspace was specified, validate it exists by executing USE statement
@@ -205,8 +205,8 @@ namespace Cassandra
 
             // First, we shutdown the session in Rust - this acquires a write lock,
             // waits for all ongoing queries to complete, and blocks future queries.
-            Task<ManuallyDestructible> shutdownTask = bridgedSession.Shutdown();
-            ManuallyDestructible emptyBridgedResult = await shutdownTask.ConfigureAwait(false);
+            Task<RustBridge.ManuallyDestructible> shutdownTask = bridgedSession.Shutdown();
+            RustBridge.ManuallyDestructible emptyBridgedResult = await shutdownTask.ConfigureAwait(false);
             EmptyRustResource emptyResource = new EmptyRustResource(emptyBridgedResult);
 
             // Free the empty bridged result returned by shutdown
@@ -292,7 +292,7 @@ namespace Cassandra
                     // TODO: perform whole logic related to USE statements on the Rust side.
                     bool isUseStatement = IsUseKeyspace(queryString, out string newKeyspace);
 
-                    Task<ManuallyDestructible> task;
+                    Task<RustBridge.ManuallyDestructible> task;
                     if (queryValues.Length == 0)
                     {
                         // Use session_use_keyspace for USE statements and session_query for other statements.
@@ -318,7 +318,7 @@ namespace Cassandra
 
                     return task.ContinueWith(t =>
                     {
-                        ManuallyDestructible mdRowSet = t.Result;
+                        RustBridge.ManuallyDestructible mdRowSet = t.Result;
                         var rowSet = new RowSet(mdRowSet);
 
                         // TODO: Fix this logic once we have proper USE statement handling in the driver. Make sure no race conditions occur when updating the keyspace
@@ -341,7 +341,7 @@ namespace Cassandra
                     IntPtr queryPrepared = bs.PreparedStatement.bridgedPreparedStatement.DangerousGetHandle();
                     object[] queryValuesBound = bs.QueryValues ?? [];
 
-                    Task<ManuallyDestructible> boundTask;
+                    Task<RustBridge.ManuallyDestructible> boundTask;
                     if (queryValuesBound.Length == 0)
                     {
                         boundTask = bridgedSession.QueryBound(queryPrepared);
@@ -353,7 +353,7 @@ namespace Cassandra
 
                     return boundTask.ContinueWith(t =>
                     {
-                        ManuallyDestructible mdRowSet = t.Result;
+                        RustBridge.ManuallyDestructible mdRowSet = t.Result;
                         return new RowSet(mdRowSet);
                     }, TaskContinuationOptions.ExecuteSynchronously);
 
@@ -432,11 +432,11 @@ namespace Cassandra
                                                 " setting the keyspace as part of the PREPARE request");
             }
 
-            Task<ManuallyDestructible> task = bridgedSession.Prepare(cqlQuery);
+            Task<RustBridge.ManuallyDestructible> task = bridgedSession.Prepare(cqlQuery);
 
             return task.ContinueWith(t =>
             {
-                ManuallyDestructible mdPreparedStatement = t.Result;
+                RustBridge.ManuallyDestructible mdPreparedStatement = t.Result;
                 // FIXME: Bridge with Rust to get variables metadata.
                 RowSetMetadata variablesRowsMetadata = null;
                 var ps = new PreparedStatement(mdPreparedStatement, cqlQuery, variablesRowsMetadata);

@@ -36,11 +36,11 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr InvalidQueryExceptionFromRust(FFIString message)
+        internal static IntPtr InvalidQueryExceptionFromRust(RustBridge.FFIString message)
         {
             string msg = message.ToManagedString();
             var exception = new InvalidQueryException(msg);
-            
+
             GCHandle handle = GCHandle.Alloc(exception);
             IntPtr handlePtr = GCHandle.ToIntPtr(handle);
             return handlePtr;

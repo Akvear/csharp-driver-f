@@ -51,9 +51,9 @@ namespace Cassandra
             Keyspace = string.IsNullOrEmpty(keyspace.Trim()) ? null : keyspace;
             Table = string.IsNullOrEmpty(table.Trim()) ? null : table;
         }
-    
+
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr AlreadyExistsExceptionFromRust(FFIString keyspace, FFIString table)
+        internal static IntPtr AlreadyExistsExceptionFromRust(RustBridge.FFIString keyspace, RustBridge.FFIString table)
         {
             string keyspaceStr = keyspace.ToManagedString();
             string tableStr = table.ToManagedString();

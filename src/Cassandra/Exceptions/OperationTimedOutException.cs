@@ -33,7 +33,7 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr OperationTimedOutExceptionFromRust(FFIString address, int timeout)
+        internal static IntPtr OperationTimedOutExceptionFromRust(RustBridge.FFIString address, int timeout)
         {
             string addressString = address.ToManagedString();
             IPEndPoint addr;

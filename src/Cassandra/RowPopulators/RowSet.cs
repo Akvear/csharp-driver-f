@@ -18,14 +18,8 @@ using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Threading;
 using System.Threading.Tasks;
-using Cassandra.Tasks;
 using Cassandra.Serialization;
-using System.Linq;
-using System.Management;
 
 // ReSharper disable DoNotCallOverridableMethodsInConstructor
 // ReSharper disable CheckNamespace
@@ -121,7 +115,7 @@ namespace Cassandra
         /// <summary>
         /// Creates a new instance of RowSet.
         /// </summary>
-        internal RowSet(ManuallyDestructible mdRowSet)
+        internal RowSet(RustBridge.ManuallyDestructible mdRowSet)
         {
             bridgedRowSet = new BridgedRowSet(mdRowSet);
             Columns = bridgedRowSet.ExtractColumnsFromRust();

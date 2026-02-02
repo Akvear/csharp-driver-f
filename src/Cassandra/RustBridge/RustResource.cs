@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using static Cassandra.RustBridge;
 
 namespace Cassandra
 {
@@ -107,15 +108,16 @@ namespace Cassandra
         /// If the exception is not null, it will be thrown.
         /// </summary>
         /// <param name="invoke"></param>
-        internal virtual void RunWithIncrement(Func<IntPtr, RustBridge.FfiException> invoke)
+        internal virtual void RunWithIncrement(Func<IntPtr, RustBridge.FFIException> invoke)
         {
             bool refAdded = false;
-            RustBridge.FfiException exception;
+            RustBridge.FFIException exception;
             try
             {
                 DangerousAddRef(ref refAdded);
                 exception = invoke(handle);
-                try {
+                try
+                {
                     RustBridge.ThrowIfException(ref exception);
                 }
                 finally

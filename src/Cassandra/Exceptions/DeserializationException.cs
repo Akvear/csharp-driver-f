@@ -13,12 +13,12 @@ namespace Cassandra
         { }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr DeserializationExceptionFromRust(FFIString message)
+        internal static IntPtr DeserializationExceptionFromRust(RustBridge.FFIString message)
         {
             string msg = message.ToManagedString();
 
             var exception = new DeserializationException(msg);
-            
+
             GCHandle handle = GCHandle.Alloc(exception);
             IntPtr handlePtr = GCHandle.ToIntPtr(handle);
             return handlePtr;

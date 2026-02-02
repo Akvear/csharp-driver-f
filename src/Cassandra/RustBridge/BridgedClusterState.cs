@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Net;
 using System.Runtime.CompilerServices;
+using static Cassandra.RustBridge;
 
 namespace Cassandra
 {
@@ -18,7 +19,7 @@ namespace Cassandra
         }
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        private static extern RustBridge.FfiException cluster_state_fill_nodes(
+        private static extern RustBridge.FFIException cluster_state_fill_nodes(
             IntPtr clusterState,
             IntPtr contextPtr,
             IntPtr callback);
@@ -45,7 +46,7 @@ namespace Cassandra
                 // 4. Unsafe.Read dereferences the pointer to get the current reference value
                 // This matches the pattern used in row_set_fill_columns_metadata.
                 var context = Unsafe.AsRef<Metadata.RefreshContext>((void*)contextPtr);
-                
+
                 var hostId = new Guid(idBytes.ToSpan());
 
                 // Construct IPAddress directly from bytes (4 for IPv4, 16 for IPv6). ipBytes is an FFIByteSlice 

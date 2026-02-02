@@ -1,6 +1,7 @@
 using System;
 
 using System.Runtime.InteropServices;
+using static Cassandra.RustBridge;
 
 namespace Cassandra
 {
@@ -22,6 +23,6 @@ namespace Cassandra
         }
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern RustBridge.FfiException prepared_statement_is_lwt(IntPtr prepared_statement, [MarshalAs(UnmanagedType.U1)] out bool isLwt);
+        unsafe private static extern FFIException prepared_statement_is_lwt(IntPtr prepared_statement, [MarshalAs(UnmanagedType.U1)] out bool isLwt);
     }
 }

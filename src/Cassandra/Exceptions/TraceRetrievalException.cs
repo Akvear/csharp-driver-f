@@ -36,7 +36,7 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr TraceRetrievalExceptionFromRust(FFIString message)
+        internal static IntPtr TraceRetrievalExceptionFromRust(RustBridge.FFIString message)
         {
             string messageStr = message.ToManagedString();
             var exception = new TraceRetrievalException(messageStr);

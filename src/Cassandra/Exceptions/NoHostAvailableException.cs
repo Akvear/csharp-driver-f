@@ -102,11 +102,11 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr NoHostAvailableExceptionFromRust(FFIString message)
+        internal static IntPtr NoHostAvailableExceptionFromRust(RustBridge.FFIString message)
         {
             string msg = message.ToManagedString();
             var exception = new NoHostAvailableException(msg);
-            
+
             GCHandle handle = GCHandle.Alloc(exception);
             IntPtr handlePtr = GCHandle.ToIntPtr(handle);
             return handlePtr;

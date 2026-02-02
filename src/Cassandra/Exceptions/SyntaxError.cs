@@ -30,7 +30,7 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr SyntaxErrorFromRust(FFIString message)
+        internal static IntPtr SyntaxErrorFromRust(RustBridge.FFIString message)
         {
             string msg = message.ToManagedString();
             var exception = new SyntaxError(msg);

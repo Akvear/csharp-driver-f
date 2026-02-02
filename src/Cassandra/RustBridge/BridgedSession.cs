@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using static Cassandra.RustBridge;
 
 namespace Cassandra
 {
@@ -35,7 +36,7 @@ namespace Cassandra
         unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        private static extern RustBridge.FfiException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
+        private static extern FFIException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
 
         /// <summary>
         /// Executes a query with already-serialized values.
@@ -113,7 +114,7 @@ namespace Cassandra
             IntPtr valuesPtr = SerializationHandler.InitializeSerializedValues(queryValues).TakeNativeHandle();
             return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query_with_values(tcb, ptr, statement, valuesPtr));
         }
-        
+
         /// <summary>
         /// Sets the keyspace for the session.
         /// </summary>
@@ -150,7 +151,7 @@ namespace Cassandra
             ManuallyDestructible mdClusterState = default;
             unsafe
             {
-                RunWithIncrement(handle => session_get_cluster_state(handle, out mdClusterState, (IntPtr)RustBridgeGlobals.ConstructorsPtr));
+                RunWithIncrement(handle => session_get_cluster_state(handle, out mdClusterState, (IntPtr)Globals.ConstructorsPtr));
             }
             return new BridgedClusterState(mdClusterState);
         }

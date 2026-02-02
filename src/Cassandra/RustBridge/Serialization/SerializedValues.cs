@@ -37,9 +37,9 @@ namespace Cassandra
             {
                 throw new InvalidOperationException("The native handle has already been consumed");
             }
-            
+
             var h = DangerousGetHandle();
-            
+
             // Detach the handle from this wrapper; the caller now owns it and is responsible
             // for ultimately passing it to a Rust-side query call that consumes/destroys it.
             SetHandleAsInvalid();
@@ -64,8 +64,9 @@ namespace Cassandra
         {
             if (value == null)
             {
-                unsafe {
-                    var res = pre_serialized_values_add_null(handle, (IntPtr)RustBridgeGlobals.ConstructorsPtr);
+                unsafe
+                {
+                    var res = pre_serialized_values_add_null(handle, (IntPtr)RustBridge.Globals.ConstructorsPtr);
                     try
                     {
                         RustBridge.ThrowIfException(ref res);
@@ -79,8 +80,9 @@ namespace Cassandra
             }
             if (ReferenceEquals(value, Unset.Value))
             {
-                unsafe {
-                    var res = pre_serialized_values_add_unset(handle, (IntPtr)RustBridgeGlobals.ConstructorsPtr);
+                unsafe
+                {
+                    var res = pre_serialized_values_add_unset(handle, (IntPtr)RustBridge.Globals.ConstructorsPtr);
                     try
                     {
                         RustBridge.ThrowIfException(ref res);
@@ -103,8 +105,8 @@ namespace Cassandra
                 {
                     IntPtr valuePtr = (IntPtr)ptr;
                     UIntPtr valueLen = (UIntPtr)buf.Length;
-                    
-                    var res = pre_serialized_values_add_value(handle, valuePtr, valueLen, (IntPtr)RustBridgeGlobals.ConstructorsPtr);
+
+                    var res = pre_serialized_values_add_value(handle, valuePtr, valueLen, (IntPtr)RustBridge.Globals.ConstructorsPtr);
                     try
                     {
                         RustBridge.ThrowIfException(ref res);
@@ -125,13 +127,13 @@ namespace Cassandra
         private static extern void pre_serialized_values_free(IntPtr ptr);
 
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
-        private static extern RustBridge.FfiException pre_serialized_values_add_unset(IntPtr valuesPtr, IntPtr constructorsPtr);
+        private static extern RustBridge.FFIException pre_serialized_values_add_unset(IntPtr valuesPtr, IntPtr constructorsPtr);
 
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
-        private static extern RustBridge.FfiException pre_serialized_values_add_null(IntPtr valuesPtr, IntPtr constructorsPtr);
+        private static extern RustBridge.FFIException pre_serialized_values_add_null(IntPtr valuesPtr, IntPtr constructorsPtr);
 
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
-        private static extern RustBridge.FfiException pre_serialized_values_add_value(
+        private static extern RustBridge.FFIException pre_serialized_values_add_value(
             IntPtr valuesPtr,
             IntPtr valuePtr,
             UIntPtr valueLen,
