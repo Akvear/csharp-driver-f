@@ -55,7 +55,7 @@ namespace Cassandra
         unsafe private static extern void session_query_bound(Tcb tcb, IntPtr session, IntPtr preparedStatement);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void session_use_keyspace(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspace, [MarshalAs(UnmanagedType.U1)] bool isCaseSensitive);
+        unsafe private static extern void session_use_keyspace(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspace, FFIBool isCaseSensitive);
 
         /// <summary>
         /// Creates a new session connected to the specified Cassandra URI.

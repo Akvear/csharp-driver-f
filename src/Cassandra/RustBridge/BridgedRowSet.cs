@@ -36,7 +36,7 @@ namespace Cassandra
 
             var serializerHandle = GCHandle.Alloc(serializer);
             IntPtr serializerPtr = GCHandle.ToIntPtr(serializerHandle);
-            bool hasRow = false;
+            FFIBool hasRow = false;
 
             try
             {
@@ -90,7 +90,7 @@ namespace Cassandra
         // Private methods and P/Invoke
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr, [MarshalAs(UnmanagedType.U1)] out bool hasRow, IntPtr constructorsPtr);
+        unsafe private static extern FFIException row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr, out FFIBool hasRow, IntPtr constructorsPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIException row_set_get_columns_count(IntPtr rowSetPtr, out nuint count);

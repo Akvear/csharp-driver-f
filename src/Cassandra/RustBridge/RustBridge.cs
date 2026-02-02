@@ -78,6 +78,26 @@ namespace Cassandra
         }
 
         /// <summary>
+        /// Represents a boolean value passed over FFI boundary.
+        /// Used to pass bools between Rust and C#, in both directions.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        internal readonly struct FFIBool
+        {
+            [MarshalAs(UnmanagedType.U1)]
+            private readonly bool value;
+
+            internal FFIBool(bool value)
+            {
+                this.value = value;
+            }
+
+            // Must be public, because `implicit operator` requires it.
+            public static implicit operator FFIBool(bool value) => new(value);
+            public static implicit operator bool(FFIBool b) => b.value;
+        }
+
+        /// <summary>
         /// Struct used to pass a native pointer along with its destructor function pointer.
         /// This is used to transfer ownership of Rust resources to C# code.
         /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
