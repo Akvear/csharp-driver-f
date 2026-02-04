@@ -104,54 +104,6 @@ pub extern "C" fn session_shutdown(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn session_prepare(
-    tcb: Tcb<ManuallyDestructible>,
-    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
-    statement: CSharpStr<'_>,
-) {
-    // Convert the raw C string to a Rust string.
-    let statement = statement.as_cstr().unwrap().to_str().unwrap().to_owned();
-    let session_arc = ArcFFI::cloned_from_ptr(session_ptr).unwrap();
-
-    tracing::trace!(
-        "[FFI] Scheduling statement for preparation: \"{}\"",
-        statement
-    );
-
-    // Try to acquire an owned read lock.
-    // If the operation fails, treat it as session shutting down.
-    let session_guard_res = session_arc.try_read_owned();
-
-    BridgedFuture::spawn::<_, _, MaybeShutdownError<PrepareError>, _>(tcb, async move {
-        tracing::debug!("[FFI] Preparing statement \"{}\"", statement);
-
-        let Ok(session_guard) = session_guard_res else {
-            // Session is currently shutting down - exit with appropriate error.
-            return Err(MaybeShutdownError::AlreadyShutdown);
-        };
-
-        // Check if session is connected or if it has been shut down.
-        // If it has been shut down, return appropriate error.
-        let Some(session) = session_guard.session.as_ref() else {
-            return Err(MaybeShutdownError::AlreadyShutdown);
-        };
-
-        // Lock is held for the entire duration of the prepare operation,
-        // preventing shutdown until this future completes
-        // Map underlying `PrepareError` into `MaybeShutdownError::Inner` so
-        // the BridgedFuture's error type matches.
-        let ps = session
-            .prepare(statement)
-            .await
-            .map_err(MaybeShutdownError::Inner)?;
-
-        tracing::trace!("[FFI] Statement prepared");
-
-        Ok(Arc::new(BridgedPreparedStatement { inner: ps }))
-    })
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn session_query(
     tcb: Tcb<ManuallyDestructible>,
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
@@ -263,6 +215,54 @@ pub extern "C" fn session_query_with_values(
             pager: std::sync::Mutex::new(Some(query_pager)),
         }))
     });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn session_prepare(
+    tcb: Tcb<ManuallyDestructible>,
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+    statement: CSharpStr<'_>,
+) {
+    // Convert the raw C string to a Rust string.
+    let statement = statement.as_cstr().unwrap().to_str().unwrap().to_owned();
+    let session_arc = ArcFFI::cloned_from_ptr(session_ptr).unwrap();
+
+    tracing::trace!(
+        "[FFI] Scheduling statement for preparation: \"{}\"",
+        statement
+    );
+
+    // Try to acquire an owned read lock.
+    // If the operation fails, treat it as session shutting down.
+    let session_guard_res = session_arc.try_read_owned();
+
+    BridgedFuture::spawn::<_, _, MaybeShutdownError<PrepareError>, _>(tcb, async move {
+        tracing::debug!("[FFI] Preparing statement \"{}\"", statement);
+
+        let Ok(session_guard) = session_guard_res else {
+            // Session is currently shutting down - exit with appropriate error.
+            return Err(MaybeShutdownError::AlreadyShutdown);
+        };
+
+        // Check if session is connected or if it has been shut down.
+        // If it has been shut down, return appropriate error.
+        let Some(session) = session_guard.session.as_ref() else {
+            return Err(MaybeShutdownError::AlreadyShutdown);
+        };
+
+        // Lock is held for the entire duration of the prepare operation,
+        // preventing shutdown until this future completes
+        // Map underlying `PrepareError` into `MaybeShutdownError::Inner` so
+        // the BridgedFuture's error type matches.
+        let ps = session
+            .prepare(statement)
+            .await
+            .map_err(MaybeShutdownError::Inner)?;
+
+        tracing::trace!("[FFI] Statement prepared");
+
+        Ok(Arc::new(BridgedPreparedStatement { inner: ps }))
+    })
 }
 
 #[unsafe(no_mangle)]
