@@ -15,6 +15,91 @@ namespace Cassandra
     static class RustBridge
     {
         /// <summary>
+        /// Struct used to pass a GCHandle along with its destructor function pointer.
+        /// This is used to transfer ownership of GCHandles to Rust code.
+        /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        internal readonly struct FFIGCHandle
+        {
+            internal readonly IntPtr gchandle;
+            internal readonly IntPtr free;
+
+            internal FFIGCHandle(GCHandle handle)
+            {
+                gchandle = GCHandle.ToIntPtr(handle);
+                unsafe
+                {
+                    free = (IntPtr)freeGCHandleDel;
+                }
+            }
+
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, void> freeGCHandleDel = &FreeGCHandle;
+
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            internal static void FreeGCHandle(IntPtr gchandlePtr)
+            {
+                var handle = GCHandle.FromIntPtr(gchandlePtr);
+                if (handle.IsAllocated)
+                {
+                    handle.Free();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Struct used to pass an *optional* GCHandle along with its destructor function pointer.
+        /// This is used to transfer ownership of GCHandles to Rust code.
+        /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        internal readonly struct FFIMaybeGCHandle
+        {
+            internal readonly IntPtr gchandle;
+            internal readonly IntPtr free;
+
+            internal FFIMaybeGCHandle(GCHandle handle)
+            {
+                gchandle = GCHandle.ToIntPtr(handle);
+                unsafe
+                {
+                    free = (IntPtr)freeGCHandleDel;
+                }
+            }
+
+            // Intended just for null instantiation using `empty()`.
+            private FFIMaybeGCHandle(IntPtr _gchandle, IntPtr _free)
+            {
+                gchandle = _gchandle;
+                free = _free;
+            }
+
+            static internal FFIMaybeGCHandle Empty()
+            {
+                return new FFIMaybeGCHandle(IntPtr.Zero, IntPtr.Zero);
+            }
+
+            internal bool IsEmpty()
+            {
+                return gchandle == IntPtr.Zero;
+            }
+
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, void> freeGCHandleDel = &FreeGCHandle;
+
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            internal static void FreeGCHandle(IntPtr gchandlePtr)
+            {
+                var handle = GCHandle.FromIntPtr(gchandlePtr);
+                if (handle.IsAllocated)
+                {
+                    handle.Free();
+                }
+            }
+        }
+
+
+
+        /// <summary>
         /// Represents a UTF-8 string passed over FFI boundary.
         /// Used to pass strings from Rust to C#.
         /// </summary>
