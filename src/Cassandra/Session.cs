@@ -318,7 +318,9 @@ namespace Cassandra
 
                     return task.ContinueWith(t =>
                     {
-                        RustBridge.ManuallyDestructible mdRowSet = t.Result;
+                        // Use GetAwaiter().GetResult() to unwrap AggregateException
+                        // and throw the inner exception directly, avoiding double-wrapping.
+                        RustBridge.ManuallyDestructible mdRowSet = t.GetAwaiter().GetResult();
                         var rowSet = new RowSet(mdRowSet);
 
                         // TODO: Fix this logic once we have proper USE statement handling in the driver. Make sure no race conditions occur when updating the keyspace
@@ -356,7 +358,9 @@ namespace Cassandra
 
                     return boundTask.ContinueWith(t =>
                     {
-                        RustBridge.ManuallyDestructible mdRowSet = t.Result;
+                        // Use GetAwaiter().GetResult() to unwrap AggregateException
+                        // and throw the inner exception directly, avoiding double-wrapping.
+                        RustBridge.ManuallyDestructible mdRowSet = t.GetAwaiter().GetResult();
                         return new RowSet(mdRowSet);
                     }, TaskContinuationOptions.ExecuteSynchronously);
 
@@ -439,7 +443,9 @@ namespace Cassandra
 
             return task.ContinueWith(t =>
             {
-                RustBridge.ManuallyDestructible mdPreparedStatement = t.Result;
+                // Use GetAwaiter().GetResult() to unwrap AggregateException
+                // and throw the inner exception directly, avoiding double-wrapping.
+                RustBridge.ManuallyDestructible mdPreparedStatement = t.GetAwaiter().GetResult();
                 var ps = new PreparedStatement(mdPreparedStatement, cqlQuery);
                 return ps;
             }, TaskContinuationOptions.ExecuteSynchronously);
