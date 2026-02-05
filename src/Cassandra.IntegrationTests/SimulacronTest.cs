@@ -22,6 +22,7 @@ using Cassandra.IntegrationTests.SimulacronAPI.SystemTables;
 using Cassandra.IntegrationTests.TestBase;
 using Cassandra.IntegrationTests.TestClusterManagement;
 using Cassandra.IntegrationTests.TestClusterManagement.Simulacron;
+using Cassandra.Serialization;
 using Cassandra.Tests;
 using NUnit.Framework;
 using Assert = NUnit.Framework.Legacy.ClassicAssert;
@@ -57,7 +58,7 @@ namespace Cassandra.IntegrationTests
 
         protected ISession Session { get; private set; }
 
-        internal IInternalSession InternalSession => (IInternalSession)Session;
+        internal Session InternalSession => (Session)Session;
 
         protected ICluster SessionCluster => Session?.Cluster;
 
@@ -71,7 +72,7 @@ namespace Cassandra.IntegrationTests
 
         protected string SerializeParameter(object parameter)
         {
-            var serializer = Session.Cluster.Metadata.ControlConnection.Serializer.GetCurrentSerializer();
+            var serializer = SerializerManager.Default.GetCurrentSerializer();
             return Convert.ToBase64String(serializer.Serialize(parameter));
         }
 
@@ -93,7 +94,7 @@ namespace Cassandra.IntegrationTests
 
         protected void VerifyStatement(IList<RequestLog> logs, string cql, int count, params object[] positionalParameters)
         {
-            var serializer = Session.Cluster.Metadata.ControlConnection.Serializer.GetCurrentSerializer();
+            var serializer = SerializerManager.Default.GetCurrentSerializer();
             var paramBytes = positionalParameters.Select(obj => obj == null ? null : Convert.ToBase64String(serializer.Serialize(obj))).ToList();
             var filteredQueries = logs.Where(q => (q.Query == cql || cql == null) && q.Frame.GetQueryMessage().Options.PositionalValues.SequenceEqual(paramBytes));
 
@@ -107,7 +108,7 @@ namespace Cassandra.IntegrationTests
 
         protected void VerifyBatchStatement(int count, string[] queries, params object[][] parameters)
         {
-            var serializer = Session.Cluster.Metadata.ControlConnection.Serializer.GetCurrentSerializer();
+            var serializer = SerializerManager.Default.GetCurrentSerializer();
             var logs = TestCluster.GetQueries(null, QueryType.Batch);
 
             var paramBytes = parameters.SelectMany(obj => obj.Select(o => o == null ? null : Convert.ToBase64String(serializer.Serialize(o)))).ToArray();
@@ -119,7 +120,7 @@ namespace Cassandra.IntegrationTests
 
         protected void VerifyBatchStatement(int count, string[] queries, Func<BatchMessage, bool> func, params object[][] parameters)
         {
-            var serializer = Session.Cluster.Metadata.ControlConnection.Serializer.GetCurrentSerializer();
+            var serializer = SerializerManager.Default.GetCurrentSerializer();
             var logs = TestCluster.GetQueries(null, QueryType.Batch);
 
             var paramBytes = parameters.SelectMany(obj => obj.Select(o => o == null ? null : Convert.ToBase64String(serializer.Serialize(o)))).ToArray();
