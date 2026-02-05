@@ -2,10 +2,9 @@ use scylla::client::pager::QueryPager;
 use scylla::cluster::metadata::CollectionType;
 use scylla::frame::response::result::{ColumnType, NativeType};
 
-use crate::FfiPtr;
 use crate::error_conversion::FfiException;
 use crate::ffi::{
-    ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIStr, FromArc, FromRef, RefFFI,
+    ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIStr, FfiPtr, FromArc, FromRef, RefFFI,
 };
 use crate::task::BridgedFuture;
 use crate::task::ExceptionConstructors;

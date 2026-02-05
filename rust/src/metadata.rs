@@ -1,6 +1,5 @@
-use crate::FfiPtr;
 use crate::error_conversion::FfiException;
-use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIStr, FromArc};
+use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIStr, FfiPtr, FromArc};
 use scylla::cluster::ClusterState;
 
 impl FFI for ClusterState {

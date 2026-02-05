@@ -8,11 +8,10 @@ use scylla::errors::{NewSessionError, PagerExecutionError, PrepareError};
 use scylla_cql::serialize::row::SerializedValues;
 use tokio::sync::RwLock;
 
-use crate::CSharpStr;
 use crate::error_conversion::{FfiException, MaybeShutdownError};
 use crate::ffi::{
-    ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr, FFI,
-    FromArc,
+    ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr,
+    CSharpStr, FFI, FromArc,
 };
 use crate::pre_serialized_values::PreSerializedValues;
 use crate::prepared_statement::BridgedPreparedStatement;

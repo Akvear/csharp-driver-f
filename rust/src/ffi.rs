@@ -1,4 +1,5 @@
-use std::ffi::c_void;
+use std::ffi::{CStr, c_char, c_void};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::sync::{Arc, Weak};
@@ -656,5 +657,33 @@ impl<'a> FFIStr<'a> {
                 len: 0,
             },
         }
+    }
+}
+
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+pub struct FfiPtr<'a, T: Sized> {
+    ptr: Option<NonNull<T>>,
+    _phantom: PhantomData<&'a ()>,
+}
+
+// Compile-time assertion that `FfiPtr` is pointer-sized.
+// Ensures ABI compatibility with C# (opaque GCHandle/IntPtr across FFI).
+const _: [(); std::mem::size_of::<FfiPtr<'_, ()>>()] = [(); std::mem::size_of::<*const ()>()];
+
+impl<'a, T> Debug for FfiPtr<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ptr = self
+            .ptr
+            .map(|nn| nn.as_ptr())
+            .unwrap_or(std::ptr::null::<T>() as *mut T);
+        write!(f, "FfiPtr({:p})", ptr)
+    }
+}
+
+pub(crate) type CSharpStr<'a> = FfiPtr<'a, c_char>;
+impl<'a> CSharpStr<'a> {
+    pub(crate) fn as_cstr(&self) -> Option<&CStr> {
+        self.ptr.map(|ptr| unsafe { CStr::from_ptr(ptr.as_ptr()) })
     }
 }

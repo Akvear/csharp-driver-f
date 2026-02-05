@@ -1,6 +1,5 @@
-use crate::FfiPtr;
 use crate::error_conversion::FfiException;
-use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIStr, FromArc, RefFFI};
+use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIStr, FfiPtr, FromArc, RefFFI};
 use crate::row_set::column_type_to_code;
 use scylla::frame::response::result::ColumnType;
 use scylla::statement::prepared::PreparedStatement;

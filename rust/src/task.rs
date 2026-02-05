@@ -6,7 +6,6 @@ use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 
-use crate::FfiPtr;
 use crate::error_conversion::{
     AlreadyExistsConstructor, AlreadyShutdownExceptionConstructor,
     DeserializationExceptionConstructor, ErrorToException, ExceptionPtr,
@@ -18,7 +17,7 @@ use crate::error_conversion::{
     TraceRetrievalExceptionConstructor, TruncateExceptionConstructor,
     UnauthorizedExceptionConstructor,
 };
-use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr};
+use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr, FfiPtr};
 
 /// The global Tokio runtime used to execute async tasks.
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
