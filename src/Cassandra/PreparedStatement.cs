@@ -32,7 +32,7 @@ namespace Cassandra
     public class PreparedStatement
     {
         internal readonly BridgedPreparedStatement bridgedPreparedStatement;
-        private readonly RowSetMetadata _variablesRowsMetadata;
+        private readonly RowSetMetadata _variablesMetadata;
         private readonly ISerializerManager _serializerManager = SerializerManager.Default;
         private volatile RoutingKey _routingKey;
         private string[] _routingNames;
@@ -70,7 +70,7 @@ namespace Cassandra
         /// </summary>
         public RowSetMetadata Variables
         {
-            get { return _variablesRowsMetadata; }
+            get { return _variablesMetadata; }
         }
 
         /// <summary>
@@ -108,10 +108,10 @@ namespace Cassandra
 
         public bool IsLwt => _isLwt;
 
-        internal PreparedStatement(RowSetMetadata variablesRowsMetadata, byte[] id, string cql,
+        internal PreparedStatement(RowSetMetadata variablesMetadata, byte[] id, string cql,
                                    string keyspace, ISerializerManager serializer, bool isLwt)
         {
-            _variablesRowsMetadata = variablesRowsMetadata;
+            _variablesMetadata = variablesMetadata;
             Id = id;
             Cql = cql;
             Keyspace = keyspace;
@@ -120,11 +120,11 @@ namespace Cassandra
         }
 
         // For use by the Rust interop code.
-        internal PreparedStatement(RustBridge.ManuallyDestructible mdPreparedStatement, string cql, RowSetMetadata variablesRowsMetadata)
+        internal PreparedStatement(RustBridge.ManuallyDestructible mdPreparedStatement, string cql)
         {
             bridgedPreparedStatement = new BridgedPreparedStatement(mdPreparedStatement);
             bool isLwt = bridgedPreparedStatement.IsLwt();
-            _variablesRowsMetadata = variablesRowsMetadata;
+            _variablesMetadata = bridgedPreparedStatement.ExtractVariablesMetadataFromRust();
             Cql = cql;
             _isLwt = isLwt;
         }
@@ -170,7 +170,7 @@ namespace Cassandra
             {
                 //Using named parameters
                 //Reorder the params according the position in the query
-                valuesByPosition = Utils.GetValues(_variablesRowsMetadata.Columns.Select(c => c.Name), values[0]).ToArray();
+                valuesByPosition = Utils.GetValues(_variablesMetadata.Columns.Select(c => c.Name), values[0]).ToArray();
             }
 
             var serializer = _serializerManager.GetCurrentSerializer();
@@ -200,7 +200,7 @@ namespace Cassandra
         /// <returns>True if it was possible to set the routing indexes for this query</returns>
         internal bool SetPartitionKeys(TableColumn[] keys)
         {
-            var queryParameters = _variablesRowsMetadata.Columns;
+            var queryParameters = _variablesMetadata.Columns;
             var routingIndexes = new List<int>();
             foreach (var key in keys)
             {

@@ -348,7 +348,10 @@ namespace Cassandra
                     }
                     else
                     {
-                        throw new NotImplementedException("Bound statements with values are not yet supported");
+                        boundTask = bridgedSession.QueryBoundWithValues(
+                            queryPrepared,
+                            queryValuesBound
+                        );
                     }
 
                     return boundTask.ContinueWith(t =>
@@ -437,9 +440,7 @@ namespace Cassandra
             return task.ContinueWith(t =>
             {
                 RustBridge.ManuallyDestructible mdPreparedStatement = t.Result;
-                // FIXME: Bridge with Rust to get variables metadata.
-                RowSetMetadata variablesRowsMetadata = null;
-                var ps = new PreparedStatement(mdPreparedStatement, cqlQuery, variablesRowsMetadata);
+                var ps = new PreparedStatement(mdPreparedStatement, cqlQuery);
                 return ps;
             }, TaskContinuationOptions.ExecuteSynchronously);
         }

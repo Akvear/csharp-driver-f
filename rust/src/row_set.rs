@@ -460,7 +460,7 @@ pub extern "C" fn row_set_type_info_get_udt_field<'typ>(
     }
 }
 
-fn column_type_to_code(typ: &ColumnType) -> u8 {
+pub(crate) fn column_type_to_code(typ: &ColumnType) -> u8 {
     match typ {
         ColumnType::Native(nt) => match nt {
             NativeType::Ascii => 0x01,

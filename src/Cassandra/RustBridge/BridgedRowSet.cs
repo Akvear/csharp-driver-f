@@ -87,6 +87,65 @@ namespace Cassandra
             return columns;
         }
 
+        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nuint, FFIString, FFIString, FFIString, byte, IntPtr, byte, FFIException> setColumnMetaPtr = &SetColumnMeta;
+
+        /// <summary>
+        /// This shall be called by Rust code for each column.
+        /// </summary>
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static FFIException SetColumnMeta(
+            IntPtr columnsPtr,
+            nuint columnIndex,
+            FFIString name,
+            FFIString keyspace,
+            FFIString table,
+            byte typeCode,
+            IntPtr typeInfoPtr,
+            byte isFrozen
+        )
+        {
+            unsafe
+            {
+                // Safety:
+                // 1. pointer validity:
+                //   - columnsPtr is a valid pointer to an array of CqlColumn.
+                //   - the referenced CqlColumn[] array lives **on the stack of the caller** (ExtractColumnsFromRust),
+                //     so it cannot be GC-collected during this call.
+                //   - the CqlColumn[] materialised here is transient, i.e., not stored beyond this call.
+                // 2. array length:
+                //   - the referenced CqlColumn[] array has length equal to the number of columns in the RowSet.
+                //   - columnIndex is within bounds of the columns array.
+                int index = (int)columnIndex;
+
+                CqlColumn[] columns = Unsafe.Read<CqlColumn[]>((void*)columnsPtr);
+                {
+                    if (index < 0 || index >= columns.Length)
+                    {
+                        // I am not sure whether this warrant panicking or returning an error.
+                        return FFIException.FromException(
+                            new IndexOutOfRangeException($"Column index {index} is out of range (0..{columns.Length - 1})")
+                        );
+                    }
+
+                    var col = columns[index];
+                    col.Name = name.ToManagedString();
+                    col.Keyspace = keyspace.ToManagedString();
+                    col.Table = table.ToManagedString();
+                    col.TypeCode = (ColumnTypeCode)typeCode;
+                    col.Index = index;
+                    col.Type = MapTypeFromCode(col.TypeCode);
+                    col.IsFrozen = isFrozen != 0;
+
+                    // If a non-null type-info handle was provided by Rust, build the corresponding IColumnInfo
+                    if (typeInfoPtr != IntPtr.Zero)
+                    {
+                        col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode);
+                    }
+                }
+                return FFIException.Ok();
+            }
+        }
+
         // Private methods and P/Invoke
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
@@ -225,65 +284,6 @@ namespace Cassandra
                 // Realistically nothing throws exceptions here so there shouldn't be any exceptions to catch.
                 Environment.FailFast($"Unexpected exception in BuildTypeInfoFromHandle: {e}");
                 return null;
-            }
-        }
-
-        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nuint, FFIString, FFIString, FFIString, byte, IntPtr, byte, FFIException> setColumnMetaPtr = &SetColumnMeta;
-
-        /// <summary>
-        /// This shall be called by Rust code for each column.
-        /// </summary>
-        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static FFIException SetColumnMeta(
-            IntPtr columnsPtr,
-            nuint columnIndex,
-            FFIString name,
-            FFIString keyspace,
-            FFIString table,
-            byte typeCode,
-            IntPtr typeInfoPtr,
-            byte isFrozen
-        )
-        {
-            unsafe
-            {
-                // Safety:
-                // 1. pointer validity:
-                //   - columnsPtr is a valid pointer to an array of CqlColumn.
-                //   - the referenced CqlColumn[] array lives **on the stack of the caller** (ExtractColumnsFromRust),
-                //     so it cannot be GC-collected during this call.
-                //   - the CqlColumn[] materialised here is transient, i.e., not stored beyond this call.
-                // 2. array length:
-                //   - the referenced CqlColumn[] array has length equal to the number of columns in the RowSet.
-                //   - columnIndex is within bounds of the columns array.
-                int index = (int)columnIndex;
-
-                CqlColumn[] columns = Unsafe.Read<CqlColumn[]>((void*)columnsPtr);
-                {
-                    if (index < 0 || index >= columns.Length)
-                    {
-                        // I am not sure whether this warrant panicking or returning an error.
-                        return FFIException.FromException(
-                            new IndexOutOfRangeException($"Column index {index} is out of range (0..{columns.Length - 1})")
-                        );
-                    }
-
-                    var col = columns[index];
-                    col.Name = name.ToManagedString();
-                    col.Keyspace = keyspace.ToManagedString();
-                    col.Table = table.ToManagedString();
-                    col.TypeCode = (ColumnTypeCode)typeCode;
-                    col.Index = index;
-                    col.Type = MapTypeFromCode(col.TypeCode);
-                    col.IsFrozen = isFrozen != 0;
-
-                    // If a non-null type-info handle was provided by Rust, build the corresponding IColumnInfo
-                    if (typeInfoPtr != IntPtr.Zero)
-                    {
-                        col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode);
-                    }
-                }
-                return FFIException.Ok();
             }
         }
 

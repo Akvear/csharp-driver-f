@@ -41,7 +41,7 @@ namespace Cassandra.Tests
         [Test]
         public void SimpleStatement_Bind_Positional_Values()
         {
-            var stmt = new SimpleStatement(Query).Bind(1, "value 2", 10030L);
+            var stmt = new SimpleStatement(Query, 1, "value 2", 10030L);
             CollectionAssert.AreEqual(new object[] { 1, "value 2", 10030L }, stmt.QueryValues);
         }
 
@@ -55,7 +55,7 @@ namespace Cassandra.Tests
         [Test]
         public void SimpleStatement_Bind_No_Values()
         {
-            var stmt = new SimpleStatement(Query).Bind();
+            var stmt = new SimpleStatement(Query, new object[0]);
             Assert.AreEqual(new object[0], stmt.QueryValues);
         }
 
@@ -106,7 +106,7 @@ namespace Cassandra.Tests
         public void SimpleStatement_Bind_Named_Values()
         {
             var values = new { Name = "Futurama", Description = "In Stereo where available", Time = DateTimeOffset.Parse("1963-08-28") };
-            var stmt = new SimpleStatement(Query).Bind(values);
+            var stmt = new SimpleStatement(Query, values);
             var actualValues = new Dictionary<string, object>();
             Assert.AreEqual(3, stmt.QueryValueNames.Count);
             Assert.AreEqual(3, stmt.QueryValues.Length);
