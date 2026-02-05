@@ -240,16 +240,22 @@ namespace Cassandra
 
         internal IEnumerable<string> ParseContactPoints(IEnumerable<object> contactPoints)
         {
-            // FIXME: bring back more sophisticated parsing (endpoints, IPs, etc.).
-            // For now, only strings are supported.
             return contactPoints.Select(cp =>
             {
-                if (cp is string s)
+                switch (cp)
                 {
-                    return s;
+                    case string contactPointText:
+                        return contactPointText;
+                    case System.Net.IPEndPoint ipEndPoint:
+                        return ipEndPoint.ToString();
+                    case System.Net.IPAddress ipAddress:
+                        // Rust Driver correctly supports bare IPs passed as contact points. It first tries to resolve the hostname as containing the port.
+                        // If resolution fails, it retries with the default port (9042) appended.
+                        // https://github.com/scylladb/scylla-rust-driver/blob/d1a5c373a5fbab95f84635c25c5174480b7d6491/scylla/src/cluster/node.rs#L309-L338
+                        return ipAddress.ToString();
+                    default:
+                        throw new InvalidOperationException($"Contact points should be either string, IPEndPoint, or IPAddress instances, not {cp.GetType()}");
                 }
-
-                throw new NotImplementedException();
             });
         }
     }
