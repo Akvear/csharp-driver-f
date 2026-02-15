@@ -77,6 +77,7 @@ CLAUDE.md
 
 # Ignore Rust build files
 rust/target/
+rust/libcsharp_wrapper.so
 
 # Ignore rust-analyzer files
 target/rust-analyzer/
