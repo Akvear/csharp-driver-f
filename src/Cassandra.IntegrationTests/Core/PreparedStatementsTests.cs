@@ -499,5 +499,21 @@ namespace Cassandra.IntegrationTests.Core
 
             session.Execute(cql, session.Cluster.Configuration.QueryOptions.GetConsistencyLevel());
         }
+
+        [Test, TestTimeout(180000)]
+        public void Bound_With_ChangingKeyspace()
+        {
+            using (var localCluster = ClusterBuilder()
+                .WithSocketOptions(new SocketOptions().SetConnectTimeoutMillis(15000))
+                .AddContactPoint(TestCluster.InitialContactPoint)
+                .Build())
+            {
+                var session = localCluster.Connect("system");
+                session.Execute("CREATE KEYSPACE bound_changeks_test WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 3}");
+                var ps = session.Prepare("SELECT * FROM system.local WHERE key='local'");
+                session.ChangeKeyspace("bound_changeks_test");
+                Assert.DoesNotThrow(() => TestHelper.Invoke(() => session.Execute(ps.Bind()), 10));
+            }
+        }
     }
 }
