@@ -6,6 +6,7 @@ mod pre_serialized_values;
 mod prepared_statement;
 mod row_set;
 mod session;
+mod socket_options;
 mod task;
 
 use std::ffi::{CStr, c_char};
