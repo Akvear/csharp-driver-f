@@ -120,6 +120,34 @@ namespace Cassandra
             internal static abstract IntPtr FailTaskDelegate { get; }
         }
 
+        
+        /// <summary>
+        /// Socket-related options passed from C# to Rust.
+        ///
+        /// This struct must match the Rust layout in rust/src/socket_options.rs.
+        /// It is a blittable struct passed by value to avoid marshaling overhead.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct FFISocketOptions
+        {
+            internal int ConnectTimeoutMillis;
+            internal FFIBool TcpNoDelay;
+            internal FFIBool KeepAlive;
+            internal long TcpKeepAliveIntervalMillis;
+
+            internal static FFISocketOptions FromManaged(SocketOptions socketOptions)
+            {
+                return new FFISocketOptions
+                {
+                    ConnectTimeoutMillis = socketOptions?.ConnectTimeoutMillis ?? SocketOptions.DefaultConnectTimeoutMillis,
+                    TcpNoDelay = socketOptions?.TcpNoDelay ?? true,
+                    KeepAlive = socketOptions?.KeepAlive ?? true,
+                    // Rust driver requires an explicit interval to enable TCP keepalives, it's not just a boolean flag.
+                    TcpKeepAliveIntervalMillis = 0
+                };
+            }
+        }
+
         /// <summary>
         /// Represents a boolean value passed over FFI boundary.
         /// Used to pass bools between Rust and C#, in both directions.
