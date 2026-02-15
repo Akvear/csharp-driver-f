@@ -81,7 +81,7 @@ namespace Cassandra
             string contactPointUris,
             string keyspace)
         {
-            Task<RustBridge.ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris);
+            Task<RustBridge.ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris, cluster.Configuration.SocketOptions);
 
             RustBridge.ManuallyDestructible mdSession = await mdSessionTask.ConfigureAwait(false);
             var session = new Session(cluster, mdSession);

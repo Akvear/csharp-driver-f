@@ -16,6 +16,7 @@ use crate::ffi::{
 use crate::pre_serialized_values::PreSerializedValues;
 use crate::prepared_statement::BridgedPreparedStatement;
 use crate::row_set::RowSet;
+use crate::socket_options::SocketOptions;
 use crate::task::{BridgedFuture, ExceptionConstructors, ManuallyDestructible, Tcb};
 
 /// Internal representation of a session bridged to C#.
@@ -50,14 +51,22 @@ pub extern "C" fn empty_bridged_result_free(ptr: BridgedOwnedSharedPtr<EmptyBrid
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn session_create(tcb: Tcb<ManuallyDestructible>, uri: CSharpStr<'_>) {
+pub extern "C" fn session_create(
+    tcb: Tcb<ManuallyDestructible>,
+    uri: CSharpStr<'_>,
+    socket_options: SocketOptions,
+) {
     // Convert the raw C string to a Rust string
     let uri = uri.as_cstr().unwrap().to_str().unwrap();
     let uri = uri.to_owned();
 
     BridgedFuture::spawn::<_, _, NewSessionError, _>(tcb, async move {
         tracing::debug!("[FFI] Create Session... {}", uri);
-        let session = SessionBuilder::new().known_node(&uri).build().await?;
+
+        let mut builder = SessionBuilder::new().known_node(&uri);
+        builder = socket_options.apply_to_session_builder(builder);
+
+        let session = builder.build().await?;
         tracing::info!("[FFI] Session created! URI: {}", uri);
         tracing::trace!(
             "[FFI] Contacted node's address: {}",

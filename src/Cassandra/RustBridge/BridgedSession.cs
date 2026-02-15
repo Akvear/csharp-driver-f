@@ -28,7 +28,7 @@ namespace Cassandra
 
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void session_create(Tcb<ManuallyDestructible> tcb, [MarshalAs(UnmanagedType.LPUTF8Str)] string uri);
+        unsafe private static extern void session_create(Tcb<ManuallyDestructible> tcb, [MarshalAs(UnmanagedType.LPUTF8Str)] string uri, FFISocketOptions socketOptions);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_shutdown(Tcb<ManuallyDestructible> tcb, IntPtr session);
@@ -65,7 +65,8 @@ namespace Cassandra
         /// Creates a new session connected to the specified Cassandra URI.
         /// </summary>
         /// <param name="uri"></param>
-        static internal Task<ManuallyDestructible> Create(string uri)
+        /// <param name="socketOptions">Optional socket options to configure the session's network behavior.</param>
+        static internal Task<ManuallyDestructible> Create(string uri, SocketOptions socketOptions)
         {
             /*
              * TaskCompletionSource is a way to programatically control a Task.
@@ -83,9 +84,19 @@ namespace Cassandra
             // So we pass a pointer to the method and Rust code will call it via that pointer.
             // This is a common pattern to call C# code from native code ("reversed P/Invoke").
             var tcb = Tcb<ManuallyDestructible>.WithTcs(tcs);
-            session_create(tcb, uri);
+
+            var ffiSocketOptions = FFISocketOptions.FromManaged(socketOptions);
+            unsafe
+            {
+                session_create(tcb, uri, ffiSocketOptions);
+            }
 
             return tcs.Task;
+        }
+
+        static internal Task<ManuallyDestructible> Create(string uri)
+        {
+            return Create(uri, new SocketOptions());
         }
 
         /// <summary>
