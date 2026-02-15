@@ -349,19 +349,32 @@ impl ErrorToException for NewSessionError {
     fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             NewSessionError::MetadataError(MetadataError::ConnectionPoolError(
-                ConnectionPoolError::Broken {
-                    last_connection_error: ConnectionError::IoError(io_err),
-                },
-            )) => {
-                match io_err.kind() {
+                connection_pool_error,
+            )) => connection_pool_error.to_exception(ctors),
+            _ => ctors.rust_exception_constructor.construct_from_rust(self), // TODO: convert errors to specific exceptions
+        }
+    }
+}
+
+impl ErrorToException for ConnectionPoolError {
+    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+        match self {
+            ConnectionPoolError::Broken {
+                last_connection_error,
+            } => match last_connection_error {
+                ConnectionError::IoError(io_err) => match io_err.kind() {
                     std::io::ErrorKind::ConnectionRefused
                     | std::io::ErrorKind::TimedOut
                     | std::io::ErrorKind::NotConnected => ctors
                         .no_host_available_exception_constructor
                         .construct_from_rust(io_err.to_string().as_str()),
                     _ => ctors.rust_exception_constructor.construct_from_rust(self), // TODO: convert errors to specific exceptions
-                }
-            }
+                },
+                ConnectionError::ConnectTimeout => ctors
+                    .no_host_available_exception_constructor
+                    .construct_from_rust(self.to_string().as_str()),
+                _ => ctors.rust_exception_constructor.construct_from_rust(self), // TODO: convert errors to specific exceptions
+            },
             _ => ctors.rust_exception_constructor.construct_from_rust(self), // TODO: convert errors to specific exceptions
         }
     }
