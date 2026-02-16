@@ -55,11 +55,9 @@ namespace Cassandra
         /// <summary>
         /// Gets or sets the keyspace
         /// </summary>
-        private string _keyspace;
         public string Keyspace
         {
-            get => _keyspace;
-            private set => _keyspace = value;
+            get => bridgedSession.GetKeyspace();
         }
 
         /// <inheritdoc />
@@ -71,12 +69,10 @@ namespace Cassandra
 
         private Session(
             ICluster cluster,
-            string keyspace,
             RustBridge.ManuallyDestructible mdSession)
         {
             _cluster = cluster;
             Configuration = cluster.Configuration;
-            Keyspace = keyspace;
             bridgedSession = new BridgedSession(mdSession);
         }
 
@@ -88,7 +84,7 @@ namespace Cassandra
             Task<RustBridge.ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris);
 
             RustBridge.ManuallyDestructible mdSession = await mdSessionTask.ConfigureAwait(false);
-            var session = new Session(cluster, keyspace, mdSession);
+            var session = new Session(cluster, mdSession);
 
             // If a keyspace was specified, validate it exists by executing USE statement
             // This should throw InvalidQueryException if keyspace doesn't exist.
@@ -138,12 +134,7 @@ namespace Cassandra
         /// <inheritdoc />
         public void ChangeKeyspace(string keyspace)
         {
-            if (Keyspace != keyspace)
-            {
-                // FIXME: Migrate to Rust `Session::use_keyspace()`.
-
-                Execute(new SimpleStatement(CqlQueryTools.GetUseKeyspaceCql(keyspace)));
-            }
+            Execute(new SimpleStatement(CqlQueryTools.GetUseKeyspaceCql(keyspace)));
         }
 
         /// <inheritdoc />
@@ -322,12 +313,6 @@ namespace Cassandra
                         // and throw the inner exception directly, avoiding double-wrapping.
                         RustBridge.ManuallyDestructible mdRowSet = t.GetAwaiter().GetResult();
                         var rowSet = new RowSet(mdRowSet);
-
-                        // TODO: Fix this logic once we have proper USE statement handling in the driver. Make sure no race conditions occur when updating the keyspace
-                        if (isUseStatement)
-                        {
-                            _keyspace = newKeyspace;
-                        }
 
                         return rowSet;
                     }, TaskContinuationOptions.ExecuteSynchronously);
