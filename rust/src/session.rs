@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 use crate::error_conversion::{FFIException, MaybeShutdownError};
 use crate::ffi::{
     ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr,
-    CSharpStr, FFI, FromArc,
+    CSharpManagedStringPtr, CSharpStr, FFI, FFIStr, FromArc, WriteStringCallback,
 };
 use crate::pre_serialized_values::PreSerializedValues;
 use crate::prepared_statement::BridgedPreparedStatement;
@@ -360,6 +360,43 @@ pub extern "C" fn session_query_bound_with_values(
             pager: std::sync::Mutex::new(Some(query_pager)),
         }))
     });
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn session_get_keyspace(
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+    write_cs_str: WriteStringCallback,
+    cs_string: CSharpManagedStringPtr,
+    constructors: &'static ExceptionConstructors,
+) -> FFIException {
+    let session_arc =
+        ArcFFI::as_ref(session_ptr).expect("valid and non-null BridgedSession pointer");
+
+    // Try to acquire a read lock synchronously.
+    let Ok(session_guard) = session_arc.try_read() else {
+        // Session is currently shutting down.
+        let ex = constructors
+            .already_shutdown_exception_constructor
+            .construct_from_rust("Session has been shut down and can no longer execute operations");
+        return FFIException::from_exception(ex);
+    };
+
+    // Check if session is connected or if it has been shut down.
+    let Some(session) = session_guard.session.as_ref() else {
+        let ex = constructors
+            .already_shutdown_exception_constructor
+            .construct_from_rust("Session has been shut down and can no longer execute operations");
+        return FFIException::from_exception(ex);
+    };
+
+    let Some(keyspace) = session.get_keyspace() else {
+        // If no keyspace is set, we don't set FFIStr.
+        // This will be treated as null on the C# side.
+        return FFIException::ok();
+    };
+
+    let ffi_str = FFIStr::new(keyspace.as_ref());
+    write_cs_str(ffi_str, cs_string)
 }
 
 // TO DO: Handle setting keyspace in session_query

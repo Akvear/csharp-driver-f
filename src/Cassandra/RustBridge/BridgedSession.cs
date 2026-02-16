@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using static Cassandra.RustBridge;
@@ -59,6 +60,9 @@ namespace Cassandra
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_use_keyspace(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspace, FFIBool isCaseSensitive);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern FFIException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
 
         /// <summary>
         /// Creates a new session connected to the specified Cassandra URI.
@@ -168,6 +172,28 @@ namespace Cassandra
                 RunWithIncrement(handle => session_get_cluster_state(handle, out mdClusterState, (IntPtr)Globals.ConstructorsPtr));
             }
             return new BridgedClusterState(mdClusterState);
+        }
+
+        /// <summary>
+        /// Gets the keyspace of the session. Returns the name of the current keyspace as a string, or null if no keyspace is set.
+        /// Note: This method involves marshaling a string from native code, which can be expensive.
+        /// Exceptions thrown by the native code will be propagated as FFIException.
+        /// </summary>
+        internal string GetKeyspace()
+        {
+            var stringContainer = new FFIManagedStringWriter.StringContainer();
+            unsafe
+            {
+                RunWithIncrement(handle =>
+                    session_get_keyspace(
+                        handle,
+                        (IntPtr)FFIManagedStringWriter.WriteToStrPtr,
+                        (IntPtr)Unsafe.AsPointer(ref stringContainer),
+                        (IntPtr)Globals.ConstructorsPtr
+                    )
+                );
+            }
+            return stringContainer.Value;
         }
     }
 }
