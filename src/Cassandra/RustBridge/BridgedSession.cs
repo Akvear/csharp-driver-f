@@ -59,9 +59,6 @@ namespace Cassandra
         unsafe private static extern void session_query_bound_with_values(Tcb<ManuallyDestructible> tcb, IntPtr session, IntPtr preparedStatement, IntPtr valuesPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void session_use_keyspace(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspace, FFIBool isCaseSensitive);
-
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
 
         /// <summary>
@@ -120,16 +117,6 @@ namespace Cassandra
         {
             IntPtr valuesPtr = SerializationHandler.InitializeSerializedValues(queryValues).TakeNativeHandle();
             return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query_with_values(tcb, ptr, statement, valuesPtr));
-        }
-
-        /// <summary>
-        /// Sets the keyspace for the session.
-        /// </summary>
-        /// <param name="keyspace"></param>
-        /// <param name="isCaseSensitive"></param>
-        internal Task<ManuallyDestructible> UseKeyspace(string keyspace, bool isCaseSensitive)
-        {
-            return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_use_keyspace(tcb, ptr, keyspace, isCaseSensitive));
         }
 
         /// <summary>
