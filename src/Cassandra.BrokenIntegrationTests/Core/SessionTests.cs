@@ -67,19 +67,6 @@ namespace Cassandra.IntegrationTests.Core
         }
 
         [Test]
-        public void ChangeKeyspace_SetsKeyspace()
-        {
-            var localCluster = GetNewTemporaryCluster();
-            var localSession = localCluster.Connect();
-            localSession.CreateKeyspace(KeyspaceName, null, false);
-            localSession = localCluster.Connect();
-            Assert.IsNull(localSession.Keyspace);
-            localSession.ChangeKeyspace(KeyspaceName);
-            Assert.IsNotNull(localSession.Keyspace);
-            Assert.AreEqual(KeyspaceName, localSession.Keyspace);
-        }
-
-        [Test]
         public void Session_Keyspace_Create_Case_Sensitive()
         {
             var localCluster = GetNewTemporaryCluster();
@@ -357,44 +344,6 @@ namespace Cassandra.IntegrationTests.Core
             Assert.True(rowSet.IsFullyFetched);
             Assert.AreEqual(0, rowSet.Count());
             Assert.AreEqual(0, rowSet.GetAvailableWithoutFetching());
-        }
-
-        [Test]
-        public async Task Cluster_ConnectAsync_Should_Create_A_Session_With_Keyspace_Set()
-        {
-            const string query = "SELECT * FROM local";
-            // Using a default keyspace
-            using (var cluster = ClusterBuilder().AddContactPoint(TestCluster.InitialContactPoint)
-                                           .WithDefaultKeyspace("system").Build())
-            {
-                ISession session = await cluster.ConnectAsync().ConfigureAwait(false);
-                Assert.DoesNotThrowAsync(async () =>
-                    await session.ExecuteAsync(new SimpleStatement(query)).ConfigureAwait(false));
-                Assert.DoesNotThrowAsync(async () =>
-                    await session.ExecuteAsync(new SimpleStatement(query)).ConfigureAwait(false));
-                await cluster.ShutdownAsync().ConfigureAwait(false);
-            }
-
-            // Setting the keyspace on ConnectAsync
-            using (var cluster = ClusterBuilder().AddContactPoint(TestCluster.InitialContactPoint).Build())
-            {
-                ISession session = await cluster.ConnectAsync("system").ConfigureAwait(false);
-                Assert.DoesNotThrowAsync(async () =>
-                    await session.ExecuteAsync(new SimpleStatement(query)).ConfigureAwait(false));
-                Assert.DoesNotThrowAsync(async () =>
-                    await session.ExecuteAsync(new SimpleStatement(query)).ConfigureAwait(false));
-                await cluster.ShutdownAsync().ConfigureAwait(false);
-            }
-
-            // Without setting the keyspace
-            using (var cluster = ClusterBuilder().AddContactPoint(TestCluster.InitialContactPoint).Build())
-            {
-                ISession session = await cluster.ConnectAsync().ConfigureAwait(false);
-                Assert.DoesNotThrowAsync(async () =>
-                    await session.ExecuteAsync(new SimpleStatement("SELECT * FROM system.local WHERE key='local'"))
-                                 .ConfigureAwait(false));
-                await cluster.ShutdownAsync().ConfigureAwait(false);
-            }
         }
     }
 }
