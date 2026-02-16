@@ -529,8 +529,15 @@ namespace Cassandra
                     unauthorized_exception_constructor = unauthorizedException;
                 }
             }
-
+            
             internal static readonly Constructors* ConstructorsPtr;
+
+            /// <summary>
+            /// Initializes the Rust driver components.
+            /// This must be called early to ensure logging is properly initialized.
+            /// </summary>
+            [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+            private static extern void init_rust_logging();
 
             static Globals()
             {
@@ -554,6 +561,8 @@ namespace Cassandra
                     (IntPtr)TruncateExceptionConstructorPtr,
                     (IntPtr)UnauthorizedExceptionConstructorPtr
                 );
+
+                init_rust_logging();
             }
         }
 
