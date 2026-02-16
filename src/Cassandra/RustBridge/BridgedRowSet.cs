@@ -76,7 +76,7 @@ namespace Cassandra
             unsafe
             {
                 void* columnsPtr = Unsafe.AsPointer(ref columns);
-                FillColumnsMetadata((IntPtr)columnsPtr, (IntPtr)setColumnMetaPtr, (IntPtr)Globals.ConstructorsPtr);
+                FillColumnsMetadata((IntPtr)columnsPtr, (IntPtr)setColumnMetaPtr);
             }
 
             // This was recommended by ChatGPT in the general case to ensure the raw pointer is still valid.
@@ -155,7 +155,7 @@ namespace Cassandra
         unsafe private static extern FFIException row_set_get_columns_count(IntPtr rowSetPtr, out nuint count);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter, IntPtr constructorsPtr);
+        unsafe private static extern FFIException row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern byte row_set_type_info_get_code(IntPtr typeInfoHandle);
@@ -184,9 +184,9 @@ namespace Cassandra
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void row_set_type_info_get_tuple_field(IntPtr typeInfoHandle, nuint index, out IntPtr fieldHandle);
 
-        private void FillColumnsMetadata(IntPtr columnsPtr, IntPtr metadataSetter, IntPtr constructorsPtr)
+        private void FillColumnsMetadata(IntPtr columnsPtr, IntPtr metadataSetter)
         {
-            RunWithIncrement(handle => row_set_fill_columns_metadata(handle, columnsPtr, metadataSetter, constructorsPtr));
+            RunWithIncrement(handle => row_set_fill_columns_metadata(handle, columnsPtr, metadataSetter));
         }
 
         private nuint GetColumnsCount()
