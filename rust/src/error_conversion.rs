@@ -28,15 +28,15 @@ pub struct ExceptionPtr(NonNull<Exception>);
 /// At the managed boundary, C# must either throw (which frees) or explicitly free the handle.
 /// All changes to this struct must be mirrored in C# code in the exact same order.
 #[repr(transparent)]
-pub struct FfiException {
+pub struct FFIException {
     pub exception: Option<ExceptionPtr>,
 }
 
-// Compile-time assertion that `FfiException` is pointer-sized.
+// Compile-time assertion that `FFIException` is pointer-sized.
 // Ensures ABI compatibility with C# (opaque GCHandle/IntPtr across FFI).
-const _: [(); size_of::<FfiException>()] = [(); size_of::<*const ()>()];
+const _: [(); size_of::<FFIException>()] = [(); size_of::<*const ()>()];
 
-impl FfiException {
+impl FFIException {
     pub(crate) fn ok() -> Self {
         Self { exception: None }
     }

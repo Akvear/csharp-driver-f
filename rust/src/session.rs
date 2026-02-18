@@ -8,7 +8,7 @@ use scylla::errors::{NewSessionError, PagerExecutionError, PrepareError};
 use scylla_cql::serialize::row::SerializedValues;
 use tokio::sync::RwLock;
 
-use crate::error_conversion::{FfiException, MaybeShutdownError};
+use crate::error_conversion::{FFIException, MaybeShutdownError};
 use crate::ffi::{
     ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr,
     CSharpStr, FFI, FromArc,
@@ -449,7 +449,7 @@ pub extern "C" fn session_get_cluster_state(
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
     out_cluster_state: *mut ManuallyDestructible,
     constructors: &'static ExceptionConstructors,
-) -> FfiException {
+) -> FFIException {
     let session_arc =
         ArcFFI::as_ref(session_ptr).expect("valid and non-null BridgedSession pointer");
 
@@ -459,7 +459,7 @@ pub extern "C" fn session_get_cluster_state(
         let ex = constructors
             .already_shutdown_exception_constructor
             .construct_from_rust("Session has been shut down and can no longer execute operations");
-        return FfiException::from_exception(ex);
+        return FFIException::from_exception(ex);
     };
 
     // Check if session is connected or if it has been shut down.
@@ -467,7 +467,7 @@ pub extern "C" fn session_get_cluster_state(
         let ex = constructors
             .already_shutdown_exception_constructor
             .construct_from_rust("Session has been shut down and can no longer execute operations");
-        return FfiException::from_exception(ex);
+        return FFIException::from_exception(ex);
     };
 
     // Get the cluster state from the session and convert it into an ArcFFI-wrapped pointer.
@@ -476,5 +476,5 @@ pub extern "C" fn session_get_cluster_state(
     unsafe {
         *out_cluster_state = md;
     }
-    FfiException::ok()
+    FFIException::ok()
 }

@@ -103,7 +103,7 @@ namespace Cassandra
         /// Helper to encapsulate the common pattern for sync native calls with incremented ref count:
         /// DangerousAddRef, invoke native function, finally DangerousRelease.
         /// Using this method ensures that the handle remains valid for the duration of the native call.
-        /// Invoke must be a function that takes an IntPtr (the handle) and returns an FfiException.
+        /// Invoke must be a function that takes an IntPtr (the handle) and returns an FFIException.
         /// If the exception is not null, it will be thrown.
         /// </summary>
         /// <param name="invoke"></param>

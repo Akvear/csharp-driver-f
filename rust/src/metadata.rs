@@ -1,4 +1,4 @@
-use crate::error_conversion::FfiException;
+use crate::error_conversion::FFIException;
 use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIPtr, FFIStr, FromArc};
 use scylla::cluster::ClusterState;
 
@@ -50,7 +50,7 @@ pub extern "C" fn cluster_state_fill_nodes(
     cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
     refresh_context_ptr: RefreshContextPtr,
     callback: ConstructCSharpHost,
-) -> FfiException {
+) -> FFIException {
     let cluster_state =
         ArcFFI::as_ref(cluster_state_ptr).expect("valid and non-null ClusterState pointer");
 
@@ -109,5 +109,5 @@ pub extern "C" fn cluster_state_fill_nodes(
         }
     }
 
-    FfiException::ok()
+    FFIException::ok()
 }

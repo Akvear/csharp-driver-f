@@ -1,4 +1,4 @@
-use crate::error_conversion::FfiException;
+use crate::error_conversion::FFIException;
 use crate::ffi::{
     BoxFFI, BridgedBorrowedExclusivePtr, BridgedOwnedExclusivePtr, FFI, FFIByteSlice, FromBox,
 };
@@ -99,13 +99,13 @@ pub unsafe extern "C" fn pre_serialized_values_add_value(
     values_ptr: BridgedBorrowedExclusivePtr<'_, PreSerializedValues>,
     value: FFIByteSlice<'_>,
     constructors: &'static ExceptionConstructors,
-) -> FfiException {
+) -> FFIException {
     let Some(values) = BoxFFI::as_mut_ref(values_ptr) else {
         panic!("invalid PreSerializedValues pointer in pre_serialized_values_add_value");
     };
     match values.add_value(value) {
-        Ok(()) => FfiException::ok(),
-        Err(e) => FfiException::from_error(e, constructors),
+        Ok(()) => FFIException::ok(),
+        Err(e) => FFIException::from_error(e, constructors),
     }
 }
 
@@ -114,13 +114,13 @@ pub unsafe extern "C" fn pre_serialized_values_add_value(
 pub extern "C" fn pre_serialized_values_add_null(
     values_ptr: BridgedBorrowedExclusivePtr<'_, PreSerializedValues>,
     constructors: &'static ExceptionConstructors,
-) -> FfiException {
+) -> FFIException {
     let Some(values) = BoxFFI::as_mut_ref(values_ptr) else {
         panic!("invalid PreSerializedValues pointer in pre_serialized_values_add_null");
     };
     match values.add_null() {
-        Ok(()) => FfiException::ok(),
-        Err(e) => FfiException::from_error(e, constructors),
+        Ok(()) => FFIException::ok(),
+        Err(e) => FFIException::from_error(e, constructors),
     }
 }
 
@@ -129,13 +129,13 @@ pub extern "C" fn pre_serialized_values_add_null(
 pub extern "C" fn pre_serialized_values_add_unset(
     values_ptr: BridgedBorrowedExclusivePtr<'_, PreSerializedValues>,
     constructors: &'static ExceptionConstructors,
-) -> FfiException {
+) -> FFIException {
     let Some(values) = BoxFFI::as_mut_ref(values_ptr) else {
         panic!("invalid PreSerializedValues pointer in pre_serialized_values_add_unset");
     };
     match values.add_unset() {
-        Ok(()) => FfiException::ok(),
-        Err(e) => FfiException::from_error(e, constructors),
+        Ok(()) => FFIException::ok(),
+        Err(e) => FFIException::from_error(e, constructors),
     }
 }
 
