@@ -1,6 +1,5 @@
-use crate::FfiPtr;
-use crate::error_conversion::FfiException;
-use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIStr, FromArc, RefFFI};
+use crate::error_conversion::FFIException;
+use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIPtr, FFIStr, FromArc, RefFFI};
 use crate::row_set::column_type_to_code;
 use scylla::frame::response::result::ColumnType;
 use scylla::statement::prepared::PreparedStatement;
@@ -18,14 +17,14 @@ impl FFI for BridgedPreparedStatement {
 pub extern "C" fn prepared_statement_is_lwt(
     prepared_statement_ptr: BridgedBorrowedSharedPtr<'_, BridgedPreparedStatement>,
     is_lwt: *mut bool,
-) -> FfiException {
+) -> FFIException {
     unsafe {
         *is_lwt = ArcFFI::as_ref(prepared_statement_ptr)
             .unwrap()
             .inner
             .is_confirmed_lwt();
     }
-    FfiException::ok()
+    FFIException::ok()
 }
 
 /// Gets the number of variable column specifications in the prepared statement.
@@ -33,14 +32,14 @@ pub extern "C" fn prepared_statement_is_lwt(
 pub extern "C" fn prepared_statement_get_variables_column_specs_count(
     prepared_statement_ptr: BridgedBorrowedSharedPtr<'_, BridgedPreparedStatement>,
     out_num_fields: *mut usize,
-) -> FfiException {
+) -> FFIException {
     let prepared_statement = ArcFFI::as_ref(prepared_statement_ptr).unwrap();
 
     unsafe {
         *out_num_fields = prepared_statement.inner.get_variable_col_specs().len();
     }
 
-    FfiException::ok()
+    FFIException::ok()
 }
 
 #[derive(Clone, Copy)]
@@ -48,7 +47,7 @@ enum Columns {}
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct ColumnsPtr(FfiPtr<'static, Columns>);
+pub struct ColumnsPtr(FFIPtr<'static, Columns>);
 
 // Function pointer type for setting column specs metadata in C#.
 type SetPreparedStatementVariablesMetadata = unsafe extern "C" fn(
@@ -60,7 +59,7 @@ type SetPreparedStatementVariablesMetadata = unsafe extern "C" fn(
     type_code: u8,
     type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
     is_frozen: u8,
-) -> FfiException;
+) -> FFIException;
 
 /// Calls back into C# for each column to provide column specs metadata.
 /// `metadata_setter` is a function pointer supplied by C# - it will be called synchronously for each column.
@@ -72,7 +71,7 @@ pub extern "C" fn prepared_statement_fill_column_specs_metadata(
     prepared_statement_ptr: BridgedBorrowedSharedPtr<'_, BridgedPreparedStatement>,
     columns_ptr: ColumnsPtr,
     set_prepared_statement_variables_metadata: SetPreparedStatementVariablesMetadata,
-) -> FfiException {
+) -> FFIException {
     let prepared_statement = ArcFFI::as_ref(prepared_statement_ptr).unwrap();
 
     // Iterate column specs and call the metadata setter
@@ -119,5 +118,5 @@ pub extern "C" fn prepared_statement_fill_column_specs_metadata(
             }
         }
     }
-    FfiException::ok()
+    FFIException::ok()
 }

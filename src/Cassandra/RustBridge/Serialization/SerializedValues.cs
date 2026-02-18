@@ -105,8 +105,9 @@ namespace Cassandra
                 {
                     IntPtr valuePtr = (IntPtr)ptr;
                     UIntPtr valueLen = (UIntPtr)buf.Length;
+                    RustBridge.FFIByteSlice valueSlice = new(valuePtr, valueLen);
 
-                    var res = pre_serialized_values_add_value(handle, valuePtr, valueLen, (IntPtr)RustBridge.Globals.ConstructorsPtr);
+                    var res = pre_serialized_values_add_value(handle, valueSlice, (IntPtr)RustBridge.Globals.ConstructorsPtr);
                     try
                     {
                         RustBridge.ThrowIfException(ref res);
@@ -135,8 +136,7 @@ namespace Cassandra
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         private static extern RustBridge.FFIException pre_serialized_values_add_value(
             IntPtr valuesPtr,
-            IntPtr valuePtr,
-            UIntPtr valueLen,
+            RustBridge.FFIByteSlice valueSlice,
             IntPtr constructorsPtr);
     }
 }

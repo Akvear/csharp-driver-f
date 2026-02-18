@@ -581,7 +581,7 @@ namespace Cassandra
             internal IntPtr exception;
 
             // Functions:
-            // Creates an FfiException from the given Exception.
+            // Creates an FFIException from the given Exception.
             internal static FFIException FromException(Exception ex)
             {
                 var handle = GCHandle.Alloc(ex);
@@ -592,7 +592,7 @@ namespace Cassandra
                 };
             }
 
-            // Creates an FfiException representing no exception.
+            // Creates an FFIException representing no exception.
             internal static FFIException Ok()
             {
                 return new FFIException
@@ -605,7 +605,7 @@ namespace Cassandra
         }
 
         /// <summary>
-        /// Throws the exception contained in the FfiException if any.
+        /// Throws the exception contained in the FFIException if any.
         /// This mustn't be used in UnmanagedCallersOnly methods because throwing exceptions
         /// across FFI boundary is UB.
         /// </summary>

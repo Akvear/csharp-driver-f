@@ -1,6 +1,5 @@
-use crate::FfiPtr;
-use crate::error_conversion::FfiException;
-use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIStr, FromArc};
+use crate::error_conversion::FFIException;
+use crate::ffi::{ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIPtr, FFIStr, FromArc};
 use scylla::cluster::ClusterState;
 
 impl FFI for ClusterState {
@@ -14,7 +13,7 @@ enum RefreshContext {}
 /// Transparent wrapper around a pointer to the C# RefreshContext.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
-pub struct RefreshContextPtr(FfiPtr<'static, RefreshContext>);
+pub struct RefreshContextPtr(FFIPtr<'static, RefreshContext>);
 
 /// Callback type for constructing C# Host objects.
 /// The callback receives raw pointers to node metadata and is responsible for:
@@ -51,7 +50,7 @@ pub extern "C" fn cluster_state_fill_nodes(
     cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
     refresh_context_ptr: RefreshContextPtr,
     callback: ConstructCSharpHost,
-) -> FfiException {
+) -> FFIException {
     let cluster_state =
         ArcFFI::as_ref(cluster_state_ptr).expect("valid and non-null ClusterState pointer");
 
@@ -110,5 +109,5 @@ pub extern "C" fn cluster_state_fill_nodes(
         }
     }
 
-    FfiException::ok()
+    FFIException::ok()
 }

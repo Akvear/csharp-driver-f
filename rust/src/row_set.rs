@@ -2,10 +2,9 @@ use scylla::client::pager::QueryPager;
 use scylla::cluster::metadata::CollectionType;
 use scylla::frame::response::result::{ColumnType, NativeType};
 
-use crate::FfiPtr;
-use crate::error_conversion::FfiException;
+use crate::error_conversion::FFIException;
 use crate::ffi::{
-    ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIStr, FromArc, FromRef, RefFFI,
+    ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIByteSlice, FFIPtr, FFIStr, FromArc, FromRef, RefFFI,
 };
 use crate::task::BridgedFuture;
 use crate::task::ExceptionConstructors;
@@ -47,7 +46,7 @@ impl FFI for ColumnType<'_> {
 pub extern "C" fn row_set_get_columns_count(
     row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
     out_num_fields: *mut usize,
-) -> FfiException {
+) -> FFIException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
     let pager = row_set.pager.lock().unwrap();
     unsafe {
@@ -56,7 +55,7 @@ pub extern "C" fn row_set_get_columns_count(
             None => 0,
         };
     }
-    FfiException::ok()
+    FFIException::ok()
 }
 
 // Function pointer type for setting column metadata in C#.
@@ -69,7 +68,7 @@ type SetMetadata = unsafe extern "C" fn(
     type_code: u8,
     type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
     is_frozen: u8,
-) -> FfiException;
+) -> FFIException;
 
 /// Calls back into C# for each column to provide metadata.
 /// `metadata_setter` is a function pointer supplied by C# - it will be called synchronously for each column.
@@ -82,7 +81,7 @@ pub extern "C" fn row_set_fill_columns_metadata(
     columns_ptr: ColumnsPtr,
     set_metadata: SetMetadata,
     constructors: &'static ExceptionConstructors,
-) -> FfiException {
+) -> FFIException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
     let pager_guard = row_set.pager.lock().unwrap();
     let Some(pager) = pager_guard.as_ref() else {
@@ -90,7 +89,7 @@ pub extern "C" fn row_set_fill_columns_metadata(
         let ex = constructors
             .rust_exception_constructor
             .construct_from_rust("RowSet has no pager to get metadata from");
-        return FfiException::from_exception(ex);
+        return FFIException::from_exception(ex);
     };
 
     // Iterate column specs and call the metadata setter
@@ -131,29 +130,26 @@ pub extern "C" fn row_set_fill_columns_metadata(
             }
         }
     }
-    FfiException::ok()
+    FFIException::ok()
 }
 
-#[derive(Clone, Copy)]
 enum Columns {}
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct ColumnsPtr(FfiPtr<'static, Columns>);
+pub struct ColumnsPtr(FFIPtr<'static, Columns>);
 
-#[derive(Clone, Copy)]
 enum Values {}
 
 #[derive(Clone, Copy)]
 #[repr(transparent)]
-pub struct ValuesPtr(FfiPtr<'static, Values>);
+pub struct ValuesPtr(FFIPtr<'static, Values>);
 
-#[derive(Clone, Copy)]
 enum Serializer {}
 
 #[derive(Clone, Copy)]
 #[repr(transparent)]
-pub struct SerializerPtr(FfiPtr<'static, Serializer>);
+pub struct SerializerPtr(FFIPtr<'static, Serializer>);
 
 type DeserializeValue = unsafe extern "C" fn(
     columns_ptr: ColumnsPtr,
@@ -161,7 +157,7 @@ type DeserializeValue = unsafe extern "C" fn(
     value_index: usize,
     serializer_ptr: SerializerPtr,
     frame_slice: FFIByteSlice<'_>,
-) -> FfiException;
+) -> FFIException;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_next_row<'row_set>(
@@ -172,21 +168,21 @@ pub extern "C" fn row_set_next_row<'row_set>(
     serializer_ptr: SerializerPtr,
     out_has_row: *mut bool,
     constructors: &'static ExceptionConstructors,
-) -> FfiException {
+) -> FFIException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
     let mut pager_guard = row_set.pager.lock().unwrap();
     let Some(pager) = pager_guard.as_mut() else {
         unsafe {
             *out_has_row = false;
         }
-        return FfiException::ok(); // Empty RowSet has no rows
+        return FFIException::ok(); // Empty RowSet has no rows
     };
     let num_columns = pager.column_specs().len();
 
     let deserialize_fut = async {
         // Returns Ok(true) when a row was read and deserialized,
         // Ok(false) when there are no more rows,
-        // Err(FfiException) when an error occurs and should be propagated to C#.
+        // Err(FFIException) when an error occurs and should be propagated to C#.
         // TODO: consider how to handle possibility of the metadata to change between pages.
         // While unlikely, it's not impossible.
         // For now, we just assume it won't happen and ignore `_new_page_began`.
@@ -202,7 +198,7 @@ pub extern "C" fn row_set_next_row<'row_set>(
             // Successfully obtained the next row's column iterator
             Ok(values) => values,
             // Error while fetching the column value
-            Err(err) => return Err(FfiException::from_error(err, constructors)),
+            Err(err) => return Err(FFIException::from_error(err, constructors)),
         };
 
         for value_index in 0..num_columns {
@@ -215,12 +211,12 @@ pub extern "C" fn row_set_next_row<'row_set>(
                         "Row contains fewer columns ({} of {}) than metadata claims",
                         value_index, num_columns
                     ));
-                return Err(FfiException::from_exception(ex));
+                return Err(FFIException::from_exception(ex));
             };
 
             let raw_column = match column_res {
                 Ok(rc) => rc,
-                Err(err) => return Err(FfiException::from_error(err, constructors)),
+                Err(err) => return Err(FFIException::from_error(err, constructors)),
             };
 
             let Some(frame_slice) = raw_column.slice else {
@@ -249,7 +245,7 @@ pub extern "C" fn row_set_next_row<'row_set>(
     // This is inherently inefficient, but necessary due to blocking C# API upon page boundaries.
     // TODO: implement async C# API (IAsyncEnumerable) to avoid this.
     let (has_row, result) = match BridgedFuture::block_on(deserialize_fut) {
-        Ok(has_row) => (has_row, FfiException::ok()),
+        Ok(has_row) => (has_row, FFIException::ok()),
         Err(exception) => (false, exception),
     };
     unsafe {

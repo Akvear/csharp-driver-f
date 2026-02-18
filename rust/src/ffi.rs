@@ -1,4 +1,5 @@
-use std::ffi::c_void;
+use std::ffi::{CStr, c_char, c_void};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::sync::{Arc, Weak};
@@ -620,6 +621,19 @@ impl<'a> FFIByteSlice<'a> {
         };
         FFIByteSlice { ptr, len: s.len() }
     }
+
+    pub(crate) fn as_slice(&self) -> &[u8] {
+        if self.len == 0 {
+            return &[];
+        }
+
+        unsafe {
+            std::slice::from_raw_parts(
+                self.ptr.ptr.expect("non-null slice pointer").as_ptr(),
+                self.len,
+            )
+        }
+    }
 }
 
 /// Represents a string passed over FFI from Rust to C#.
@@ -643,5 +657,42 @@ impl<'a> FFIStr<'a> {
                 len: 0,
             },
         }
+    }
+}
+
+#[repr(transparent)]
+pub struct FFIPtr<'a, T: Sized> {
+    ptr: Option<NonNull<T>>,
+    _phantom: PhantomData<&'a ()>,
+}
+
+// Manual implementation to avoid `T: Clone` bound.
+impl<T> Clone for FFIPtr<'_, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+// Manual implementation to avoid `T: Copy` bound.
+impl<T> Copy for FFIPtr<'_, T> {}
+
+// Compile-time assertion that `FFIPtr` is pointer-sized.
+// Ensures ABI compatibility with C# (opaque GCHandle/IntPtr across FFI).
+const _: [(); std::mem::size_of::<FFIPtr<'_, ()>>()] = [(); std::mem::size_of::<*const ()>()];
+
+impl<'a, T> Debug for FFIPtr<'a, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ptr = self
+            .ptr
+            .map(|nn| nn.as_ptr())
+            .unwrap_or(std::ptr::null::<T>() as *mut T);
+        write!(f, "FFIPtr({:p})", ptr)
+    }
+}
+
+pub(crate) type CSharpStr<'a> = FFIPtr<'a, c_char>;
+impl<'a> CSharpStr<'a> {
+    pub(crate) fn as_cstr(&self) -> Option<&CStr> {
+        self.ptr.map(|ptr| unsafe { CStr::from_ptr(ptr.as_ptr()) })
     }
 }
