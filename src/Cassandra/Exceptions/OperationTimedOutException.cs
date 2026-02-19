@@ -27,27 +27,22 @@ namespace Cassandra
     /// </summary>
     public class OperationTimedOutException : DriverException
     {
+
+        [Obsolete("This is a legacy constructor - it is only used in one test case and should not be used in new code.")]
         public OperationTimedOutException(IPEndPoint address, int timeout) :
             base($"The host {address} did not reply before timeout {timeout}ms")
         {
         }
 
-        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr OperationTimedOutExceptionFromRust(RustBridge.FFIString address, int timeout)
+        internal OperationTimedOutException(int timeout) :
+            base($"The server did not reply before timeout {timeout}ms")
         {
-            string addressString = address.ToManagedString();
-            IPEndPoint addr;
-            Exception exception;
-            try
-            {
-                addr = IPEndPoint.Parse(addressString);
-                exception = new OperationTimedOutException(addr, timeout);
-            }
-            catch (FormatException)
-            {
-                // Invalid address string; return a handle to a generic exception
-                exception = new RustException("Failed to parse IPEndPoint from Rust");
-            }
+        }
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        internal static IntPtr OperationTimedOutExceptionFromRust(int timeout)
+        {
+            Exception exception = new OperationTimedOutException(timeout);
 
             GCHandle handle = GCHandle.Alloc(exception);
             IntPtr handlePtr = GCHandle.ToIntPtr(handle);

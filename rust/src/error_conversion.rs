@@ -117,13 +117,12 @@ impl NoHostAvailableExceptionConstructor {
 /// FFI constructor for C# `OperationTimedOutException`.
 #[repr(transparent)]
 pub struct OperationTimedOutExceptionConstructor(
-    unsafe extern "C" fn(address: FFIStr<'_>, timeout_ms: i32) -> ExceptionPtr,
+    unsafe extern "C" fn(timeout_ms: i32) -> ExceptionPtr,
 );
 
 impl OperationTimedOutExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, address: &str, timeout_ms: i32) -> ExceptionPtr {
-        let addr = FFIStr::new(address);
-        unsafe { (self.0)(addr, timeout_ms) }
+    pub(crate) fn construct_from_rust(&self, timeout_ms: i32) -> ExceptionPtr {
+        unsafe { (self.0)(timeout_ms) }
     }
 }
 
@@ -330,7 +329,7 @@ impl ErrorToException for PagerExecutionError {
                 RequestError::RequestTimeout(duration),
             )) => ctors
                 .operation_timed_out_exception_constructor
-                .construct_from_rust("0.0.0.0:0", duration.as_millis() as i32), // FIXME: address is unknown here; placeholder used
+                .construct_from_rust(duration.as_millis().clamp(0, i32::MAX as u128) as i32),
 
             // TODO: Add more specific mappings for other error types as needed.
             _ => ctors.rust_exception_constructor.construct_from_rust(self),
