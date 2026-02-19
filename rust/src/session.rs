@@ -11,7 +11,7 @@ use tokio::sync::RwLock;
 use crate::error_conversion::{FFIException, MaybeShutdownError};
 use crate::ffi::{
     ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr,
-    CSharpStr, FFI, FromArc,
+    CSharpManagedStringPtr, CSharpStr, FFI, FFIStr, FromArc, WriteStringCallback,
 };
 use crate::pre_serialized_values::PreSerializedValues;
 use crate::prepared_statement::BridgedPreparedStatement;
@@ -147,7 +147,7 @@ pub extern "C" fn session_query(
         tracing::trace!("[FFI] Statement executed");
 
         Ok(Arc::new(RowSet {
-            pager: std::sync::Mutex::new(Some(query_pager)),
+            pager: std::sync::Mutex::new(query_pager),
         }))
     });
 }
@@ -211,7 +211,7 @@ pub extern "C" fn session_query_with_values(
         tracing::trace!("[FFI] Prepared statement executed with pre-serialized values");
 
         Ok(Arc::new(RowSet {
-            pager: std::sync::Mutex::new(Some(query_pager)),
+            pager: std::sync::Mutex::new(query_pager),
         }))
     });
 }
@@ -305,7 +305,7 @@ pub extern "C" fn session_query_bound(
         tracing::trace!("[FFI] Prepared statement executed");
 
         Ok(Arc::new(RowSet {
-            pager: std::sync::Mutex::new(Some(query_pager)),
+            pager: std::sync::Mutex::new(query_pager),
         }))
     })
 }
@@ -357,85 +357,46 @@ pub extern "C" fn session_query_bound_with_values(
         tracing::trace!("[FFI] Prepared statement executed");
 
         Ok(Arc::new(RowSet {
-            pager: std::sync::Mutex::new(Some(query_pager)),
+            pager: std::sync::Mutex::new(query_pager),
         }))
     });
 }
 
-// TO DO: Handle setting keyspace in session_query
 #[unsafe(no_mangle)]
-pub extern "C" fn session_use_keyspace(
-    tcb: Tcb<ManuallyDestructible>,
+pub extern "C" fn session_get_keyspace(
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
-    keyspace: CSharpStr<'_>,
-    case_sensitive: bool,
-) {
-    let keyspace = keyspace.as_cstr().unwrap().to_str().unwrap().to_owned();
-    let session_arc = ArcFFI::cloned_from_ptr(session_ptr).unwrap();
+    write_cs_str: WriteStringCallback,
+    cs_string: CSharpManagedStringPtr,
+    constructors: &'static ExceptionConstructors,
+) -> FFIException {
+    let session_arc =
+        ArcFFI::as_ref(session_ptr).expect("valid and non-null BridgedSession pointer");
 
-    tracing::trace!(
-        "[FFI] Scheduling use_keyspace: \"{}\" (case_sensitive: {})",
-        keyspace,
-        case_sensitive
-    );
+    // Try to acquire a read lock synchronously.
+    let Ok(session_guard) = session_arc.try_read() else {
+        // Session is currently shutting down.
+        let ex = constructors
+            .already_shutdown_exception_constructor
+            .construct_from_rust("Session has been shut down and can no longer execute operations");
+        return FFIException::from_exception(ex);
+    };
 
-    // Try to acquire an owned read lock.
-    // If the operation fails, treat it as session shutting down.
-    let session_guard_res = session_arc.try_read_owned();
+    // Check if session is connected or if it has been shut down.
+    let Some(session) = session_guard.session.as_ref() else {
+        let ex = constructors
+            .already_shutdown_exception_constructor
+            .construct_from_rust("Session has been shut down and can no longer execute operations");
+        return FFIException::from_exception(ex);
+    };
 
-    // TODO: replace PagerExecutionError with UseKeyspaceError.
-    BridgedFuture::spawn::<_, _, MaybeShutdownError<PagerExecutionError>, _>(tcb, async move {
-        tracing::debug!("[FFI] Executing use_keyspace \"{}\"", keyspace);
+    let Some(keyspace) = session.get_keyspace() else {
+        // If no keyspace is set, we don't set FFIStr.
+        // This will be treated as null on the C# side.
+        return FFIException::ok();
+    };
 
-        let Ok(session_guard) = session_guard_res else {
-            // Session is currently shutting down - exit with appropriate error.
-            return Err(MaybeShutdownError::AlreadyShutdown);
-        };
-
-        // Check if session is connected or if it has been shut down.
-        // If it has been shut down, return appropriate error.
-        let Some(session) = session_guard.session.as_ref() else {
-            return Err(MaybeShutdownError::AlreadyShutdown);
-        };
-
-        // TO DO: Fix error handling here to create a new C# exception type for
-        // UseKeyspaceError when use_keyspace isn't called anymore as part of Execute.
-        // Use Session::use_keyspace() to update the Rust session's internal keyspace state.
-        session
-            .use_keyspace(&keyspace, case_sensitive)
-            .await
-            .map_err(|e| {
-                // Error type conversion: UseKeyspaceError -> PagerExecutionError
-                // We need this because BridgedFuture expects PagerExecutionError to match RowSet return.
-                match e {
-                    scylla::errors::UseKeyspaceError::RequestError(req_err) => {
-                        // Common case: request failure (e.g., keyspace doesn't exist)
-                        let req_error: scylla::errors::RequestError = req_err.into();
-                        MaybeShutdownError::Inner(PagerExecutionError::NextPageError(
-                            req_error.into(),
-                        ))
-                    }
-                    scylla::errors::UseKeyspaceError::BadKeyspaceName(_)
-                    | scylla::errors::UseKeyspaceError::KeyspaceNameMismatch { .. }
-                    | scylla::errors::UseKeyspaceError::RequestTimeout(..)
-                    | _ => {
-                        // Catch-all for BadKeyspaceName, KeyspaceNameMismatch, RequestTimeout
-                        // and any future UseKeyspaceError variants (marked #[non_exhaustive])
-                        let req_attempt_err =
-                            scylla::errors::RequestAttemptError::UnexpectedResponse(
-                                scylla::errors::CqlResponseKind::Error,
-                            );
-                        let req_error: scylla::errors::RequestError = req_attempt_err.into();
-                        MaybeShutdownError::Inner(PagerExecutionError::NextPageError(
-                            req_error.into(),
-                        ))
-                    }
-                }
-            })?;
-
-        tracing::trace!("[FFI] use_keyspace executed successfully");
-        Ok(Arc::new(RowSet::empty()))
-    })
+    let ffi_str = FFIStr::new(keyspace.as_ref());
+    write_cs_str(ffi_str, cs_string)
 }
 
 /// Sets `out_cluster_state` to the current cluster state as a ManuallyDestructible resource.

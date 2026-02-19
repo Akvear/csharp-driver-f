@@ -36,6 +36,32 @@ namespace Cassandra
             }
         }
 
+        internal static class FFIManagedStringWriter
+        {
+            unsafe static internal readonly delegate* unmanaged[Cdecl]<FFIString, IntPtr, FFIException> WriteToStrPtr = &WriteToString;
+
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            internal static unsafe FFIException WriteToString(FFIString str, IntPtr ptr)
+            {
+                try 
+                {
+                    var stringContainer = Unsafe.AsRef<StringContainer>((void*)ptr);
+                    stringContainer.Value = str.ToManagedString();
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"[FFI] WriteToString threw exception: {ex}");
+                    return FFIException.FromException(ex);
+                }
+                return FFIException.Ok();
+            }
+
+            internal class StringContainer
+            {
+                public string Value;
+            }
+        }
+
         /// <summary>
         /// Represents a byte slice passed over FFI boundary.
         /// Used to pass byte arrays from Rust to C#.

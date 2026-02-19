@@ -55,11 +55,9 @@ namespace Cassandra
         /// <summary>
         /// Gets or sets the keyspace
         /// </summary>
-        private string _keyspace;
         public string Keyspace
         {
-            get => _keyspace;
-            private set => _keyspace = value;
+            get => bridgedSession.GetKeyspace();
         }
 
         /// <inheritdoc />
@@ -71,12 +69,10 @@ namespace Cassandra
 
         private Session(
             ICluster cluster,
-            string keyspace,
             RustBridge.ManuallyDestructible mdSession)
         {
             _cluster = cluster;
             Configuration = cluster.Configuration;
-            Keyspace = keyspace;
             bridgedSession = new BridgedSession(mdSession);
         }
 
@@ -88,7 +84,7 @@ namespace Cassandra
             Task<RustBridge.ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris);
 
             RustBridge.ManuallyDestructible mdSession = await mdSessionTask.ConfigureAwait(false);
-            var session = new Session(cluster, keyspace, mdSession);
+            var session = new Session(cluster, mdSession);
 
             // If a keyspace was specified, validate it exists by executing USE statement
             // This should throw InvalidQueryException if keyspace doesn't exist.
@@ -138,12 +134,7 @@ namespace Cassandra
         /// <inheritdoc />
         public void ChangeKeyspace(string keyspace)
         {
-            if (Keyspace != keyspace)
-            {
-                // FIXME: Migrate to Rust `Session::use_keyspace()`.
-
-                Execute(new SimpleStatement(CqlQueryTools.GetUseKeyspaceCql(keyspace)));
-            }
+            Execute(new SimpleStatement(CqlQueryTools.GetUseKeyspaceCql(keyspace)));
         }
 
         /// <inheritdoc />
@@ -288,25 +279,10 @@ namespace Cassandra
                     string queryString = s.QueryString;
                     object[] queryValues = s.QueryValues ?? [];
 
-                    // Check if this is a USE statement to track keyspace changes.
-                    // TODO: perform whole logic related to USE statements on the Rust side.
-                    bool isUseStatement = IsUseKeyspace(queryString, out string newKeyspace);
-
                     Task<RustBridge.ManuallyDestructible> task;
                     if (queryValues.Length == 0)
                     {
-                        // Use session_use_keyspace for USE statements and session_query for other statements.
-                        // TODO: perform whole logic related to USE statements on the Rust side.
-                        if (isUseStatement)
-                        {
-                            // For USE statements, call the dedicated use_keyspace method
-                            // case_sensitive = true to respect the exact casing provided.
-                            task = bridgedSession.UseKeyspace(newKeyspace, true);
-                        }
-                        else
-                        {
-                            task = bridgedSession.Query(queryString);
-                        }
+                        task = bridgedSession.Query(queryString);
                     }
                     else
                     {
@@ -322,12 +298,6 @@ namespace Cassandra
                         // and throw the inner exception directly, avoiding double-wrapping.
                         RustBridge.ManuallyDestructible mdRowSet = t.GetAwaiter().GetResult();
                         var rowSet = new RowSet(mdRowSet);
-
-                        // TODO: Fix this logic once we have proper USE statement handling in the driver. Make sure no race conditions occur when updating the keyspace
-                        if (isUseStatement)
-                        {
-                            _keyspace = newKeyspace;
-                        }
 
                         return rowSet;
                     }, TaskContinuationOptions.ExecuteSynchronously);
@@ -476,43 +446,6 @@ namespace Cassandra
             }
 
             return profile;
-        }
-
-        // TODO: Remove this method once we have proper USE statement handling in the driver.
-        // Checks if a query is a USE statement and extracts the keyspace name.
-        // Returns true if the query is a USE statement, false otherwise.
-        private bool IsUseKeyspace(string query, out string keyspace)
-        {
-            keyspace = null;
-
-            if (string.IsNullOrWhiteSpace(query))
-                return false;
-
-            var trimmed = query.Trim();
-
-            // Check if it starts with USE (case-insensitive)
-            if (!trimmed.StartsWith("USE ", StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            // Extract the keyspace name
-            var parts = trimmed.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length != 2)
-                return false;
-
-            var ksName = parts[1].TrimEnd(';');
-
-            // Remove quotes if present
-            if (ksName.StartsWith("\"") && ksName.EndsWith("\""))
-            {
-                keyspace = ksName.Substring(1, ksName.Length - 2).Replace("\"\"", "\"");
-            }
-            else
-            {
-                // Unquoted identifiers are lowercase in CQL.
-                keyspace = ksName.ToLower();
-            }
-
-            return true;
         }
 
         /// <summary>

@@ -1,3 +1,4 @@
+use crate::error_conversion::FFIException;
 use std::ffi::{CStr, c_char, c_void};
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -696,3 +697,12 @@ impl<'a> CSharpStr<'a> {
         self.ptr.map(|ptr| unsafe { CStr::from_ptr(ptr.as_ptr()) })
     }
 }
+
+enum CSharpManagedString {}
+
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub(crate) struct CSharpManagedStringPtr(FFIPtr<'static, CSharpManagedString>);
+
+pub(crate) type WriteStringCallback =
+    extern "C" fn(FFIStr<'_>, CSharpManagedStringPtr) -> FFIException;
