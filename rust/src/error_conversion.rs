@@ -608,6 +608,12 @@ impl ErrorToException for ConnectionPoolError {
                 last_connection_error: ConnectionError::IoError(io_err),
             } => io_err.to_exception(ctors),
 
+            ConnectionPoolError::Broken {
+                last_connection_error: ConnectionError::ConnectTimeout,
+            } => ctors
+                .no_host_available_exception_constructor
+                .construct_from_rust(self.to_string().as_str()),
+
             ConnectionPoolError::Broken { .. }
             | ConnectionPoolError::NodeDisabledByHostFilter
             | ConnectionPoolError::Initializing => {
