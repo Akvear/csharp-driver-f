@@ -34,8 +34,10 @@ namespace Cassandra
         /// Default value for <see cref="DefunctReadTimeoutThreshold"/>, 64.
         /// </summary>
         internal const int DefaultDefunctReadTimeoutThreshold = 64;
+        internal const int DefaultKeepAliveIntervalMillis = 2000;
         private int _connectTimeoutMillis = DefaultConnectTimeoutMillis;
         private bool _keepAlive = true;
+        private int _keepAliveIntervalMillis = DefaultKeepAliveIntervalMillis;
         private int? _receiveBufferSize;
         private bool? _reuseAddress;
         private int? _sendBufferSize;
@@ -60,6 +62,15 @@ namespace Cassandra
         public bool? KeepAlive
         {
             get { return _keepAlive; }
+        }
+
+        /// <summary>
+        /// Gets the number of milliseconds to wait between TCP keep-alive probes.
+        /// This option is only used if KeepAlive is set to true.
+        /// </summary>
+        public int KeepAliveIntervalMillis
+        {
+            get { return _keepAliveIntervalMillis; }
         }
 
         public bool? ReuseAddress
@@ -147,6 +158,16 @@ namespace Cassandra
         public SocketOptions SetKeepAlive(bool keepAlive)
         {
             _keepAlive = keepAlive;
+            return this;
+        }
+        
+        /// <summary>
+        /// Sets the number of milliseconds to wait between TCP keep-alive probes.
+        /// This option is only used if KeepAlive is set to true.
+        /// </summary> 
+        public SocketOptions SetKeepAliveIntervalMillis(int keepAliveIntervalMillis)
+        {
+            _keepAliveIntervalMillis = keepAliveIntervalMillis;
             return this;
         }
 
