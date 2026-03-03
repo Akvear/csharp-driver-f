@@ -693,7 +693,7 @@ impl<'a, T> Debug for FFIPtr<'a, T> {
 
 pub(crate) type CSharpStr<'a> = FFIPtr<'a, c_char>;
 impl<'a> CSharpStr<'a> {
-    pub(crate) fn as_cstr(&self) -> Option<&CStr> {
+    pub(crate) fn as_cstr(&self) -> Option<&'a CStr> {
         self.ptr.map(|ptr| unsafe { CStr::from_ptr(ptr.as_ptr()) })
     }
 }
