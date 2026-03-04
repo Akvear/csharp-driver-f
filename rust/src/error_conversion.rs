@@ -370,6 +370,8 @@ impl ErrorToException for PagerExecutionError {
                 ctors.rust_exception_constructor.construct_from_rust(self)
             }
 
+            PagerExecutionError::MetadataError(e) => e.to_exception(ctors),
+
             _ => ctors.rust_exception_constructor.construct_from_rust(self),
         }
     }
