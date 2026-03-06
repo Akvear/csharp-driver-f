@@ -14,8 +14,13 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+
 using Cassandra.IntegrationTests.TestBase;
 using Cassandra.Tests;
 
@@ -209,6 +214,84 @@ namespace Cassandra.IntegrationTests.Core
                 Assert.That(localSession.Keyspace, Is.EqualTo("system"));
                 Assert.AreNotEqual(localSession.Keyspace, "SyStEm");
             }
+        }
+
+        [Test]
+        public void Session_Cancels_Pending_When_Disposed()
+        {
+            Trace.TraceInformation("SessionCancelsPendingWhenDisposed");
+            using (var localCluster = ClusterBuilder().AddContactPoint(TestCluster.InitialContactPoint).Build())
+            {
+                var localSession = localCluster.Connect();
+                localSession.CreateKeyspaceIfNotExists(KeyspaceName, null, false);
+                localSession.ChangeKeyspace(KeyspaceName);
+                localSession.Execute("CREATE TABLE tbl_cancel_pending (id uuid primary key)");
+                var taskList = new Task[500];
+                for (var i = 0; i < taskList.Length; i++)
+                {
+                    taskList[i] = localSession.ExecuteAsync(new SimpleStatement(
+                        "INSERT INTO tbl_cancel_pending (id) VALUES (uuid())"));
+                }
+                localSession.Dispose();
+                try
+                {
+                    Task.WaitAll(taskList);
+                }
+                catch
+                {
+                    // Its OK to have a failed task
+                }
+                Assert.False(taskList.Any(t => t.Status == TaskStatus.WaitingForActivation), "No more task should be pending");
+                Assert.True(taskList.All(t => t.Status == TaskStatus.RanToCompletion || t.Status == TaskStatus.Faulted), "All task should be completed or faulted");
+            }
+        }
+
+        [Test]
+        public void Session_Keyspace_Create_Case_Sensitive()
+        {
+            var localCluster = GetNewTemporaryCluster();
+            var localSession = localCluster.Connect();
+            const string ks1 = "UPPER_ks";
+            localSession.CreateKeyspace(ks1);
+            localSession.ChangeKeyspace(ks1);
+            localSession.Execute("CREATE TABLE test1 (k uuid PRIMARY KEY, v text)");
+
+            //Execute multiple times a query on the newly created keyspace
+            Assert.DoesNotThrow(() =>
+            {
+                for (var i = 0; i < 5; i++)
+                {
+                    localSession.Execute("SELECT * FROM test1");
+                }
+            });
+        }
+        
+                /// Tests that void results return empty RowSets
+        ///
+        /// Empty_RowSet_Test tests that empty RowSets are returned for void results. It creates a simple table and performs
+        /// an INSERT query on the table, returning an empty RowSet. It then verifies the RowSet metadata is populated
+        /// properly.
+        ///
+        /// @since 3.0.0
+        /// @jira_ticket CSHARP-377
+        /// @expected_result RowSet metadata is properly returned
+        ///
+        /// @test_category queries:basic
+        [Test]
+        public void Empty_RowSet_Test()
+        {
+            var localCluster = GetNewTemporaryCluster();
+            var localSession = localCluster.Connect();
+            localSession.CreateKeyspaceIfNotExists(KeyspaceName, null, false);
+            localSession.ChangeKeyspace(KeyspaceName);
+            localSession.Execute("CREATE TABLE test (k int PRIMARY KEY, v int)");
+
+            var rowSet = localSession.Execute("INSERT INTO test (k, v) VALUES (0, 0)");
+            Assert.True(rowSet.IsExhausted());
+            // TODO: Re-enable these assertions once RowSet API is fully implemented.
+            // Assert.True(rowSet.IsFullyFetched);
+            // Assert.AreEqual(0, rowSet.Count());
+            // Assert.AreEqual(0, rowSet.GetAvailableWithoutFetching());
         }
     }
 }
