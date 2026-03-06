@@ -119,6 +119,7 @@ namespace Cassandra
         {
             bridgedRowSet = new BridgedRowSet(mdRowSet);
             Columns = bridgedRowSet.ExtractColumnsFromRust();
+            _exhausted = Columns.Length == 0;
             Info = new ExecutionInfo();
         }
 
@@ -131,6 +132,7 @@ namespace Cassandra
             Info = new ExecutionInfo();
             Columns = new CqlColumn[0];
             AutoPage = true;
+            _exhausted = true;
         }
 
 #nullable enable
