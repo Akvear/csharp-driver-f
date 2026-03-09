@@ -819,3 +819,29 @@ pub(crate) struct CSharpManagedStringPtr(FFIPtr<'static, CSharpManagedString>);
 
 pub(crate) type WriteStringCallback =
     extern "C" fn(FFIStr<'_>, CSharpManagedStringPtr) -> FFIException;
+
+/// Feeds each item from an iterator to a C FFI callback, one at a time.
+///
+/// This avoids materializing the full iterator into a `Vec`/`FFISlice`.
+/// The callback is invoked once per item with the context pointer and the item.
+///
+/// # Safety
+/// - `callback` must be a valid function pointer with C calling convention
+/// - `context` must remain valid for the duration of iteration
+#[expect(unused)]
+// The function is currently unused, but it will be useful when we need to pass slices from Rust to C# without materializing them.
+pub(crate) unsafe fn ffi_callback_for_each<Ctx: Copy, T>(
+    context: Ctx,
+    callback: unsafe extern "C" fn(Ctx, T) -> FFIException,
+    iter: impl Iterator<Item = T>,
+) -> FFIException {
+    for item in iter {
+        unsafe {
+            let res = callback(context, item);
+            if res.has_exception() {
+                return res;
+            }
+        }
+    }
+    FFIException::ok()
+}
