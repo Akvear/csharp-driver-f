@@ -243,6 +243,19 @@ impl AlreadyExistsConstructor {
     }
 }
 
+/// FFI constructor for C# `InvalidArgumentException`.
+#[repr(transparent)]
+pub struct InvalidArgumentExceptionConstructor(
+    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+);
+
+impl InvalidArgumentExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
 /// FFI constructor for C# `InvalidQueryException`.
 #[repr(transparent)]
 pub struct InvalidQueryConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr);
