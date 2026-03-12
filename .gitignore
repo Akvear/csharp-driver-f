@@ -77,6 +77,8 @@ CLAUDE.md
 
 # Ignore Rust build files
 rust/target/
+benchmark/rust-driver/target/
+benchmark/rust-driver/Cargo.lock
 rust/libcsharp_wrapper.so
 
 # Ignore rust-analyzer files

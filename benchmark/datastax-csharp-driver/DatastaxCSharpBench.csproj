@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Official ScyllaDB C# Driver — ScyllaDB's fork of the DataStax driver.
+         https://nuget.org/packages/ScyllaDBCSharpDriver/ -->
+    <PackageReference Include="ScyllaDBCSharpDriver" Version="3.22.0.1" />
+
+  </ItemGroup>
+
+</Project>

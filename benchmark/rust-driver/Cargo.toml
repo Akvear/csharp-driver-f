@@ -1,0 +1,14 @@
+[package]
+name = "rust-bench"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "rust-bench"
+path = "src/main.rs"
+
+[dependencies]
+# Official ScyllaDB Rust driver — picked up from crates.io.
+scylla = "1"
+tokio = { version = "1", features = ["full"] }
+uuid = "1.22.0"

@@ -377,7 +377,7 @@ namespace Cassandra
                         // by the C# code.
                         handle.Free();
 
-                        Console.Error.WriteLine($"[FFI] CompleteTask done.");
+                        // Console.Error.WriteLine($"[FFI] CompleteTask done.");
                     }
                     else
                     {

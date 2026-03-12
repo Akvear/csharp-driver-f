@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Reference the ScyllaDB C# driver from this repository.
+         Replace with a PackageReference once a NuGet package is published. -->
+    <ProjectReference Include="..\..\src\Cassandra\Cassandra.csproj" />
+
+  </ItemGroup>
+
+</Project>
