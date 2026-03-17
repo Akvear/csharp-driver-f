@@ -74,7 +74,7 @@ global.json
 
 # Claude / AI assistant metadata
 CLAUDE.md
-.claude/ 
+.claude/
 
 # Ignore Rust build files
 rust/target/
@@ -82,3 +82,8 @@ rust/libcsharp_wrapper.so
 
 # Ignore rust-analyzer files
 target/rust-analyzer/
+
+# Ignore benchmarker results
+*.svg
+*.db
+benchmark/results/
