@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>DatastaxCSharpBench</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BenchmarkEntryPoint Condition="'$(BenchmarkEntryPoint)' == ''">ParametrizedInsertBenchmarkEntryPoint</BenchmarkEntryPoint>
+    <StartupObject>$(BenchmarkEntryPoint)</StartupObject>
+    <OutputPath>bin/$(Configuration)/$(BenchmarkEntryPoint)/</OutputPath>
+    <IntermediateOutputPath>obj/$(Configuration)/$(BenchmarkEntryPoint)/</IntermediateOutputPath>
+    <DefineConstants Condition="'$(DefineConstants)' != ''">$(DefineConstants);DATASTAX_DRIVER</DefineConstants>
+    <DefineConstants Condition="'$(DefineConstants)' == ''">DATASTAX_DRIVER</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../Common.cs" />
+    <Compile Include="../Benchmarks/**/*.cs" />
+    <PackageReference Include="ScyllaDBCSharpDriver" Version="3.22.0.1" />
+  </ItemGroup>
+
+</Project>

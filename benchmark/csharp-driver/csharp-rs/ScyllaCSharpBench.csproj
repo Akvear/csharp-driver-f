@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <BenchmarkEntryPoint Condition="'$(BenchmarkEntryPoint)' == ''">ParametrizedInsertBenchmarkEntryPoint</BenchmarkEntryPoint>
+    <StartupObject>$(BenchmarkEntryPoint)</StartupObject>
+    <OutputPath>bin/$(Configuration)/$(BenchmarkEntryPoint)/</OutputPath>
+    <IntermediateOutputPath>obj/$(Configuration)/$(BenchmarkEntryPoint)/</IntermediateOutputPath>
+    <DefineConstants>$(DefineConstants);RUST_BACKED_DRIVER</DefineConstants>
+    <AssemblyName>ScyllaCSharpBench</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../Common.cs" />
+    <Compile Include="../Benchmarks/**/*.cs" />
+    <ProjectReference Include="../../../src/Cassandra/Cassandra.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.13" />
+  </ItemGroup>
+
+  <Target Name="BuildRustNativeWrapper" BeforeTargets="Build" Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true'">
+    <PropertyGroup>
+      <RustProjectDir>$(MSBuildThisFileDirectory)../../../rust</RustProjectDir>
+    </PropertyGroup>
+
+    <Exec Command="cd &quot;$(RustProjectDir)&quot; &amp;&amp; cargo build --release &amp;&amp; cd - &gt;/dev/null" />
+  </Target>
+
+  <Target Name="LinkRustNativeWrapper" AfterTargets="Build" Condition="'$(OS)' != 'Windows_NT'">
+    <PropertyGroup>
+      <RustWrapperSo>$(MSBuildThisFileDirectory)../../../rust/target/release/libcsharp_wrapper.so</RustWrapperSo>
+      <OutputWrapperSo>$(TargetDir)libcsharp_wrapper.so</OutputWrapperSo>
+    </PropertyGroup>
+
+    <Exec
+      Condition="Exists('$(RustWrapperSo)')"
+      Command="ln -sf &quot;$(RustWrapperSo)&quot; &quot;$(OutputWrapperSo)&quot;" />
+  </Target>
+
+</Project>
