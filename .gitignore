@@ -81,3 +81,7 @@ rust/libcsharp_wrapper.so
 
 # Ignore rust-analyzer files
 target/rust-analyzer/
+
+# Ignore benchmarker results
+*.svg
+*.db
