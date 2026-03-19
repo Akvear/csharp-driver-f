@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
@@ -30,7 +31,14 @@ namespace Cassandra
         /// <summary>
         /// Gets the table indexes by name
         /// </summary>
-        public IDictionary<string, IndexMetadata> Indexes { get; protected set; }
+        private IDictionary<string, IndexMetadata> _indexes;
+        // FIXME: we don't have access to index info from Rust, so when user tries to access indexes,
+        // we throw an exception instead of returning incorrect information.
+        public IDictionary<string, IndexMetadata> Indexes
+        {
+            get => throw new InvalidOperationException("Indexes access is not supported.");
+            protected set => _indexes = value ?? EmptyIndexes;
+        }
 
         /// <summary>
         /// Determines whether the table is a virtual table or not.

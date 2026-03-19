@@ -57,7 +57,15 @@ namespace Cassandra
         /// <summary>
         /// Gets an array of pairs of columns and sort order that are part of the clustering key
         /// </summary>
-        public Tuple<TableColumn, SortOrder>[] ClusteringKeys { get; protected set; }
+        private Tuple<TableColumn, SortOrder>[] _clusteringKeys;
+
+        // FIXME: we don't have access to clustering key order info from Rust, so when user tries to access clustering keys,
+        // we throw an exception instead of returning incorrect information.
+        public Tuple<TableColumn, SortOrder>[] ClusteringKeys
+        {
+            get => throw new InvalidOperationException("ClusteringKeys access is not supported.");
+            protected set => _clusteringKeys = value;
+        }
 
         /// <summary>
         /// Gets the table options

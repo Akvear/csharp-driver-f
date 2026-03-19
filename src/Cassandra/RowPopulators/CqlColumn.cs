@@ -23,6 +23,7 @@ namespace Cassandra
         /// <summary>
         /// Index of the column in the rowset
         /// </summary>
+        // FIXME: we don't have access to column index from Rust, so the index is set to -1 by default and is not updated.
         public int Index { get; set; }
         /// <summary>
         /// CLR Type of the column
