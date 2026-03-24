@@ -29,6 +29,7 @@ pub struct ExceptionPtr(NonNull<Exception>);
 /// At the managed boundary, C# must either throw (which frees) or explicitly free the handle.
 /// All changes to this struct must be mirrored in C# code in the exact same order.
 #[repr(transparent)]
+#[must_use]
 pub struct FFIException {
     pub exception: Option<ExceptionPtr>,
 }
