@@ -1,0 +1,51 @@
+defaults:
+  name: datastax
+
+backends:
+  - benchmark-name: insert
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedInsertBenchmarkEntryPoint
+    run-command: env N_WORKERS=1 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedInsertBenchmarkEntryPoint
+
+  - benchmark-name: concurrent_insert
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedInsertBenchmarkEntryPoint
+    run-command: env N_WORKERS=100 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedInsertBenchmarkEntryPoint
+
+  - benchmark-name: select
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedSelectBenchmarkEntryPoint
+    run-command: env N_ROWS=10 N_WORKERS=1 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedSelectBenchmarkEntryPoint
+
+  - benchmark-name: concurrent_select
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedSelectBenchmarkEntryPoint
+    run-command: env N_ROWS=10 N_WORKERS=100 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedSelectBenchmarkEntryPoint
+
+  - benchmark-name: batch
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=BatchBenchmarkEntryPoint
+    run-command: ./benchmark/runner-config/run-csharp-benchmark.sh datastax BatchBenchmarkEntryPoint
+
+  - benchmark-name: paging
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=PagingBenchmarkEntryPoint
+    run-command: ./benchmark/runner-config/run-csharp-benchmark.sh datastax PagingBenchmarkEntryPoint
+
+  - benchmark-name: large_select
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedSelectBenchmarkEntryPoint
+    run-command: env N_ROWS=5000 N_WORKERS=1 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedSelectBenchmarkEntryPoint
+
+  - benchmark-name: concurrent_large_select
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedSelectBenchmarkEntryPoint
+    run-command: env N_ROWS=5000 N_WORKERS=100 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedSelectBenchmarkEntryPoint
+
+  - benchmark-name: ser
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedSerBenchmarkEntryPoint
+    run-command: env N_WORKERS=1 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedSerBenchmarkEntryPoint
+
+  - benchmark-name: concurrent_ser
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedSerBenchmarkEntryPoint
+    run-command: env N_WORKERS=100 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedSerBenchmarkEntryPoint
+
+  - benchmark-name: deser
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedDeserBenchmarkEntryPoint
+    run-command: env N_WORKERS=1 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedDeserBenchmarkEntryPoint
+
+  - benchmark-name: concurrent_deser
+    build-command: dotnet build benchmark/csharp-driver/datastax/DatastaxCSharpBench.csproj -c Release -p:BenchmarkEntryPoint=ParametrizedDeserBenchmarkEntryPoint
+    run-command: env N_WORKERS=100 ./benchmark/runner-config/run-csharp-benchmark.sh datastax ParametrizedDeserBenchmarkEntryPoint
