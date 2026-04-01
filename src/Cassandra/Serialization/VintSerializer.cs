@@ -12,6 +12,8 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 
+using System;
+
 namespace Cassandra.Serialization
 {
     internal static class VintSerializer
@@ -120,6 +122,31 @@ namespace Cassandra.Serialization
         public static long ReadVInt(byte[] buffer, ref int offset)
         {
             return DecodeZigZag64(ReadUnsignedVInt(buffer, ref offset));
+        }
+
+        public static long ReadUnsignedVInt(ref ReadOnlySpan<byte> input)
+        {
+            var firstByte = input[0];
+            input = input.Slice(1);
+            if ((firstByte & 0x80) == 0)
+            {
+                return firstByte;
+            }
+            var size = NumberOfExtraBytesToRead(firstByte);
+            long result = firstByte & FirstByteValueMask(size);
+            for (var ii = 0; ii < size; ii++)
+            {
+                long b = input[0];
+                input = input.Slice(1);
+                result <<= 8;
+                result |= b & 0xff;
+            }
+            return result;
+        }
+
+        public static long ReadVInt(ref ReadOnlySpan<byte> buffer)
+        {
+            return DecodeZigZag64(ReadUnsignedVInt(ref buffer));
         }
     }
 }

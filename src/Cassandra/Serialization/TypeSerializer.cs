@@ -63,6 +63,15 @@ namespace Cassandra.Serialization
             };
         }
 
+        internal static void GuidShuffle(ReadOnlySpan<byte> source, Span<byte> destination)
+        {
+            destination[0] = source[3]; destination[1] = source[2]; destination[2] = source[1]; destination[3] = source[0];
+            destination[4] = source[5]; destination[5] = source[4];
+            destination[6] = source[7]; destination[7] = source[6];
+            destination[8] = source[8]; destination[9] = source[9]; destination[10] = source[10]; destination[11] = source[11];
+            destination[12] = source[12]; destination[13] = source[13]; destination[14] = source[14]; destination[15] = source[15];
+        }
+
         /// <summary>
         /// Decodes length for collection types (always 4 bytes for protocol V4+).
         /// </summary>
@@ -70,6 +79,17 @@ namespace Cassandra.Serialization
         {
             var result = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(index));
             index += 4;
+            return result;
+        }
+
+        /// <summary>
+        /// Decodes length for collection types (always 4 bytes for protocol V4+).
+        /// Advances the span past the consumed bytes.
+        /// </summary>
+        internal static int DecodeCollectionLength(ProtocolVersion protocolVersion, ref ReadOnlySpan<byte> buffer)
+        {
+            var result = BinaryPrimitives.ReadInt32BigEndian(buffer);
+            buffer = buffer.Slice(4);
             return result;
         }
 
