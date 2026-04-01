@@ -406,19 +406,6 @@ namespace Cassandra.IntegrationTests.Core
             Assert.AreEqual(1, table.TableColumns.Count(c => c.Name == "added_col"));
         }
 
-        [Test, TestCase(true), TestCase(false)]
-        public void GetTableAsync_With_Keyspace_And_Table_Not_Found(bool metadataSync)
-        {
-            var cluster = GetNewTemporaryCluster(builder => builder.WithMetadataSyncOptions(new MetadataSyncOptions().SetMetadataSyncEnabled(metadataSync)));
-            cluster.Connect();
-            var t = cluster.Metadata.GetTableAsync("ks_does_not_exist", "t1");
-            var table = TaskHelper.WaitToComplete(t);
-            Assert.Null(table);
-            t = cluster.Metadata.GetTableAsync("system", "table_does_not_exist");
-            table = TaskHelper.WaitToComplete(t);
-            Assert.Null(table);
-        }
-
         /// Tests that materialized view metadata is being updated
         ///
         /// GetMaterializedView_Should_Refresh_View_Metadata_Via_Events tests that materialized view metadata is being properly updated by the driver

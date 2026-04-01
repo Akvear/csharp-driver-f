@@ -828,8 +828,6 @@ pub(crate) type WriteStringCallback =
 /// # Safety
 /// - `callback` must be a valid function pointer with C calling convention
 /// - `context` must remain valid for the duration of iteration
-#[expect(unused)]
-// The function is currently unused, but it will be useful when we need to pass slices from Rust to C# without materializing them.
 pub(crate) unsafe fn ffi_callback_for_each<Ctx: Copy, T>(
     context: Ctx,
     callback: unsafe extern "C" fn(Ctx, T) -> FFIException,

@@ -26,6 +26,8 @@ namespace Cassandra
 {
     public class KeyspaceMetadata
     {
+        private readonly BridgedClusterState _clusterState;
+
         /// <summary>
         ///  Gets the name of this keyspace.
         /// </summary>
@@ -37,20 +39,20 @@ namespace Cassandra
         /// </summary>
         /// <returns><c>true</c> if durable writes are set on this keyspace
         ///  , <c>false</c> otherwise.</returns>
-        public bool DurableWrites { get; }
+        public bool DurableWrites { get; private set; }
 
         /// <summary>
         ///  Gets the Strategy Class of this keyspace.
         /// </summary>
         /// <returns>name of StrategyClass of this keyspace.</returns>
-        public string StrategyClass { get; }
+        public string StrategyClass { get; private set; }
 
         /// <summary>
         ///  Returns the replication options for this keyspace.
         /// </summary>
         /// 
         /// <returns>a dictionary containing the keyspace replication strategy options.</returns>
-        public IDictionary<string, int> Replication { get; }
+        public IDictionary<string, int> Replication { get; private set; }
 
         /// <summary>
         /// Determines whether the keyspace is a virtual keyspace or not.
@@ -74,6 +76,30 @@ namespace Cassandra
             throw new NotImplementedException("TODO: implement KeyspaceMetadata");
         }
 
+        // Constructor for creating a KeyspaceMetadata with only the name, used for bridging rest of metadata from Rust to C#.
+        internal KeyspaceMetadata(
+            BridgedClusterState clusterState,
+            string name
+        )
+        {
+            Name = name;
+            _clusterState = clusterState;
+            IsVirtual = false;
+        }
+
+        // Internal method to fill the rest of the metadata fields with bridged data from Rust
+        // after the KeyspaceMetadata object is created with only the name.
+        internal void FillKeyspaceMetadata(
+            bool durableWrites,
+            string strategyClass,
+            IDictionary<string, int> replication
+        )
+        {
+            DurableWrites = durableWrites;
+            StrategyClass = strategyClass;
+            Replication = replication;
+        }
+
         /// <summary>
         ///  Returns metadata of specified table in this keyspace.
         /// </summary>
@@ -82,12 +108,7 @@ namespace Cassandra
         ///  exists, <c>null</c> otherwise.</returns>
         public TableMetadata GetTableMetadata(string tableName)
         {
-            throw new NotImplementedException("TODO: implement TableMetadata");
-        }
-
-        internal Task<TableMetadata> GetTableMetadataAsync(string tableName)
-        {
-            throw new NotImplementedException("TODO: implement TableMetadata");
+            return _clusterState.GetTableMetadata(Name, tableName);
         }
 
         /// <summary>
@@ -140,7 +161,7 @@ namespace Cassandra
         ///  keyspace.</returns>
         public IEnumerable<TableMetadata> GetTablesMetadata()
         {
-            throw new NotImplementedException("TODO: implement TableMetadata");
+            return GetTablesNames().Select(GetTableMetadata);
         }
 
 
@@ -152,7 +173,7 @@ namespace Cassandra
         ///  keyspace tables names.</returns>
         public ICollection<string> GetTablesNames()
         {
-            throw new NotImplementedException("TODO: implement KeyspaceMetadata");
+            return _clusterState.GetTableNames(Name);
         }
 
         /// <summary>

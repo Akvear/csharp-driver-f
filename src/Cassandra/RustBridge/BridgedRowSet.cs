@@ -203,7 +203,7 @@ namespace Cassandra
         }
 
         // This function is called from UnmanagedCallersOnly context - it must not throw exceptions.
-        private static IColumnInfo BuildTypeInfoFromHandle(IntPtr handle, ColumnTypeCode code)
+        internal static IColumnInfo BuildTypeInfoFromHandle(IntPtr handle, ColumnTypeCode code)
         {
             if (handle == IntPtr.Zero) return null;
             try
@@ -346,7 +346,7 @@ namespace Cassandra
             }
         }
 
-        private static Type MapTypeFromCode(ColumnTypeCode code)
+        internal static Type MapTypeFromCode(ColumnTypeCode code)
         {
             return code switch
             {

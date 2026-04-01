@@ -262,52 +262,6 @@ namespace Cassandra.IntegrationTests.Core
         }
 
         [Test]
-        public void CheckSimpleStrategyKeyspace()
-        {
-            ITestCluster testCluster = TestClusterManager.GetNonShareableTestCluster(DefaultNodeCount);
-            var session = testCluster.Session;
-            bool durableWrites = Randomm.Instance.NextBoolean();
-            string keyspaceName = TestUtils.GetUniqueKeyspaceName();
-
-            string strategyClass = ReplicationStrategies.SimpleStrategy;
-            int replicationFactor = Randomm.Instance.Next(1, 21);
-            session.CreateKeyspace(keyspaceName,
-                ReplicationStrategies.CreateSimpleStrategyReplicationProperty(replicationFactor),
-                durableWrites);
-            session.ChangeKeyspace(keyspaceName);
-
-            KeyspaceMetadata ksmd = testCluster.Cluster.Metadata.GetKeyspace(keyspaceName);
-            Assert.AreEqual(strategyClass, ksmd.StrategyClass);
-            Assert.AreEqual(durableWrites, ksmd.DurableWrites);
-            Assert.AreEqual(replicationFactor, ksmd.Replication["replication_factor"]);
-        }
-
-        [Test]
-        public void CheckNetworkTopologyStrategyKeyspace()
-        {
-            ITestCluster testCluster = TestClusterManager.GetNonShareableTestCluster(DefaultNodeCount);
-            var session = testCluster.Session;
-            string keyspaceName = TestUtils.GetUniqueKeyspaceName();
-            bool durableWrites = Randomm.Instance.NextBoolean();
-            Dictionary<string, int> datacentersReplicationFactors = null;
-
-            string strategyClass = ReplicationStrategies.NetworkTopologyStrategy;
-            int dataCentersCount = Randomm.Instance.Next(1, 11);
-            datacentersReplicationFactors = new Dictionary<string, int>((int)dataCentersCount);
-            for (int i = 0; i < dataCentersCount; i++)
-                datacentersReplicationFactors.Add("dc" + i, Randomm.Instance.Next(1, 21));
-            session.CreateKeyspace(keyspaceName,
-                ReplicationStrategies.CreateNetworkTopologyStrategyReplicationProperty(
-                    datacentersReplicationFactors), durableWrites);
-
-            KeyspaceMetadata ksmd = testCluster.Cluster.Metadata.GetKeyspace(keyspaceName);
-            Assert.AreEqual(strategyClass, ksmd.StrategyClass);
-            Assert.AreEqual(durableWrites, ksmd.DurableWrites);
-            if (datacentersReplicationFactors != null)
-                Assert.True(datacentersReplicationFactors.SequenceEqual(ksmd.Replication));
-        }
-
-        [Test]
         public void CheckTableMetadata()
         {
             CheckMetadata(TestUtils.GetUniqueTableName(), TestUtils.GetUniqueKeyspaceName());

@@ -15,8 +15,10 @@
 //
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using Cassandra.IntegrationTests.TestBase;
 using Cassandra.Tests;
 using NUnit.Framework;
 using Assert = NUnit.Framework.Legacy.ClassicAssert;
@@ -26,7 +28,9 @@ namespace Cassandra.IntegrationTests.Core
     [Category(TestCategory.Short), Category(TestCategory.RealCluster)]
     public class MetadataTests : SharedClusterTest
     {
-        public MetadataTests() : base(3, true)
+        private const int DefaultNodeCount = 3;
+
+        public MetadataTests() : base(DefaultNodeCount, true)
         {
         }
 
@@ -35,7 +39,7 @@ namespace Cassandra.IntegrationTests.Core
         {
             var hosts = Cluster.AllHosts();
             Assert.NotNull(hosts, "AllHosts() should not return null");
-            Assert.AreEqual(3, hosts.Count, "AllHosts() should return the same number of hosts as the cluster size");
+            Assert.AreEqual(DefaultNodeCount, hosts.Count, "AllHosts() should return the same number of hosts as the cluster size");
 
             foreach (var host in hosts)
             {
@@ -98,7 +102,7 @@ namespace Cassandra.IntegrationTests.Core
             var metadata = Cluster.Metadata;
             var hosts = metadata.AllHosts();
             Assert.NotNull(hosts, "Metadata.AllHosts() should not return null");
-            Assert.AreEqual(3, hosts.Count, "Metadata.AllHosts() should return correct number of hosts");
+            Assert.AreEqual(DefaultNodeCount, hosts.Count, "Metadata.AllHosts() should return correct number of hosts");
 
             var clusterHosts = Cluster.AllHosts();
             Assert.AreEqual(clusterHosts.Count, hosts.Count,
@@ -164,6 +168,80 @@ namespace Cassandra.IntegrationTests.Core
 
             // Check reference equality to ensure caching is working and we are not recreating objects unnecessarily
             Assert.AreSame(host1, host2, "Expected same property Host instance when topology is stable");
+        }
+
+        [Test]
+        public void CheckSimpleStrategyKeyspace()
+        {
+            var metadata = Cluster.Metadata;
+
+            string keyspaceName = TestUtils.GetUniqueKeyspaceName().ToLower();
+            bool durableWrites = Randomm.Instance.NextBoolean();
+            string strategyClass = ReplicationStrategies.SimpleStrategy;
+            int replicationFactor = Randomm.Instance.Next(1, DefaultNodeCount + 1);
+
+            Dictionary<string, string> replicationStrategy = new Dictionary<string, string>
+            {
+                { "class", strategyClass },
+                { "replication_factor", replicationFactor.ToString() }
+            };
+
+            Session.CreateKeyspace(
+                keyspaceName,
+                replicationStrategy,
+                durableWrites
+            );
+
+            KeyspaceMetadata ksmd = metadata.GetKeyspace(keyspaceName);
+            Assert.NotNull(ksmd, $"Keyspace '{keyspaceName}' should exist in cluster metadata");
+            Assert.AreEqual(strategyClass, ksmd.StrategyClass);
+            Assert.AreEqual(durableWrites, ksmd.DurableWrites);
+
+            // Verify replication settings are present
+            Assert.NotNull(ksmd.Replication);
+            Assert.True(ksmd.Replication.ContainsKey("replication_factor"));
+            Assert.AreEqual(replicationFactor, ksmd.Replication["replication_factor"]);
+
+            var keyspaces = metadata.GetKeyspaces();
+            Assert.NotNull(keyspaces, "GetKeyspaces() should not return null");
+            Assert.IsTrue(keyspaces.Contains(keyspaceName), $"GetKeyspaces() should contain the newly created keyspace '{keyspaceName}'");
+        }
+
+        [Test]
+        public void CheckNetworkTopologyStrategyKeyspace()
+        {
+            var metadata = Cluster.Metadata;
+
+            string keyspaceName = TestUtils.GetUniqueKeyspaceName().ToLower();
+            bool durableWrites = Randomm.Instance.NextBoolean();
+            string strategyClass = ReplicationStrategies.NetworkTopologyStrategy;
+            int replicationFactor = Randomm.Instance.Next(1, DefaultNodeCount + 1);
+
+            Dictionary<string, string> replicationStrategy = new Dictionary<string, string>
+            {
+                { "class", strategyClass },
+                { "replication_factor", replicationFactor.ToString() }
+            };
+
+            Session.CreateKeyspace(
+                keyspaceName,
+                replicationStrategy,
+                durableWrites
+            );
+
+            KeyspaceMetadata ksmd = metadata.GetKeyspace(keyspaceName);
+            Assert.NotNull(ksmd, $"Keyspace '{keyspaceName}' should exist in cluster metadata");
+            Assert.AreEqual(strategyClass, ksmd.StrategyClass);
+            Assert.AreEqual(durableWrites, ksmd.DurableWrites);
+
+            // Verify replication settings are present
+            Assert.NotNull(ksmd.Replication);
+            Assert.True(ksmd.Replication.ContainsKey("datacenter1"));
+            Assert.AreEqual(replicationFactor, ksmd.Replication["datacenter1"]);
+
+            var keyspaces = metadata.GetKeyspaces();
+            Assert.NotNull(keyspaces, "GetKeyspaces() should not return null");
+            Assert.IsTrue(keyspaces.Contains(keyspaceName), $"GetKeyspaces() should contain the newly created keyspace '{keyspaceName}'");
         }
     }
 }
