@@ -331,7 +331,7 @@ namespace Cassandra
                     // TODO: reuse the frameSlice buffer.
                     var frameSlice = FFIframeSlice.As<byte>().ToSpan().ToArray();
                     int length = frameSlice.Length;
-                    values[valueIndex] = serializer.Deserialize(ProtocolVersion.V4, frameSlice, 0, length, column.TypeCode, column.TypeInfo);
+                    values[valueIndex] = serializer.Deserialize(ProtocolVersion.V4, frameSlice.AsSpan(0, length), column.TypeCode, column.TypeInfo);
                 }
                 else
                 {

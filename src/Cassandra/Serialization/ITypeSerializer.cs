@@ -26,7 +26,7 @@ namespace Cassandra.Serialization
 
         ColumnTypeCode CqlType { get; }
 
-        object Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo);
+        object Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo);
 
         byte[] Serialize(ushort protocolVersion, object obj);
     }

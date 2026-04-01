@@ -32,17 +32,17 @@ namespace Cassandra.Serialization
 
         public ProtocolVersion ProtocolVersion { get; }
 
-        public object Deserialize(byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo)
+        public object Deserialize(ReadOnlySpan<byte> buffer, ColumnTypeCode typeCode, IColumnInfo typeInfo)
         {
-            return _serializer.Deserialize(ProtocolVersion, buffer, offset, length, typeCode, typeInfo);
+            return _serializer.Deserialize(ProtocolVersion, buffer, typeCode, typeInfo);
         }
 
-        public object DeserializeAndDecrypt(string ks, string table, string column, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo)
+        public object DeserializeAndDecrypt(string ks, string table, string column, ReadOnlySpan<byte> buffer, ColumnTypeCode typeCode, IColumnInfo typeInfo)
         {
             var columnEncryptionMetadata = _columnEncryptionPolicy.GetColumnEncryptionMetadata(ks, table, column);
             if (columnEncryptionMetadata != null)
             {
-                var encryptedData = _serializer.Deserialize(ProtocolVersion, buffer, offset, length, typeCode, typeInfo);
+                var encryptedData = _serializer.Deserialize(ProtocolVersion, buffer, typeCode, typeInfo);
                 if (encryptedData == null)
                 {
                     throw new DriverInternalError("deserialization of encrypted data returned null");
@@ -58,9 +58,9 @@ namespace Cassandra.Serialization
                 {
                     return null;
                 }
-                return _serializer.Deserialize(ProtocolVersion, decryptedDataBuf, 0, decryptedDataBuf.Length, columnEncryptionMetadata.Value.TypeCode, columnEncryptionMetadata.Value.TypeInfo);
+                return _serializer.Deserialize(ProtocolVersion, decryptedDataBuf.AsSpan(), columnEncryptionMetadata.Value.TypeCode, columnEncryptionMetadata.Value.TypeInfo);
             }
-            return _serializer.Deserialize(ProtocolVersion, buffer, offset, length, typeCode, typeInfo);
+            return _serializer.Deserialize(ProtocolVersion, buffer, typeCode, typeInfo);
         }
 
         public byte[] Serialize(object value)
@@ -154,9 +154,9 @@ namespace Cassandra.Serialization
             }
         }
 
-        public object Deserialize(ProtocolVersion version, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo)
+        public object Deserialize(ProtocolVersion version, ReadOnlySpan<byte> buffer, ColumnTypeCode typeCode, IColumnInfo typeInfo)
         {
-            return _serializer.Deserialize(version, buffer, offset, length, typeCode, typeInfo);
+            return _serializer.Deserialize(version, buffer, typeCode, typeInfo);
         }
 
         public byte[] Serialize(ProtocolVersion version, object value)

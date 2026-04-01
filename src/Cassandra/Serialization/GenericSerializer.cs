@@ -87,11 +87,11 @@ namespace Cassandra.Serialization
             SetSpecificSerializers(typeSerializers);
         }
 
-        public object Deserialize(ProtocolVersion version, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo)
+        public object Deserialize(ProtocolVersion version, ReadOnlySpan<byte> buffer, ColumnTypeCode typeCode, IColumnInfo typeInfo)
         {
             if (_primitiveDeserializers.TryGetValue(typeCode, out ITypeSerializer typeSerializer))
             {
-                return typeSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
+                return typeSerializer.Deserialize((byte)version, buffer, typeInfo);
             }
             switch (typeCode)
             {
@@ -102,22 +102,22 @@ namespace Cassandra.Serialization
                             // Use byte[] by default
                             typeSerializer = TypeSerializer.PrimitiveByteArraySerializer;
                         }
-                        return typeSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
+                        return typeSerializer.Deserialize((byte)version, buffer, typeInfo);
                     }
                 case ColumnTypeCode.Vector:
-                    return _vectorSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
+                    return ((ITypeSerializer)_vectorSerializer).Deserialize((byte)version, buffer, typeInfo);
                 case ColumnTypeCode.Udt:
-                    return _udtSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
+                    return ((ITypeSerializer)_udtSerializer).Deserialize((byte)version, buffer, typeInfo);
                 case ColumnTypeCode.List:
                 case ColumnTypeCode.Set:
-                    return _collectionSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
+                    return ((ITypeSerializer)_collectionSerializer).Deserialize((byte)version, buffer, typeInfo);
                 case ColumnTypeCode.Map:
-                    return _dictionarySerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
+                    return ((ITypeSerializer)_dictionarySerializer).Deserialize((byte)version, buffer, typeInfo);
                 case ColumnTypeCode.Tuple:
-                    return _tupleSerializer.Deserialize((byte)version, buffer, offset, length, typeInfo);
+                    return ((ITypeSerializer)_tupleSerializer).Deserialize((byte)version, buffer, typeInfo);
             }
             //Unknown type, return the byte representation
-            return buffer;
+            return buffer.ToArray();
         }
 
         public Type GetClrType(ColumnTypeCode typeCode, IColumnInfo typeInfo)

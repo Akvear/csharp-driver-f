@@ -166,9 +166,9 @@ namespace Cassandra.Serialization
         /// </summary>
         public abstract ColumnTypeCode CqlType { get; }
 
-        object ITypeSerializer.Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        object ITypeSerializer.Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            return Deserialize(protocolVersion, buffer, offset, length, typeInfo);
+            return Deserialize(protocolVersion, buffer.ToArray(), 0, buffer.Length, typeInfo);
         }
 
         byte[] ITypeSerializer.Serialize(ushort protocolVersion, object obj)
@@ -195,13 +195,18 @@ namespace Cassandra.Serialization
         /// <param name="value">The object to encode.</param>
         public abstract byte[] Serialize(ushort protocolVersion, T value);
 
-        internal object DeserializeChild(ushort protocolVersion, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo)
+        internal object DeserializeChild(ushort protocolVersion, ReadOnlySpan<byte> buffer, ColumnTypeCode typeCode, IColumnInfo typeInfo)
         {
             if (_serializer == null)
             {
                 throw new NullReferenceException("Child serializer can not be null");
             }
-            return _serializer.Deserialize((ProtocolVersion)protocolVersion, buffer, offset, length, typeCode, typeInfo);
+            return _serializer.Deserialize((ProtocolVersion)protocolVersion, buffer, typeCode, typeInfo);
+        }
+
+        internal object DeserializeChild(ushort protocolVersion, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo)
+        {
+            return DeserializeChild(protocolVersion, buffer.AsSpan(offset, length), typeCode, typeInfo);
         }
 
         internal Type GetClrType(ColumnTypeCode typeCode, IColumnInfo typeInfo)

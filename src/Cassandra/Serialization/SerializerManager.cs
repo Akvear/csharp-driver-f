@@ -53,11 +53,6 @@ namespace Cassandra.Serialization
             return _serializer;
         }
 
-        public object Deserialize(ProtocolVersion version, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo)
-        {
-            return _genericSerializer.Deserialize(version, buffer, offset, length, typeCode, typeInfo);
-        }
-
         public byte[] Serialize(ProtocolVersion version, object value)
         {
             return _genericSerializer.Serialize(version, value);

@@ -27,9 +27,9 @@ namespace Cassandra.Serialization
         /// </summary>
         ProtocolVersion ProtocolVersion { get; }
 
-        object Deserialize(byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo);
+        object Deserialize(ReadOnlySpan<byte> buffer, ColumnTypeCode typeCode, IColumnInfo typeInfo);
 
-        object DeserializeAndDecrypt(string ks, string table, string col, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo);
+        object DeserializeAndDecrypt(string ks, string table, string col, ReadOnlySpan<byte> buffer, ColumnTypeCode typeCode, IColumnInfo typeInfo);
 
         byte[] Serialize(object value);
 
