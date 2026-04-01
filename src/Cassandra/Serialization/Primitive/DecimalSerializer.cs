@@ -80,7 +80,8 @@ namespace Cassandra.Serialization.Primitive
         {
             int[] bits = decimal.GetBits(value);
             int scale = (bits[3] >> 16) & 31;
-            byte[] scaleBytes = BeConverter.GetBytes(scale);
+            byte[] scaleBytes = new byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(scaleBytes, scale);
             var bigintBytes = new byte[13]; // 13th byte is for making sure that the number is positive
             Buffer.BlockCopy(bits, 0, bigintBytes, 0, 12);
             var bigInteger = new BigInteger(bigintBytes);

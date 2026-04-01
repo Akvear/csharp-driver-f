@@ -35,7 +35,9 @@ namespace Cassandra.Serialization.Primitive
         internal static byte[] Serialize(DateTimeOffset value)
         {
             var ticks = (value - UnixStart).Ticks;
-            return BeConverter.GetBytes(ticks / TimeSpan.TicksPerMillisecond);
+            var buffer = new byte[8];
+            BinaryPrimitives.WriteInt64BigEndian(buffer, ticks / TimeSpan.TicksPerMillisecond);
+            return buffer;
         }
 
         public override DateTimeOffset Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)

@@ -33,7 +33,9 @@ namespace Cassandra.Serialization.Primitive
 
         public override byte[] Serialize(ushort protocolVersion, LocalTime value)
         {
-            return BeConverter.GetBytes(value.TotalNanoseconds);
+            var buffer = new byte[8];
+            BinaryPrimitives.WriteInt64BigEndian(buffer, value.TotalNanoseconds);
+            return buffer;
         }
     }
 }
