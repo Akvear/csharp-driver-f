@@ -28,7 +28,7 @@ namespace Cassandra.Serialization
 
         public override IColumnInfo TypeInfo => new CustomColumnInfo(DataTypeParser.VectorTypeName);
 
-        public override IInternalCqlVector Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override IInternalCqlVector Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
             var vectorTypeInfo = GetVectorColumnInfo(typeInfo);
             if (vectorTypeInfo.Dimensions == null)
@@ -39,9 +39,10 @@ namespace Cassandra.Serialization
             var childSerializer = GetChildSerializer();
             var childType = GetClrType(vectorTypeInfo.ValueTypeCode, vectorTypeInfo.ValueTypeInfo);
             var result = Array.CreateInstance(childType, vectorTypeInfo.Dimensions.Value);
+            var remaining = buffer;
             for (var i = 0; i < vectorTypeInfo.Dimensions; i++)
             {
-                if (offset >= buffer.Length)
+                if (remaining.IsEmpty)
                 {
                     throw new DriverInternalError(
                         $"No more bytes while deserializing vector with subtype {typeInfo.GetType().FullName} and dimensions {vectorTypeInfo.Dimensions}");
@@ -49,7 +50,7 @@ namespace Cassandra.Serialization
                 var itemLength = childSerializer.GetValueLengthIfFixed(vectorTypeInfo.ValueTypeCode, vectorTypeInfo.ValueTypeInfo);
                 if (itemLength < 0)
                 {
-                    var longItemLength = VintSerializer.ReadUnsignedVInt(buffer, ref offset);
+                    var longItemLength = VintSerializer.ReadUnsignedVInt(ref remaining);
                     if (longItemLength > int.MaxValue)
                     {
                         throw new DriverInternalError(
@@ -58,11 +59,11 @@ namespace Cassandra.Serialization
 
                     itemLength = Convert.ToInt32(longItemLength);
                 }
-                result.SetValue(DeserializeChild(protocolVersion, buffer, offset, itemLength, vectorTypeInfo.ValueTypeCode, vectorTypeInfo.ValueTypeInfo), i);
-                offset += itemLength;
+                result.SetValue(DeserializeChild(protocolVersion, remaining.Slice(0, itemLength), vectorTypeInfo.ValueTypeCode, vectorTypeInfo.ValueTypeInfo), i);
+                remaining = remaining.Slice(itemLength);
             }
 
-            if (offset < length - 1)
+            if (!remaining.IsEmpty)
             {
                 throw new DriverInternalError(
                     $"There are still bytes left while deserializing vector with subtype {typeInfo.GetType().FullName} and dimensions {vectorTypeInfo.Dimensions}");

@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+using System;
 using System.Text;
 using Cassandra.Serialization;
 
@@ -41,14 +42,14 @@ namespace Cassandra.Tests.Extensions.Serializers
             return base.Serialize(protocolVersion, value);
         }
 
-        public override object Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override object Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
             DeserializationCounter++;
             if (_fixedValue)
             {
-                return Utils.SliceBuffer(buffer, offset, length);
+                return buffer.ToArray();
             }
-            return base.Deserialize(protocolVersion, buffer, offset, length, typeInfo);
+            return base.Deserialize(protocolVersion, buffer, typeInfo);
         }
     }
 }

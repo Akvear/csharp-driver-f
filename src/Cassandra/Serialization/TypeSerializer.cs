@@ -168,7 +168,7 @@ namespace Cassandra.Serialization
 
         object ITypeSerializer.Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            return Deserialize(protocolVersion, buffer.ToArray(), 0, buffer.Length, typeInfo);
+            return Deserialize(protocolVersion, buffer, typeInfo);
         }
 
         byte[] ITypeSerializer.Serialize(ushort protocolVersion, object obj)
@@ -181,11 +181,9 @@ namespace Cassandra.Serialization
         /// data type.
         /// </summary>
         /// <param name="protocolVersion">The Cassandra native protocol version.</param>
-        /// <param name="buffer">The byte array.</param>
-        /// <param name="offset">The zero-based byte offset in buffer at which to begin storing data from the current stream.</param>
-        /// <param name="length">The maximum amount of bytes to read from buffer.</param>
+        /// <param name="buffer">The byte span containing exactly the serialized value.</param>
         /// <param name="typeInfo">Additional type information designed for non-primitive types.</param>
-        public abstract T Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo);
+        public abstract T Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo);
 
         /// <summary>
         /// When overridden from a derived class, it encodes the CLR object into the byte representation

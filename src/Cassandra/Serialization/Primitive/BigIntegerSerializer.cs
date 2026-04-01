@@ -29,12 +29,9 @@ namespace Cassandra.Serialization.Primitive
             get { return ColumnTypeCode.Varint; }
         }
 
-        public override BigInteger Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override BigInteger Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            buffer = Utils.SliceBuffer(buffer, offset, length);
-            //Cassandra uses big endian encoding
-            Array.Reverse(buffer);
-            return new BigInteger(buffer);
+            return new BigInteger(buffer, isUnsigned: false, isBigEndian: true);
         }
 
         public override byte[] Serialize(ushort protocolVersion, BigInteger value)

@@ -35,10 +35,10 @@ namespace Cassandra.Tests.Extensions.Serializers
             get { return ColumnTypeCode.Decimal; }
         }
 
-        public override BigDecimal Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override BigDecimal Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            var scale = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(offset));
-            var unscaledValue = _bigIntegerSerializer.Deserialize(protocolVersion, buffer, 4, length - 4, null);
+            var scale = BinaryPrimitives.ReadInt32BigEndian(buffer);
+            var unscaledValue = _bigIntegerSerializer.Deserialize(protocolVersion, buffer.Slice(4), null);
             return new BigDecimal(scale, unscaledValue);
         }
 

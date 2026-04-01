@@ -26,9 +26,9 @@ namespace Cassandra.Serialization.Primitive
             get { return ColumnTypeCode.Int; }
         }
 
-        public override int Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override int Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            return BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(offset));
+            return BinaryPrimitives.ReadInt32BigEndian(buffer);
         }
 
         public override byte[] Serialize(ushort protocolVersion, int value)

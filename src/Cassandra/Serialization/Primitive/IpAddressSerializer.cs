@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+using System;
 using System.Net;
 
 namespace Cassandra.Serialization.Primitive
@@ -25,13 +26,13 @@ namespace Cassandra.Serialization.Primitive
             get { return ColumnTypeCode.Inet; }
         }
 
-        public override IPAddress Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override IPAddress Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            if (length == 4 || length == 16)
+            if (buffer.Length == 4 || buffer.Length == 16)
             {
-                return new IPAddress(Utils.FromOffset(buffer, offset, length));
+                return new IPAddress(buffer);
             }
-            throw new DriverInternalError("Invalid length of Inet address: " + length);
+            throw new DriverInternalError("Invalid length of Inet address: " + buffer.Length);
         }
 
         public override byte[] Serialize(ushort protocolVersion, IPAddress value)

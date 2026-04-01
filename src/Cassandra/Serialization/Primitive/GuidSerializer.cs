@@ -25,14 +25,18 @@ namespace Cassandra.Serialization.Primitive
             get { return ColumnTypeCode.Uuid; }
         }
 
-        public override Guid Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override Guid Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            return new Guid(GuidShuffle(buffer, offset));
+            Span<byte> shuffled = stackalloc byte[16];
+            GuidShuffle(buffer, shuffled);
+            return new Guid((ReadOnlySpan<byte>)shuffled);
         }
 
         public override byte[] Serialize(ushort protocolVersion, Guid value)
         {
-            return GuidShuffle(value.ToByteArray());
+            var result = new byte[16];
+            GuidShuffle((ReadOnlySpan<byte>)value.ToByteArray(), result);
+            return result;
         }
     }
 }

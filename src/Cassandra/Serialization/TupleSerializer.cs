@@ -30,27 +30,27 @@ namespace Cassandra.Serialization
             get { return ColumnTypeCode.Tuple; }
         }
 
-        public override IStructuralEquatable Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override IStructuralEquatable Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
             var tupleInfo = (TupleColumnInfo)typeInfo;
             var tupleType = GetClrType(ColumnTypeCode.Tuple, tupleInfo);
             var tupleValues = new object[tupleInfo.Elements.Count];
-            var maxOffset = offset + length;
+            var remaining = buffer;
             for (var i = 0; i < tupleInfo.Elements.Count; i++)
             {
                 var element = tupleInfo.Elements[i];
-                if (offset >= maxOffset)
+                if (remaining.IsEmpty)
                 {
                     break;
                 }
-                var itemLength = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(offset));
-                offset += 4;
+                var itemLength = BinaryPrimitives.ReadInt32BigEndian(remaining);
+                remaining = remaining.Slice(4);
                 if (itemLength < 0)
                 {
                     continue;
                 }
-                tupleValues[i] = DeserializeChild(protocolVersion, buffer, offset, itemLength, element.TypeCode, element.TypeInfo);
-                offset += itemLength;
+                tupleValues[i] = DeserializeChild(protocolVersion, remaining.Slice(0, itemLength), element.TypeCode, element.TypeInfo);
+                remaining = remaining.Slice(itemLength);
             }
 
             return (IStructuralEquatable)Activator.CreateInstance(tupleType, tupleValues);

@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+using System;
 using Cassandra.Serialization;
 
 namespace Cassandra.Tests.Extensions.Serializers
@@ -26,9 +27,9 @@ namespace Cassandra.Tests.Extensions.Serializers
 
         }
 
-        public override DummyCustomType Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override DummyCustomType Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            return new DummyCustomType(Utils.SliceBuffer(buffer, offset, length));
+            return new DummyCustomType(buffer.ToArray());
         }
 
         public override byte[] Serialize(ushort protocolVersion, DummyCustomType value)

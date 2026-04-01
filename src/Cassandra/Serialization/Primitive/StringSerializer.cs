@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+using System;
 using System.Text;
 
 namespace Cassandra.Serialization.Primitive
@@ -32,9 +33,9 @@ namespace Cassandra.Serialization.Primitive
             _encoding = encoding;
         }
 
-        public override string Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override string Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            return _encoding.GetString(buffer, offset, length);
+            return _encoding.GetString(buffer);
         }
 
         public override byte[] Serialize(ushort protocolVersion, string value)

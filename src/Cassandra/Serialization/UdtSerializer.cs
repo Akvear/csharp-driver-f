@@ -56,31 +56,31 @@ namespace Cassandra.Serialization
             return map;
         }
 
-        public override object Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override object Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
             var udtInfo = (UdtColumnInfo)typeInfo;
             var map = GetUdtMap(udtInfo.Name);
             if (map == null)
             {
-                return buffer;
+                return buffer.ToArray();
             }
             var valuesList = new object[udtInfo.Fields.Count];
-            var maxOffset = offset + length;
+            var remaining = buffer;
             for (var i = 0; i < udtInfo.Fields.Count; i++)
             {
                 var field = udtInfo.Fields[i];
-                if (offset >= maxOffset)
+                if (remaining.IsEmpty)
                 {
                     break;
                 }
-                var itemLength = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(offset));
-                offset += 4;
+                var itemLength = BinaryPrimitives.ReadInt32BigEndian(remaining);
+                remaining = remaining.Slice(4);
                 if (itemLength < 0)
                 {
                     continue;
                 }
-                valuesList[i] = DeserializeChild(protocolVersion, buffer, offset, itemLength, field.TypeCode, field.TypeInfo);
-                offset += itemLength;
+                valuesList[i] = DeserializeChild(protocolVersion, remaining.Slice(0, itemLength), field.TypeCode, field.TypeInfo);
+                remaining = remaining.Slice(itemLength);
             }
             return map.ToObject(valuesList);
         }

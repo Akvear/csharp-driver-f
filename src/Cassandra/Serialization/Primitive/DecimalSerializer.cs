@@ -30,15 +30,10 @@ namespace Cassandra.Serialization.Primitive
             get { return ColumnTypeCode.Decimal; }
         }
 
-        public override decimal Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override decimal Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            var scale = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(offset));
-            var unscaledBytes = Utils.SliceBuffer(buffer, offset + 4, length - 4);
-            if (BitConverter.IsLittleEndian)
-            {
-                Array.Reverse(unscaledBytes);
-            }
-            return ToDecimal(new BigInteger(unscaledBytes), scale);
+            var scale = BinaryPrimitives.ReadInt32BigEndian(buffer);
+            return ToDecimal(new BigInteger(buffer.Slice(4), isUnsigned: false, isBigEndian: true), scale);
         }
 
         internal static decimal ToDecimal(BigInteger unscaledValue, int scale)
