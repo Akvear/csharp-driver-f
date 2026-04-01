@@ -14,6 +14,8 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -48,7 +50,7 @@ namespace Cassandra.Tests
         public void Should_Parse_ErrorResponse_With_Warnings()
         {
             // Protocol warnings are [string list]: A [short] n, followed by n [string]
-            var warningBuffers = BeConverter.GetBytes((ushort)1).Concat(GetProtocolString("Test warning"));
+            var warningBuffers = GetBigEndianBytes((ushort)1).Concat(GetProtocolString("Test warning"));
             var body = warningBuffers.Concat(GetErrorBody(0x2000, "Test syntax error")).ToArray();
             var header = FrameHeader.ParseResponseHeader(Version, GetHeaderBuffer(body.Length, HeaderFlags.Warning), 0);
             var response = FrameParser.Parse(new Frame(header, new MemoryStream(body), Serializer.GetCurrentSerializer(), null));
@@ -159,14 +161,14 @@ namespace Cassandra.Tests
         private static byte[] GetHeaderBuffer(int length, HeaderFlags flags = 0)
         {
             var headerBuffer = new byte[] { 0x80 | (int)Version, (byte)flags, 0, 0, ErrorResponse.OpCode }
-                .Concat(BeConverter.GetBytes(length));
+                .Concat(GetBigEndianBytes(length));
             return headerBuffer.ToArray();
         }
 
         private static byte[] GetErrorBody(int code, string message, IEnumerable<byte> additional = null)
         {
             // error body = [int][string][additional]
-            return BeConverter.GetBytes(code)
+            return GetBigEndianBytes(code)
                               .Concat(GetProtocolString(message))
                               .Concat(additional ?? new byte[0])
                               .ToArray();
@@ -182,7 +184,22 @@ namespace Cassandra.Tests
         private static byte[] GetProtocolString(string value)
         {
             var textBuffer = Encoding.UTF8.GetBytes(value);
-            return BeConverter.GetBytes((ushort)textBuffer.Length).Concat(textBuffer).ToArray();
+            return GetBigEndianBytes((ushort)textBuffer.Length).Concat(textBuffer).ToArray();
+        }
+
+        private static byte[] GetBigEndianBytes(int value)
+        {
+            var buf = new byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(buf, value);
+            return buf;
+        }
+
+        private static byte[] GetBigEndianBytes(ushort value)
+        {
+            var buf = new byte[2];
+            BinaryPrimitives.WriteUInt16BigEndian(buf, value);
+            return buf;
+        }
         }
 
         private static TException IsErrorResponse<TException>(Response response) where TException : DriverException

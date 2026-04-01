@@ -14,6 +14,8 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Buffers.Binary;
 using System.Linq;
 using System.Numerics;
 using Cassandra.Serialization;
@@ -35,14 +37,15 @@ namespace Cassandra.Tests.Extensions.Serializers
 
         public override BigDecimal Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
         {
-            var scale = BeConverter.ToInt32(buffer, offset);
+            var scale = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(offset));
             var unscaledValue = _bigIntegerSerializer.Deserialize(protocolVersion, buffer, 4, length - 4, null);
             return new BigDecimal(scale, unscaledValue);
         }
 
         public override byte[] Serialize(ushort protocolVersion, BigDecimal value)
         {
-            var scaleBuffer = BeConverter.GetBytes(value.Scale);
+            var scaleBuffer = new byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(scaleBuffer, value.Scale);
             var valueBuffer = _bigIntegerSerializer.Serialize(protocolVersion, value.UnscaledValue);
             return Utils.JoinBuffers(new[] { scaleBuffer, valueBuffer }, scaleBuffer.Length + valueBuffer.Length);
         }
