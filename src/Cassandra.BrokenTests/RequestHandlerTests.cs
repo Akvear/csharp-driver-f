@@ -15,6 +15,7 @@
 //
 
 using System;
+using System.Buffers.Binary;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -278,7 +279,7 @@ namespace Cassandra.Tests
 
             // The query request is composed by:
             // <query><consistency><flags><result_page_size><paging_state><serial_consistency><timestamp>
-            var queryBuffer = BeConverter.GetBytes(statement.QueryString.Length)
+            var queryBuffer = GetBigEndianBytes(statement.QueryString.Length)
                 .Concat(Encoding.UTF8.GetBytes(statement.QueryString))
                 .ToArray();
             CollectionAssert.AreEqual(queryBuffer, bodyBuffer.Take(queryBuffer.Length));
@@ -293,7 +294,7 @@ namespace Cassandra.Tests
             Assert.True(flags.HasFlag(QueryFlags.WithSerialConsistency));
             // Skip result_page_size (4) + serial_consistency (2)
             offset += 6;
-            var timestamp = BeConverter.ToInt64(bodyBuffer, offset);
+            var timestamp = BinaryPrimitives.ReadInt64BigEndian(bodyBuffer.AsSpan(offset));
             var expectedTimestamp = TypeSerializer.SinceUnixEpoch(DateTimeOffset.Now.Subtract(TimeSpan.FromMilliseconds(100))).Ticks / 10;
             Assert.Greater(timestamp, expectedTimestamp);
         }
@@ -314,7 +315,7 @@ namespace Cassandra.Tests
 
             // The query request is composed by:
             // <query><consistency><flags><result_page_size><paging_state><serial_consistency><timestamp>
-            var queryBuffer = BeConverter.GetBytes(statement.QueryString.Length)
+            var queryBuffer = GetBigEndianBytes(statement.QueryString.Length)
                                          .Concat(Encoding.UTF8.GetBytes(statement.QueryString))
                                          .ToArray();
             CollectionAssert.AreEqual(queryBuffer, bodyBuffer.Take(queryBuffer.Length));
@@ -346,7 +347,7 @@ namespace Cassandra.Tests
 
             // The query request is composed by:
             // <query><consistency><flags><result_page_size><paging_state><serial_consistency><timestamp>
-            var queryBuffer = BeConverter.GetBytes(statement.QueryString.Length)
+            var queryBuffer = GetBigEndianBytes(statement.QueryString.Length)
                                          .Concat(Encoding.UTF8.GetBytes(statement.QueryString))
                                          .ToArray();
             CollectionAssert.AreEqual(queryBuffer, bodyBuffer.Take(queryBuffer.Length));
@@ -357,7 +358,7 @@ namespace Cassandra.Tests
             Assert.True(flags.HasFlag(QueryFlags.PageSize));
             // Skip result_page_size (4) + serial_consistency (2)
             offset += 6;
-            var timestamp = BeConverter.ToInt64(bodyBuffer, offset);
+            var timestamp = BinaryPrimitives.ReadInt64BigEndian(bodyBuffer.AsSpan(offset));
             Assert.AreEqual(TypeSerializer.SinceUnixEpoch(expectedTimestamp).Ticks / 10, timestamp);
         }
 
@@ -396,12 +397,12 @@ namespace Cassandra.Tests
             // <type><n><query_1>...<query_n><consistency><flags>[<serial_consistency>][<timestamp>]
             var offset = 1;
             // n = 1
-            Assert.AreEqual(1, BeConverter.ToInt16(bodyBuffer, offset));
+            Assert.AreEqual(1, BinaryPrimitives.ReadInt16BigEndian(bodyBuffer.AsSpan(offset)));
             // Query_1 <kind><string><n_params>
             offset += 2;
             // kind = 0, not prepared
             Assert.AreEqual(0, bodyBuffer[offset++]);
-            var queryLength = BeConverter.ToInt32(bodyBuffer, offset);
+            var queryLength = BinaryPrimitives.ReadInt32BigEndian(bodyBuffer.AsSpan(offset));
             Assert.AreEqual(5, queryLength);
             // skip query, n_params and consistency
             offset += 4 + queryLength + 2 + 2;
@@ -409,7 +410,7 @@ namespace Cassandra.Tests
             Assert.True(flags.HasFlag(QueryFlags.WithDefaultTimestamp));
             // Skip serial consistency
             offset += 2;
-            var timestamp = TypeSerializer.UnixStart.AddTicks(BeConverter.ToInt64(bodyBuffer, offset) * 10);
+            var timestamp = TypeSerializer.UnixStart.AddTicks(BinaryPrimitives.ReadInt64BigEndian(bodyBuffer.AsSpan(offset)) * 10);
             Assert.GreaterOrEqual(timestamp, startDate);
             Assert.LessOrEqual(timestamp, DateTimeOffset.Now.Add(TimeSpan.FromMilliseconds(100)));
         }
@@ -431,7 +432,7 @@ namespace Cassandra.Tests
             // The batch request is composed by:
             // <type><n><query_1>...<query_n><consistency><flags>[<serial_consistency>][<timestamp>]
             var offset = 1 + 2 + 1;
-            var queryLength = BeConverter.ToInt32(bodyBuffer, offset);
+            var queryLength = BinaryPrimitives.ReadInt32BigEndian(bodyBuffer.AsSpan(offset));
             Assert.AreEqual(5, queryLength);
             // skip query, n_params and consistency
             offset += 4 + queryLength + 2 + 2;
@@ -458,7 +459,7 @@ namespace Cassandra.Tests
             // The batch request is composed by:
             // <type><n><query_1>...<query_n><consistency><flags>[<serial_consistency>][<timestamp>]
             var offset = 1 + 2 + 1;
-            var queryLength = BeConverter.ToInt32(bodyBuffer, offset);
+            var queryLength = BinaryPrimitives.ReadInt32BigEndian(bodyBuffer.AsSpan(offset));
             Assert.AreEqual(5, queryLength);
             // skip query, n_params and consistency
             offset += 4 + queryLength + 2 + 2;
@@ -466,7 +467,7 @@ namespace Cassandra.Tests
             Assert.True(flags.HasFlag(QueryFlags.WithDefaultTimestamp));
             // Skip serial consistency
             offset += 2;
-            var timestamp = TypeSerializer.UnixStart.AddTicks(BeConverter.ToInt64(bodyBuffer, offset) * 10);
+            var timestamp = TypeSerializer.UnixStart.AddTicks(BinaryPrimitives.ReadInt64BigEndian(bodyBuffer.AsSpan(offset)) * 10);
             Assert.AreEqual(providedTimestamp, timestamp);
         }
 
@@ -482,7 +483,7 @@ namespace Cassandra.Tests
             // The batch request is composed by:
             // <type><n><query_1>...<query_n><consistency><flags>[<serial_consistency>][<timestamp>][<keyspace>]
             var offset = 1 + 2 + 1;
-            var queryLength = BeConverter.ToInt32(bodyBuffer, offset);
+            var queryLength = BinaryPrimitives.ReadInt32BigEndian(bodyBuffer.AsSpan(offset));
             Assert.AreEqual(5, queryLength);
             // skip query, n_params and consistency
             offset += 4 + queryLength + 2 + 2;
@@ -505,7 +506,7 @@ namespace Cassandra.Tests
             // The batch request on protocol 2 is composed by:
             // <type><n><query_1>...<query_n><consistency>
             const int queryOffSet = 1 + 2 + 1;
-            var queryLength = BeConverter.ToInt32(bodyBuffer, queryOffSet);
+            var queryLength = BinaryPrimitives.ReadInt32BigEndian(bodyBuffer.AsSpan(queryOffSet));
             Assert.AreEqual(query.Length, queryLength);
             // query, n_params and consistency
             Assert.AreEqual(4 + 4 + queryLength + 2 + 2, bodyBuffer.Length);
@@ -568,7 +569,7 @@ namespace Cassandra.Tests
             Assert.True(flags.HasFlag(QueryFlags.WithSerialConsistency));
             // Skip result_page_size (4)
             offset += 4;
-            Assert.That((ConsistencyLevel)BeConverter.ToInt16(bodyBuffer, offset), Is.EqualTo(expectedSerialConsistencyLevel));
+            Assert.That((ConsistencyLevel)BinaryPrimitives.ReadInt16BigEndian(bodyBuffer.AsSpan(offset)), Is.EqualTo(expectedSerialConsistencyLevel));
         }
 
         [Test]
@@ -598,7 +599,7 @@ namespace Cassandra.Tests
             Assert.True(flags.HasFlag(QueryFlags.WithSerialConsistency));
             // Skip result_page_size (4)
             offset += 4;
-            Assert.That((ConsistencyLevel)BeConverter.ToInt16(bodyBuffer, offset), Is.EqualTo(expectedSerialConsistencyLevel));
+            Assert.That((ConsistencyLevel)BinaryPrimitives.ReadInt16BigEndian(bodyBuffer.AsSpan(offset)), Is.EqualTo(expectedSerialConsistencyLevel));
         }
 
         [Test]
@@ -623,7 +624,7 @@ namespace Cassandra.Tests
             Assert.True(flags.HasFlag(QueryFlags.PageSize));
             // Skip result_page_size (4)
             offset += 4;
-            Assert.That((ConsistencyLevel)BeConverter.ToInt16(bodyBuffer, offset), Is.EqualTo(expectedSerialConsistencyLevel));
+            Assert.That((ConsistencyLevel)BinaryPrimitives.ReadInt16BigEndian(bodyBuffer.AsSpan(offset)), Is.EqualTo(expectedSerialConsistencyLevel));
         }
 
         [Test]
@@ -665,7 +666,7 @@ namespace Cassandra.Tests
             Assert.True(flags.HasFlag(QueryFlags.WithSerialConsistency));
             // Skip result_page_size (4)
             offset += 4;
-            Assert.That((ConsistencyLevel)BeConverter.ToInt16(bodyBuffer, offset), Is.EqualTo(expectedSerialConsistencyLevel));
+            Assert.That((ConsistencyLevel)BinaryPrimitives.ReadInt16BigEndian(bodyBuffer.AsSpan(offset)), Is.EqualTo(expectedSerialConsistencyLevel));
         }
 
         [Test]
@@ -679,13 +680,13 @@ namespace Cassandra.Tests
             // The request is composed by: <query><flags>[<keyspace>]
             var buffer = GetBodyBuffer(request, serializer);
 
-            var queryLength = BeConverter.ToInt32(buffer);
+            var queryLength = BinaryPrimitives.ReadInt32BigEndian(buffer);
             Assert.AreEqual(query.Length, queryLength);
             var offset = 4 + queryLength;
-            var flags = (PrepareFlags)BeConverter.ToInt32(buffer, offset);
+            var flags = (PrepareFlags)BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(offset));
             offset += 4;
             Assert.True(flags.HasFlag(PrepareFlags.WithKeyspace));
-            var keyspaceLength = BeConverter.ToInt16(buffer, offset);
+            var keyspaceLength = BinaryPrimitives.ReadInt16BigEndian(buffer.AsSpan(offset));
             offset += 2;
             Assert.AreEqual(keyspace.Length, keyspaceLength);
             Assert.AreEqual(keyspace, Encoding.UTF8.GetString(buffer.Skip(offset).Take(keyspaceLength).ToArray()));
@@ -701,7 +702,7 @@ namespace Cassandra.Tests
             // The request only contains the query
             var buffer = GetBodyBuffer(request, serializer);
 
-            var queryLength = BeConverter.ToInt32(buffer);
+            var queryLength = BinaryPrimitives.ReadInt32BigEndian(buffer);
             Assert.AreEqual(query.Length, queryLength);
             Assert.AreEqual(4 + queryLength, buffer.Length);
         }
@@ -734,7 +735,7 @@ namespace Cassandra.Tests
             var offset = 1 + 2 + 1 + 4 + query.Length + 2 + 2;
             var flags = GetQueryFlags(bodyBuffer, ref offset);
             Assert.True(flags.HasFlag(QueryFlags.WithSerialConsistency));
-            Assert.That((ConsistencyLevel)BeConverter.ToInt16(bodyBuffer, offset), Is.EqualTo(expectedSerialConsistencyLevel));
+            Assert.That((ConsistencyLevel)BinaryPrimitives.ReadInt16BigEndian(bodyBuffer.AsSpan(offset)), Is.EqualTo(expectedSerialConsistencyLevel));
         }
 
         private static QueryFlags GetQueryFlags(byte[] bodyBuffer, ref int offset, ISerializer serializer = null)
@@ -746,7 +747,7 @@ namespace Cassandra.Tests
             QueryFlags flags;
             if (serializer.ProtocolVersion.Uses4BytesQueryFlags())
             {
-                flags = (QueryFlags)BeConverter.ToInt32(bodyBuffer, offset);
+                flags = (QueryFlags)BinaryPrimitives.ReadInt32BigEndian(bodyBuffer.AsSpan(offset));
                 offset += 4;
             }
             else
@@ -765,6 +766,13 @@ namespace Cassandra.Tests
         internal static RetryDecision GetRetryDecisionFromClientError(Exception ex, IExtendedRetryPolicy policy, IStatement statement, Configuration config, int retryCount)
         {
             return RequestExecution.GetRetryDecisionWithReason(RequestError.CreateClientError(ex, false), policy, statement, config, retryCount).Decision;
+        }
+
+        private static byte[] GetBigEndianBytes(int value)
+        {
+            var buf = new byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(buf, value);
+            return buf;
         }
 
         /// <summary>

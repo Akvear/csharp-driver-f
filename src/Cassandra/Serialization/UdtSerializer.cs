@@ -15,6 +15,7 @@
 //
 
 using System;
+using System.Buffers.Binary;
 using System.Reflection;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -72,7 +73,7 @@ namespace Cassandra.Serialization
                 {
                     break;
                 }
-                var itemLength = BeConverter.ToInt32(buffer, offset);
+                var itemLength = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(offset));
                 offset += 4;
                 if (itemLength < 0)
                 {

@@ -15,6 +15,7 @@
 //
 
 using System;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -344,7 +345,8 @@ namespace Cassandra.Tests
             var header = (byte)((int)version | 0x80);
             if (version.Uses2BytesStreamIds())
             {
-                var bytes = BeConverter.GetBytes(streamId);
+                var bytes = new byte[2];
+                BinaryPrimitives.WriteInt16BigEndian(bytes, streamId);
                 return new byte[]
                 {
                     //header

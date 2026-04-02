@@ -15,6 +15,7 @@
 //
 
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Net;
 using System.Numerics;
@@ -71,13 +72,13 @@ namespace Cassandra.Serialization
             if (!protocolVersion.Uses4BytesCollectionLength())
             {
                 //length is a short
-                result = BeConverter.ToInt16(buffer, index);
+                result = BinaryPrimitives.ReadInt16BigEndian(buffer.AsSpan(index));
                 index += 2;
             }
             else
             {
                 //length is expressed in int
-                result = BeConverter.ToInt32(buffer, index);
+                result = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(index));
                 index += 4;
             }
             return result;
@@ -90,9 +91,13 @@ namespace Cassandra.Serialization
         {
             if (protocolVersion < 3)
             {
-                return BeConverter.GetBytes((short)value);
+                var buffer = new byte[2];
+                BinaryPrimitives.WriteInt16BigEndian(buffer, (short)value);
+                return buffer;
             }
-            return BeConverter.GetBytes(value);
+            var buf = new byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(buf, value);
+            return buf;
         }
 
         internal static byte[] EncodeBufferList(ICollection<byte[]> bufferList, int bufferLength)
@@ -103,9 +108,8 @@ namespace Cassandra.Serialization
             var index = 0;
             foreach (var buf in bufferList)
             {
-                var bufferItemLength = BeConverter.GetBytes(buf != null ? buf.Length : -1);
-                Buffer.BlockCopy(bufferItemLength, 0, result, index, bufferItemLength.Length);
-                index += bufferItemLength.Length;
+                BinaryPrimitives.WriteInt32BigEndian(result.AsSpan(index), buf != null ? buf.Length : -1);
+                index += 4;
                 if (buf == null)
                 {
                     continue;

@@ -15,6 +15,7 @@
 //
 
 using System;
+using System.Buffers.Binary;
 
 namespace Cassandra.Serialization.Primitive
 {
@@ -27,14 +28,16 @@ namespace Cassandra.Serialization.Primitive
 
         internal static DateTimeOffset Deserialize(byte[] buffer, int offset)
         {
-            var milliseconds = BeConverter.ToInt64(buffer, offset);
+            var milliseconds = BinaryPrimitives.ReadInt64BigEndian(buffer.AsSpan(offset));
             return UnixStart.AddTicks(TimeSpan.TicksPerMillisecond * milliseconds);
         }
 
         internal static byte[] Serialize(DateTimeOffset value)
         {
             var ticks = (value - UnixStart).Ticks;
-            return BeConverter.GetBytes(ticks / TimeSpan.TicksPerMillisecond);
+            var buffer = new byte[8];
+            BinaryPrimitives.WriteInt64BigEndian(buffer, ticks / TimeSpan.TicksPerMillisecond);
+            return buffer;
         }
 
         public override DateTimeOffset Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)

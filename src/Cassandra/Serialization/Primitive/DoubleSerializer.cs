@@ -14,6 +14,9 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Buffers.Binary;
+
 namespace Cassandra.Serialization.Primitive
 {
     internal class DoubleSerializer : TypeSerializer<double>
@@ -25,12 +28,14 @@ namespace Cassandra.Serialization.Primitive
 
         public override double Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
         {
-            return BeConverter.ToDouble(buffer, offset);
+            return BinaryPrimitives.ReadDoubleBigEndian(buffer.AsSpan(offset));
         }
 
         public override byte[] Serialize(ushort protocolVersion, double value)
         {
-            return BeConverter.GetBytes(value);
+            var buffer = new byte[8];
+            BinaryPrimitives.WriteDoubleBigEndian(buffer, value);
+            return buffer;
         }
     }
 }

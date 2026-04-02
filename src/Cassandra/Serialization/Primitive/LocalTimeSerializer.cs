@@ -14,6 +14,9 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Buffers.Binary;
+
 namespace Cassandra.Serialization.Primitive
 {
     internal class LocalTimeSerializer : TypeSerializer<LocalTime>
@@ -25,12 +28,14 @@ namespace Cassandra.Serialization.Primitive
 
         public override LocalTime Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
         {
-            return new LocalTime(BeConverter.ToInt64(buffer, offset));
+            return new LocalTime(BinaryPrimitives.ReadInt64BigEndian(buffer.AsSpan(offset)));
         }
 
         public override byte[] Serialize(ushort protocolVersion, LocalTime value)
         {
-            return BeConverter.GetBytes(value.TotalNanoseconds);
+            var buffer = new byte[8];
+            BinaryPrimitives.WriteInt64BigEndian(buffer, value.TotalNanoseconds);
+            return buffer;
         }
     }
 }

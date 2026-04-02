@@ -14,6 +14,9 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Buffers.Binary;
+
 namespace Cassandra.Serialization.Primitive
 {
     internal class IntSerializer : TypeSerializer<int>
@@ -25,12 +28,14 @@ namespace Cassandra.Serialization.Primitive
 
         public override int Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
         {
-            return BeConverter.ToInt32(buffer, offset);
+            return BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(offset));
         }
 
         public override byte[] Serialize(ushort protocolVersion, int value)
         {
-            return BeConverter.GetBytes(value);
+            var buffer = new byte[4];
+            BinaryPrimitives.WriteInt32BigEndian(buffer, value);
+            return buffer;
         }
     }
 }

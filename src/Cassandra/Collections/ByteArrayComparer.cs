@@ -15,6 +15,7 @@
 //
 
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -43,7 +44,7 @@ namespace Cassandra.Collections
             {
                 // Use int32 values
                 hash = Utils.CombineHashCode(
-                    new[] { hash, BeConverter.ToInt32(new[] { key[i], key[i + 1], key[i + 2], key[i + 3] }) });
+                    new[] { hash, BinaryPrimitives.ReadInt32BigEndian(key.AsSpan(i)) });
             }
             if (rest > 0)
             {
@@ -52,7 +53,7 @@ namespace Cassandra.Collections
                 {
                     arr[i] = key[key.Length - rest + i];
                 }
-                hash = Utils.CombineHashCode(new[] { hash, BeConverter.ToInt32(arr) });
+                hash = Utils.CombineHashCode(new[] { hash, BinaryPrimitives.ReadInt32BigEndian(arr) });
             }
             return hash;
         }
