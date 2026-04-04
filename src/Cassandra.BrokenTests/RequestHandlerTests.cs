@@ -138,9 +138,6 @@ namespace Cassandra.Tests
         [Test]
         [TestCase(ProtocolVersion.V5)]
         [TestCase(ProtocolVersion.V4)]
-        [TestCase(ProtocolVersion.V3)]
-        [TestCase(ProtocolVersion.V2)]
-        [TestCase(ProtocolVersion.V1)]
         public void Should_NotSkipMetadata_When_BoundStatementDoesNotContainColumnDefinitions(ProtocolVersion version)
         {
             var serializerManager = new SerializerManager(version);
@@ -154,9 +151,6 @@ namespace Cassandra.Tests
         [Test]
         [TestCase(ProtocolVersion.V5, true)]
         [TestCase(ProtocolVersion.V4, false)]
-        [TestCase(ProtocolVersion.V3, false)]
-        [TestCase(ProtocolVersion.V2, false)]
-        [TestCase(ProtocolVersion.V1, false)]
         public void Should_SkipMetadata_When_BoundStatementContainsColumnDefinitionsAndProtocolSupportsNewResultMetadataId(
             ProtocolVersion version, bool isSet)
         {
@@ -172,9 +166,6 @@ namespace Cassandra.Tests
         [Test]
         [TestCase(ProtocolVersion.V5)]
         [TestCase(ProtocolVersion.V4)]
-        [TestCase(ProtocolVersion.V3)]
-        [TestCase(ProtocolVersion.V2)]
-        [TestCase(ProtocolVersion.V1)]
         public void Should_SkipMetadata_When_NotBoundStatement(ProtocolVersion version)
         {
             var serializerManager = new SerializerManager(version);
@@ -476,7 +467,7 @@ namespace Cassandra.Tests
         {
             var batch = new BatchStatement();
             batch.Add(new SimpleStatement("QUERY")).SetKeyspace("test_keyspace");
-            var serializer = new SerializerManager(ProtocolVersion.V3).GetCurrentSerializer();
+            var serializer = new SerializerManager(ProtocolVersion.V4).GetCurrentSerializer();
             var request = RequestHandler.GetRequest(batch, serializer, new Configuration().DefaultRequestOptions);
             var bodyBuffer = GetBodyBuffer(request, serializer);
 
@@ -489,27 +480,6 @@ namespace Cassandra.Tests
             offset += 4 + queryLength + 2 + 2;
             var flags = GetQueryFlags(bodyBuffer, ref offset);
             Assert.False(flags.HasFlag(QueryFlags.WithKeyspace));
-        }
-
-        [Test]
-        public void GetRequest_Batch_With_SerialConsistency_On_Older_Protocol_Versions_Should_Ignore()
-        {
-            const string query = "QUERY";
-            var batch = new BatchStatement();
-            batch.Add(new SimpleStatement(query))
-                 .SetSerialConsistencyLevel(ConsistencyLevel.LocalSerial);
-            var serializer = new SerializerManager(ProtocolVersion.V2).GetCurrentSerializer();
-
-            var request = RequestHandler.GetRequest(batch, serializer, new Configuration().DefaultRequestOptions);
-            var bodyBuffer = GetBodyBuffer(request, serializer);
-
-            // The batch request on protocol 2 is composed by:
-            // <type><n><query_1>...<query_n><consistency>
-            const int queryOffSet = 1 + 2 + 1;
-            var queryLength = BinaryPrimitives.ReadInt32BigEndian(bodyBuffer.AsSpan(queryOffSet));
-            Assert.AreEqual(query.Length, queryLength);
-            // query, n_params and consistency
-            Assert.AreEqual(4 + 4 + queryLength + 2 + 2, bodyBuffer.Length);
         }
 
         [Test]
@@ -631,7 +601,7 @@ namespace Cassandra.Tests
         public void GetRequest_Query_With_Keyspace_On_Lower_Protocol_Version_Should_Ignore_Keyspace()
         {
             var statement = new SimpleStatement("QUERY").SetKeyspace("my_keyspace");
-            var serializer = new SerializerManager(ProtocolVersion.V3).GetCurrentSerializer();
+            var serializer = new SerializerManager(ProtocolVersion.V4).GetCurrentSerializer();
             var request = RequestHandler.GetRequest(statement, serializer, new Configuration().DefaultRequestOptions);
             var bodyBuffer = GetBodyBuffer(request, serializer);
 
@@ -696,7 +666,7 @@ namespace Cassandra.Tests
         public void Prepare_With_Keyspace_On_Lower_Protocol_Version_Should_Ignore_Keyspace()
         {
             const string query = "SELECT col1, col2 FROM table1";
-            var serializer = new SerializerManager(ProtocolVersion.V2).GetCurrentSerializer();
+            var serializer = new SerializerManager(ProtocolVersion.V4).GetCurrentSerializer();
             var request = new InternalPrepareRequest(serializer, query, "my_keyspace", null);
 
             // The request only contains the query
@@ -716,7 +686,7 @@ namespace Cassandra.Tests
 
             var stream = new MemoryStream();
             request.WriteFrame(1, stream, serializer);
-            var headerSize = serializer.ProtocolVersion.GetHeaderSize();
+            const int headerSize = 9; // Protocol V4+ frame header is always 9 bytes
             var bodyBuffer = new byte[stream.Length - headerSize];
             stream.Position = headerSize;
             stream.Read(bodyBuffer, 0, bodyBuffer.Length);

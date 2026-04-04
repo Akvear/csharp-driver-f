@@ -89,14 +89,7 @@ namespace Cassandra.IntegrationTests.Core
             Assert.NotNull(coordinator);
             Assert.AreEqual(coordinator.Address.Address, rs.Info.QueryTrace.Coordinator);
             Assert.Greater(rs.Info.QueryTrace.Events.Count, 0);
-            if (Session.BinaryProtocolVersion >= 4)
-            {
-                Assert.NotNull(rs.Info.QueryTrace.ClientAddress);
-            }
-            else
-            {
-                Assert.Null(rs.Info.QueryTrace.ClientAddress);
-            }
+            Assert.NotNull(rs.Info.QueryTrace.ClientAddress);
         }
 
         [Test]

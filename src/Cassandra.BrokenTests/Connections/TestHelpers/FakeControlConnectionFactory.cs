@@ -51,7 +51,7 @@ namespace Cassandra.Tests.Connections.TestHelpers
                 }
                 metadata.SetResolvedContactPoints(cps);
             }));
-            Mock.Get(cc).Setup(c => c.Serializer).Returns(new SerializerManager(ProtocolVersion.V3));
+            Mock.Get(cc).Setup(c => c.Serializer).Returns(new SerializerManager(ProtocolVersion.V4));
             return cc;
         }
 

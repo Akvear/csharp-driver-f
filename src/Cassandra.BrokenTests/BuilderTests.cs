@@ -121,26 +121,6 @@ namespace Cassandra.Tests
         }
 
         [Test]
-        public void WithMaxProtocolVersion_Sets_Configuration_MaxProtocolVersion()
-        {
-            var builder = Cluster.Builder()
-                .AddContactPoint("192.168.1.10")
-                .WithMaxProtocolVersion(100);
-            var cluster = builder.Build();
-            Assert.AreEqual(100, cluster.Configuration.ProtocolOptions.MaxProtocolVersion);
-            builder = Cluster.Builder()
-                .AddContactPoint("192.168.1.10")
-                .WithMaxProtocolVersion(3);
-            cluster = builder.Build();
-            Assert.AreEqual(ProtocolVersion.V3, cluster.Configuration.ProtocolOptions.MaxProtocolVersionValue);
-            builder = Cluster.Builder()
-                .AddContactPoint("192.168.1.10")
-                .WithMaxProtocolVersion(ProtocolVersion.V2);
-            cluster = builder.Build();
-            Assert.AreEqual(ProtocolVersion.V2, cluster.Configuration.ProtocolOptions.MaxProtocolVersionValue);
-        }
-
-        [Test]
         public void MaxProtocolVersion_Defaults_To_Cluster_Max()
         {
             var builder = Cluster.Builder()
@@ -161,7 +141,6 @@ namespace Cassandra.Tests
 
         [Test]
         [TestCase(ProtocolVersion.MaxSupported, 1, 2)]
-        [TestCase(ProtocolVersion.V2, 2, 8)]
         public void PoolingOptions_Create_Based_On_Protocol_Version(ProtocolVersion protocolVersion,
             int coreConnections, int maxConnections)
         {

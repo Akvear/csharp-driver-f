@@ -284,7 +284,7 @@ namespace Cassandra.Tests.ExecutionProfiles
             var requestTrackingInfoAndObserver = RequestHandler.CreateRequestObserver(session, statement).GetAwaiter().GetResult();
             var requestHandler = new RequestHandler(
                 session,
-                new SerializerManager(ProtocolVersion.V3).GetCurrentSerializer(),
+                new SerializerManager(ProtocolVersion.V4).GetCurrentSerializer(),
                 requestTrackingInfoAndObserver.Item1,
                 options,
                 requestTrackingInfoAndObserver.Item2);

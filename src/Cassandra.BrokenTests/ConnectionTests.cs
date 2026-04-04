@@ -327,7 +327,7 @@ namespace Cassandra.Tests
             var connection = connectionMock.Object;
             var buffer = GetResultBuffer(128, ProtocolVersion.V4);
             connection.ReadParse(buffer, buffer.Length);
-            buffer = ConnectionTests.GetResultBuffer(100, ProtocolVersion.V2);
+            buffer = ConnectionTests.GetResultBuffer(100, ProtocolVersion.V4);
             connectionMock2.Object.ReadParse(buffer, buffer.Length);
             buffer = GetResultBuffer(129, ProtocolVersion.V4);
             connection.ReadParse(buffer, buffer.Length);
@@ -338,9 +338,9 @@ namespace Cassandra.Tests
 
         /// <summary>
         /// Gets a buffer containing 8 bytes for header and 4 bytes for the body.
-        /// For result + void response message  (protocol v2)
+        /// For result + void response message  (protocol v4)
         /// </summary>
-        private static byte[] GetResultBuffer(short streamId, ProtocolVersion version = ProtocolVersion.V2)
+        private static byte[] GetResultBuffer(short streamId, ProtocolVersion version = ProtocolVersion.V4)
         {
             var header = (byte)((int)version | 0x80);
             if (version.Uses2BytesStreamIds())

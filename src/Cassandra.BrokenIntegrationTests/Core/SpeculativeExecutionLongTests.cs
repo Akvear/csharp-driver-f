@@ -83,47 +83,6 @@ namespace Cassandra.IntegrationTests.Core
             }
         }
 
-        [Test, TestTimeout(120000)]
-        public void SpeculativeExecution_Pause_Using_All_Stream_Ids()
-        {
-            var maxProtocolVersion = Cluster.MaxProtocolVersion;
-            _testCluster = TestClusterManager.GetNonShareableTestCluster(2, 1, true, false);
-            Cluster.MaxProtocolVersion = 2;
-            try
-            {
-                var pooling = PoolingOptions.Create();
-                var session = GetSession(new ConstantSpeculativeExecutionPolicy(50L, 1), true, null, pooling);
-                const int pauseThreshold = 140 * 2;
-                var tasks = new List<Task<IPAddress>>();
-                var semaphore = new SemaphoreSlim(150 * 2);
-                for (var i = 0; i < 512; i++)
-                {
-                    //Pause after the stream ids are in use for the connections
-                    if (i == pauseThreshold)
-                    {
-                        _testCluster.PauseNode(1);
-                    }
-                    semaphore.Wait();
-                    tasks.Add(session
-                        .ExecuteAsync(new SimpleStatement(QueryLocal).SetIdempotence(true))
-                        .ContinueSync(rs =>
-                        {
-                            semaphore.Release();
-                            return rs.Info.QueriedHost.Address;
-                        }));
-                }
-                Task.WaitAll(tasks.Select(t => (Task)t).ToArray());
-                _testCluster.ResumeNode(1);
-                //There shouldn't be any query using node1 as coordinator passed the threshold.
-                Assert.AreEqual(0, tasks.Skip(pauseThreshold).Count(t => t.Result.Equals(_addressNode1)));
-                Thread.Sleep(1000);
-            }
-            finally
-            {
-                Cluster.MaxProtocolVersion = maxProtocolVersion;
-            }
-        }
-
         /// <summary>
         /// Tries to simulate GC pauses between 2 to 4 seconds
         /// </summary>

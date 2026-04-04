@@ -34,7 +34,7 @@ namespace Cassandra.Tests.Requests
     [TestFixture]
     public class PrepareHandlerTests
     {
-        private readonly ISerializer _serializer = new SerializerManager(ProtocolVersion.V3).GetCurrentSerializer();
+        private readonly ISerializer _serializer = new SerializerManager(ProtocolVersion.V4).GetCurrentSerializer();
 
         [Test]
         public async Task Should_NotSendRequestToSecondHost_When_SecondHostDoesntHavePool()
@@ -506,7 +506,7 @@ namespace Cassandra.Tests.Requests
             var session = cluster.ConnectAsync(null).ConfigureAwait(false).GetAwaiter().GetResult() as Session;
 
             // create prepare handler
-            var prepareHandler = new PrepareHandler(new SerializerManager(ProtocolVersion.V3), cluster, new ReprepareHandler());
+            var prepareHandler = new PrepareHandler(new SerializerManager(ProtocolVersion.V4), cluster, new ReprepareHandler());
 
             // create mock result object
             var mockResult = new PrepareHandlerMockResult(prepareHandler, session, factory);

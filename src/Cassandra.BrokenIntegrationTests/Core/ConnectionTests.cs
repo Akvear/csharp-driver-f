@@ -780,7 +780,7 @@ namespace Cassandra.IntegrationTests.Core
         {
             const int defaultHeartbeatInterval = 30000;
             using (var testCluster = SimulacronCluster.CreateNew(new SimulacronOptions { Nodes = "1" }))
-            using (var connection = CreateConnection(null, null, new PoolingOptions(), ProtocolVersion.V3, testCluster.InitialContactPoint.Address.ToString()))
+            using (var connection = CreateConnection(null, null, new PoolingOptions(), ProtocolVersion.V4, testCluster.InitialContactPoint.Address.ToString()))
             {
                 await connection.Open().ConfigureAwait(false);
                 Assert.AreEqual(defaultHeartbeatInterval, connection.Configuration.PoolingOptions.GetHeartBeatInterval());

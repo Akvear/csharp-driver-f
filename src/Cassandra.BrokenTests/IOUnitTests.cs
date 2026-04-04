@@ -126,9 +126,9 @@ namespace Cassandra.Tests
         [Test]
         public void BeBinaryWriter_Close_Sets_Frame_Body_Length()
         {
-            const int frameLength = 10;
+            const int frameLength = 11;
             const int iterations = 8;
-            const ProtocolVersion protocolVersion = ProtocolVersion.V2;
+            const ProtocolVersion protocolVersion = ProtocolVersion.V4;
             var bufferPool = new RecyclableMemoryStreamManager();
             using (var stream = bufferPool.GetStream("test"))
             {
@@ -146,7 +146,7 @@ namespace Cassandra.Tests
                     var buffer = new byte[frameLength];
                     stream.Position = i * frameLength;
                     stream.Read(buffer, 0, frameLength);
-                    CollectionAssert.AreEqual(new byte[] { 2, 0, 127, 8, 0, 0, 0, 2, 9, i }, buffer);
+                    CollectionAssert.AreEqual(new byte[] { 4, 0, 0, 127, 8, 0, 0, 0, 2, 9, i }, buffer);
                 }
             }
         }

@@ -84,67 +84,6 @@ namespace Cassandra.IntegrationTests.Core
             });
         }
 
-        /// Tests that MaxProtocolVersion is honored when set
-        ///
-        /// Cluster_Should_Honor_MaxProtocolVersion_Set tests that the MaxProtocolVersion set when building a cluster is
-        /// honored properly by the driver. It first verifies that the default MaxProtocolVersion is the maximum available by
-        /// the driver (ProtocolVersion 4 as of driver 3.0.1). It then verifies that a set MaxProtocolVersion is honored when
-        /// connecting to a Cassandra cluster. It also verifies that setting an arbitary MaxProtocolVersion is allowed, as the
-        /// ProtocolVersion will be negotiated down upon first connection. Finally, it verifies that a MaxProtocolVersion is
-        /// not valid.
-        ///
-        /// @expected_errors ArgumentException When MaxProtocolVersion is set to 0.
-        ///
-        /// @since 3.0.1
-        /// @jira_ticket CSHARP-388
-        /// @expected_result MaxProtocolVersion is set and honored upon connection.
-        ///
-        /// @test_category connection
-        [Test]
-        [TestCase(true)]
-        [TestCase(false)]
-        public async Task Cluster_Should_Honor_MaxProtocolVersion_Set(bool asyncConnect)
-        {
-            _testCluster = SimulacronCluster.CreateNew(2);
-
-            // Default MaxProtocolVersion
-            var clusterDefault = ClusterBuilder()
-                                 .AddContactPoint(_testCluster.InitialContactPoint)
-                                 .Build();
-            Assert.AreEqual(Cluster.MaxProtocolVersion, clusterDefault.Configuration.ProtocolOptions.MaxProtocolVersion);
-
-            // MaxProtocolVersion set
-            var clusterMax = ClusterBuilder()
-                             .AddContactPoint(_testCluster.InitialContactPoint)
-                             .WithMaxProtocolVersion(3)
-                             .Build();
-
-            Assert.AreEqual(3, clusterMax.Configuration.ProtocolOptions.MaxProtocolVersion);
-            await TestGlobals.ConnectAndDispose(clusterMax, asyncConnect, session =>
-            {
-                if (TestClusterManager.CheckCassandraVersion(false, Version.Parse("2.1"), Comparison.LessThan))
-                    Assert.AreEqual(2, session.BinaryProtocolVersion);
-                else
-                    Assert.AreEqual(3, session.BinaryProtocolVersion);
-            }).ConfigureAwait(false);
-
-            // Arbitrary MaxProtocolVersion set, will negotiate down upon connect
-            var clusterNegotiate = ClusterBuilder()
-                                   .AddContactPoint(_testCluster.InitialContactPoint)
-                                   .WithMaxProtocolVersion(10)
-                                   .Build();
-
-            Assert.AreEqual(10, clusterNegotiate.Configuration.ProtocolOptions.MaxProtocolVersion);
-            await TestGlobals.ConnectAndDispose(clusterNegotiate, asyncConnect, session =>
-            {
-                Assert.LessOrEqual(4, clusterNegotiate.Configuration.ProtocolOptions.MaxProtocolVersion);
-            }).ConfigureAwait(false);
-
-            // ProtocolVersion 0 does not exist
-            Assert.Throws<ArgumentException>(
-                () => ClusterBuilder().AddContactPoint("127.0.0.1").WithMaxProtocolVersion((byte)0));
-        }
-
         /// <summary>
         /// Validates that the client adds the newly bootstrapped node and eventually queries from it
         /// </summary>

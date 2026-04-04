@@ -87,7 +87,6 @@ namespace Cassandra.Tests.Connections.Control
                     TopologyRefresherFactory = new FakeTopologyRefresherFactory(rows),
                     SchemaParserFactory = new FakeSchemaParserFactory(),
                     SupportedOptionsInitializerFactory = new FakeSupportedOptionsInitializerFactory(),
-                    ProtocolVersionNegotiator = new FakeProtocolVersionNegotiator(),
                     ServerEventsSubscriber = new FakeServerEventsSubscriber()
                 };
                 configBuilderAct?.Invoke(builder);
@@ -354,7 +353,7 @@ namespace Cassandra.Tests.Connections.Control
                     Mock.Of<IInternalCluster>(),
                     new ProtocolEventDebouncer(
                         new FakeTimerFactory(), TimeSpan.Zero, TimeSpan.Zero),
-                    ProtocolVersion.V3,
+                    ProtocolVersion.V4,
                     config,
                     new Metadata(config),
                     new List<IContactPoint>

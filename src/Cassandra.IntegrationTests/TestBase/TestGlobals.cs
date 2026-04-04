@@ -36,25 +36,11 @@ namespace Cassandra.IntegrationTests.TestBase
         protected static bool IsAppVeyor => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPVEYOR"));
 
         /// <summary>
-        /// Gets the latest protocol version depending on the Cassandra Version running the tests
+        /// Gets the protocol version used for tests (always V4).
         /// </summary>
         public ProtocolVersion GetProtocolVersion()
         {
-            var cassandraVersion = TestClusterManager.CassandraVersion;
-            var protocolVersion = ProtocolVersion.V1;
-            if (cassandraVersion >= Version.Parse("2.2"))
-            {
-                protocolVersion = ProtocolVersion.V4;
-            }
-            else if (cassandraVersion >= Version.Parse("2.1"))
-            {
-                protocolVersion = ProtocolVersion.V3;
-            }
-            else if (cassandraVersion > Version.Parse("2.0"))
-            {
-                protocolVersion = ProtocolVersion.V2;
-            }
-            return protocolVersion;
+            return ProtocolVersion.V4;
         }
 
         internal ISerializer GetSerializer()

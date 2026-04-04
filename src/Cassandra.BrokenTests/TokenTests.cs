@@ -506,7 +506,7 @@ namespace Cassandra.Tests
             metadata.ControlConnection = new ControlConnection(
                 Mock.Of<IInternalCluster>(),
                 new ProtocolEventDebouncer(new TaskBasedTimerFactory(), TimeSpan.FromMilliseconds(20), TimeSpan.FromSeconds(100)),
-                ProtocolVersion.V3,
+                ProtocolVersion.V4,
                 config,
                 metadata,
                 new List<IContactPoint>
