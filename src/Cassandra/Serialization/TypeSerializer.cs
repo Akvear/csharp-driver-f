@@ -111,20 +111,6 @@ namespace Cassandra.Serialization
             return value - UnixStart;
         }
 
-        /// <summary>
-        /// Checks the expected type of an object
-        /// </summary>
-        internal static void CheckArgument<T>(object value)
-        {
-            if (value == null)
-            {
-                throw new ArgumentNullException();
-            }
-            if (!(value is T))
-            {
-                throw new InvalidTypeException("value", value.GetType().FullName, new object[] { typeof(T).FullName });
-            }
-        }
     }
 
     /// <summary>
