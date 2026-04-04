@@ -64,37 +64,20 @@ namespace Cassandra.Serialization
         }
 
         /// <summary>
-        /// Decodes length for collection types depending on the protocol version
+        /// Decodes length for collection types (always 4 bytes for protocol V4+).
         /// </summary>
         internal static int DecodeCollectionLength(ProtocolVersion protocolVersion, byte[] buffer, ref int index)
         {
-            int result;
-            if (!protocolVersion.Uses4BytesCollectionLength())
-            {
-                //length is a short
-                result = BinaryPrimitives.ReadInt16BigEndian(buffer.AsSpan(index));
-                index += 2;
-            }
-            else
-            {
-                //length is expressed in int
-                result = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(index));
-                index += 4;
-            }
+            var result = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(index));
+            index += 4;
             return result;
         }
 
         /// <summary>
-        /// Uses 2 or 4 bytes to represent the length in bytes
+        /// Encodes length for collection types (always 4 bytes for protocol V4+).
         /// </summary>
         internal static byte[] EncodeCollectionLength(ushort protocolVersion, int value)
         {
-            if (protocolVersion < 3)
-            {
-                var buffer = new byte[2];
-                BinaryPrimitives.WriteInt16BigEndian(buffer, (short)value);
-                return buffer;
-            }
             var buf = new byte[4];
             BinaryPrimitives.WriteInt32BigEndian(buf, value);
             return buf;

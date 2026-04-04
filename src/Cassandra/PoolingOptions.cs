@@ -60,7 +60,6 @@ namespace Cassandra
     /// </summary>
     public class PoolingOptions
     {
-        //the defaults target small number concurrent requests (protocol 1 and 2) and multiple connections to a host
         private const int DefaultMinRequests = 25;
         private const int DefaultMaxRequestsThreshold = 128;
         private const int DefaultCorePoolLocal = 2;
@@ -391,21 +390,11 @@ namespace Cassandra
         /// <summary>
         /// Creates a new instance of <see cref="PoolingOptions"/> using the default amount of connections
         /// and settings based on the protocol version.
-        /// <para>
-        /// For modern server versions (Apache Cassandra 2.1+) the amount of core connections are set to 1,
-        /// setting 2 for max local connections.
-        /// </para>
         /// </summary>
         /// <returns>A new instance of <see cref="PoolingOptions"/></returns>
         /// <seealso cref="ProtocolVersion"/>
         public static PoolingOptions Create(ProtocolVersion protocolVersion = ProtocolVersion.MaxSupported)
         {
-            if (!protocolVersion.Uses2BytesStreamIds())
-            {
-                //New instance of pooling options with default values
-                return new PoolingOptions();
-            }
-            //New instance of pooling options with default values for high number of concurrent requests
             return new PoolingOptions()
                 .SetCoreConnectionsPerHost(HostDistance.Local, 1)
                 .SetMaxConnectionsPerHost(HostDistance.Local, 2)

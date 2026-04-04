@@ -408,10 +408,6 @@ namespace Cassandra.Serialization
         {
             if (value == Unset.Value)
             {
-                if (!version.SupportsUnset())
-                {
-                    throw new InvalidTypeException("Unset is not supported by this Cassandra version");
-                }
                 //Return a buffer that represents the value Unset
                 return SerializerManager.UnsetBuffer;
             }

@@ -180,7 +180,7 @@ namespace Cassandra
                     throw new InvalidTypeException(failureMsg);
                 }
             }
-            if (values.Length < paramsMetadata.Length && serializer.ProtocolVersion.SupportsUnset())
+            if (values.Length < paramsMetadata.Length)
             {
                 //Set the result of the unspecified parameters to Unset
                 var completeValues = new object[paramsMetadata.Length];
