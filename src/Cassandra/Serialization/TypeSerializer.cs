@@ -52,17 +52,6 @@ namespace Cassandra.Serialization
 
         internal static readonly DateTimeOffset UnixStart = new DateTimeOffset(1970, 1, 1, 0, 0, 0, 0, TimeSpan.Zero);
 
-        internal static byte[] GuidShuffle(byte[] b, int offset = 0)
-        {
-            return new[]
-            {
-                b[offset + 3], b[offset + 2], b[offset + 1], b[offset + 0],
-                b[offset + 5], b[offset + 4],
-                b[offset + 7], b[offset + 6],
-                b[offset + 8], b[offset + 9], b[offset + 10], b[offset + 11], b[offset + 12], b[offset + 13], b[offset + 14], b[offset + 15]
-            };
-        }
-
         internal static void GuidShuffle(ReadOnlySpan<byte> source, Span<byte> destination)
         {
             destination[0] = source[3]; destination[1] = source[2]; destination[2] = source[1]; destination[3] = source[0];
@@ -70,16 +59,6 @@ namespace Cassandra.Serialization
             destination[6] = source[7]; destination[7] = source[6];
             destination[8] = source[8]; destination[9] = source[9]; destination[10] = source[10]; destination[11] = source[11];
             destination[12] = source[12]; destination[13] = source[13]; destination[14] = source[14]; destination[15] = source[15];
-        }
-
-        /// <summary>
-        /// Decodes length for collection types (always 4 bytes for protocol V4+).
-        /// </summary>
-        internal static int DecodeCollectionLength(ProtocolVersion protocolVersion, byte[] buffer, ref int index)
-        {
-            var result = BinaryPrimitives.ReadInt32BigEndian(buffer.AsSpan(index));
-            index += 4;
-            return result;
         }
 
         /// <summary>
@@ -200,11 +179,6 @@ namespace Cassandra.Serialization
                 throw new NullReferenceException("Child serializer can not be null");
             }
             return _serializer.Deserialize((ProtocolVersion)protocolVersion, buffer, typeCode, typeInfo);
-        }
-
-        internal object DeserializeChild(ushort protocolVersion, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo)
-        {
-            return DeserializeChild(protocolVersion, buffer.AsSpan(offset, length), typeCode, typeInfo);
         }
 
         internal Type GetClrType(ColumnTypeCode typeCode, IColumnInfo typeInfo)

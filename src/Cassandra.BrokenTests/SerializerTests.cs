@@ -639,7 +639,12 @@ namespace Cassandra.Tests
     {
         internal static object Deserialize(this ISerializer serializer, byte[] buffer, ColumnTypeCode typeCode, IColumnInfo typeInfo)
         {
-            return serializer.Deserialize(buffer, 0, buffer.Length, typeCode, typeInfo);
+            return serializer.Deserialize(buffer.AsSpan(), typeCode, typeInfo);
+        }
+
+        internal static object Deserialize(this ISerializer serializer, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo)
+        {
+            return serializer.Deserialize(buffer.AsSpan(offset, length), typeCode, typeInfo);
         }
 
         internal static ColumnTypeCode GetCqlTypeForPrimitive(this IGenericSerializer serializer, Type type)

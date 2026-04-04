@@ -101,29 +101,6 @@ namespace Cassandra.Serialization
             return WriteUnsignedVInt(EncodeZigZag64(value), buffer);
         }
 
-        public static long ReadUnsignedVInt(byte[] input, ref int offset)
-        {
-            var firstByte = input[offset++];
-            if ((firstByte & 0x80) == 0)
-            {
-                return firstByte;
-            }
-            var size = NumberOfExtraBytesToRead(firstByte);
-            long result = firstByte & FirstByteValueMask(size);
-            for (var ii = 0; ii < size; ii++)
-            {
-                long b = input[offset++];
-                result <<= 8;
-                result |= b & 0xff;
-            }
-            return result;
-        }
-
-        public static long ReadVInt(byte[] buffer, ref int offset)
-        {
-            return DecodeZigZag64(ReadUnsignedVInt(buffer, ref offset));
-        }
-
         public static long ReadUnsignedVInt(ref ReadOnlySpan<byte> input)
         {
             var firstByte = input[0];

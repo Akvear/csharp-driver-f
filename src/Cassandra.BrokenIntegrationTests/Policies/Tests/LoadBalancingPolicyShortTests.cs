@@ -112,9 +112,12 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             for (var i = 0; i < 10; i++)
             {
                 var key = Guid.NewGuid();
+                var keyBytes = key.ToByteArray();
+                var shuffled = new byte[16];
+                TypeSerializer.GuidShuffle(keyBytes, shuffled);
                 var statement = new SimpleStatement(string.Format("INSERT INTO " + uniqueTableName + " (k, i) VALUES ({0}, {1})", key, i))
                     .SetRoutingKey(
-                        new RoutingKey() { RawRoutingKey = TypeSerializer.GuidShuffle(key.ToByteArray()) })
+                        new RoutingKey() { RawRoutingKey = shuffled })
                     .EnableTracing();
                 var rs = session.Execute(statement);
                 traces.Add(rs.Info.QueryTrace);

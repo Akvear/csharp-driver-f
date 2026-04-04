@@ -105,16 +105,16 @@ namespace Cassandra.Serialization
                         return typeSerializer.Deserialize((byte)version, buffer, typeInfo);
                     }
                 case ColumnTypeCode.Vector:
-                    return ((ITypeSerializer)_vectorSerializer).Deserialize((byte)version, buffer, typeInfo);
+                    return _vectorSerializer.Deserialize((byte)version, buffer, typeInfo);
                 case ColumnTypeCode.Udt:
-                    return ((ITypeSerializer)_udtSerializer).Deserialize((byte)version, buffer, typeInfo);
+                    return _udtSerializer.Deserialize((byte)version, buffer, typeInfo);
                 case ColumnTypeCode.List:
                 case ColumnTypeCode.Set:
-                    return ((ITypeSerializer)_collectionSerializer).Deserialize((byte)version, buffer, typeInfo);
+                    return _collectionSerializer.Deserialize((byte)version, buffer, typeInfo);
                 case ColumnTypeCode.Map:
-                    return ((ITypeSerializer)_dictionarySerializer).Deserialize((byte)version, buffer, typeInfo);
+                    return _dictionarySerializer.Deserialize((byte)version, buffer, typeInfo);
                 case ColumnTypeCode.Tuple:
-                    return ((ITypeSerializer)_tupleSerializer).Deserialize((byte)version, buffer, typeInfo);
+                    return _tupleSerializer.Deserialize((byte)version, buffer, typeInfo);
             }
             //Unknown type, return the byte representation
             return buffer.ToArray();
