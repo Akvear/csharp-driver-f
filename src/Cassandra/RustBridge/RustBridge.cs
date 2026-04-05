@@ -272,14 +272,14 @@ namespace Cassandra
             /// This shall be called by Rust code when the operation failed.
             /// </summary>
             //
-            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, exception_handle: ExceptionPtr)
+            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, exception_handle: FFIException)
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException exceptionPtr)
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException ffiException)
             {
-                Tcb<FFIBool>.FailTask(tcsHandle, exceptionPtr);
+                Tcb<FFIBool>.FailTask(tcsHandle, ffiException);
             }
 
             internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIBool, void> completeTaskDel = &CompleteTask;
@@ -342,14 +342,14 @@ namespace Cassandra
             /// This shall be called by Rust code when the operation failed.
             /// </summary>
             //
-            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, exception_handle: ExceptionPtr)
+            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, exception_handle: FFIException)
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException exceptionPtr)
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException ffiException)
             {
-                Tcb<ManuallyDestructible>.FailTask(tcsHandle, exceptionPtr);
+                Tcb<ManuallyDestructible>.FailTask(tcsHandle, ffiException);
             }
 
 
@@ -516,11 +516,11 @@ namespace Cassandra
             /// This shall be called by Rust code when the operation failed.
             /// </summary>
             //
-            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, exception_handle: ExceptionPtr)
+            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, exception_handle: FFIException)
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
-            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException exceptionPtr)
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException ffiException)
             {
                 try
                 {
@@ -534,10 +534,10 @@ namespace Cassandra
                         {
                             // Create the exception to pass to the TCS.
                             Exception exception;
-                            if (exceptionPtr.exception != IntPtr.Zero)
+                            if (ffiException.exception != IntPtr.Zero)
                             {
                                 // Recover the exception from the GCHandle passed from Rust.
-                                var exHandle = GCHandle.FromIntPtr(exceptionPtr.exception);
+                                var exHandle = GCHandle.FromIntPtr(ffiException.exception);
                                 try
                                 {
                                     if (exHandle.Target is Exception ex)

@@ -19,7 +19,7 @@ enum Exception {}
 /// This is used across the FFI boundary to represent exceptions created on the C# side.
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct ExceptionPtr(NonNull<Exception>);
+pub struct FFIException(NonNull<Exception>);
 
 /// Wrapper struct for returning exceptions over FFI.
 ///
@@ -30,7 +30,7 @@ pub struct ExceptionPtr(NonNull<Exception>);
 #[repr(transparent)]
 #[must_use]
 pub struct FFIMaybeException {
-    pub exception: Option<ExceptionPtr>,
+    pub exception: Option<FFIException>,
 }
 
 // Compile-time assertion that `FFIMaybeException` is pointer-sized.
@@ -42,7 +42,7 @@ impl FFIMaybeException {
         Self { exception: None }
     }
 
-    pub(crate) fn from_exception(exception: ExceptionPtr) -> Self {
+    pub(crate) fn from_exception(exception: FFIException) -> Self {
         Self {
             exception: Some(exception),
         }
@@ -62,14 +62,14 @@ impl FFIMaybeException {
 }
 
 #[repr(transparent)]
-pub struct RustExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr);
+pub struct RustExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException);
 
 impl RustExceptionConstructor {
     /// Creates a generic C# exception for unexpected Rust errors.
     ///
     /// Prefixes the message with "Rust exception:" and forwards it
     /// across the FFI boundary to construct the managed exception.
-    pub(crate) fn construct_from_rust(&self, err: impl Display) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, err: impl Display) -> FFIException {
         let message = format!("Rust exception: {}", err);
         let ffi_message = FFIStr::new(&message);
         unsafe { (self.0)(ffi_message) }
@@ -83,11 +83,11 @@ impl RustExceptionConstructor {
 /// FFI constructor for C# `FunctionFailureException`.
 #[repr(transparent)]
 pub struct FunctionFailureExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl FunctionFailureExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -96,11 +96,11 @@ impl FunctionFailureExceptionConstructor {
 /// FFI constructor for C# `InvalidConfigurationInQueryException`.
 #[repr(transparent)]
 pub struct InvalidConfigurationInQueryExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr) -> FFIException,
 );
 
 impl InvalidConfigurationInQueryExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -109,11 +109,11 @@ impl InvalidConfigurationInQueryExceptionConstructor {
 /// FFI constructor for C# `NoHostAvailableException`.
 #[repr(transparent)]
 pub struct NoHostAvailableExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr) -> FFIException,
 );
 
 impl NoHostAvailableExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -122,11 +122,11 @@ impl NoHostAvailableExceptionConstructor {
 /// FFI constructor for C# `OperationTimedOutException`.
 #[repr(transparent)]
 pub struct OperationTimedOutExceptionConstructor(
-    unsafe extern "C" fn(timeout_ms: i32) -> ExceptionPtr,
+    unsafe extern "C" fn(timeout_ms: i32) -> FFIException,
 );
 
 impl OperationTimedOutExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, timeout_ms: i32) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, timeout_ms: i32) -> FFIException {
         unsafe { (self.0)(timeout_ms) }
     }
 }
@@ -134,14 +134,14 @@ impl OperationTimedOutExceptionConstructor {
 /// FFI constructor for C# `PreparedQueryNotFoundException`.
 #[repr(transparent)]
 pub struct PreparedQueryNotFoundExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>, unknown_id: FFISlice<'_, u8>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>, unknown_id: FFISlice<'_, u8>) -> FFIException,
 );
 
 impl PreparedQueryNotFoundExceptionConstructor {
     /// Builds a `PreparedQueryNotFoundException` with message and statement id.
     ///
     /// `unknown_id` is the raw statement id bytes associated with the error.
-    pub(crate) fn construct_from_rust(&self, message: &str, unknown_id: &[u8]) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str, unknown_id: &[u8]) -> FFIException {
         let message = FFIStr::new(message);
         let unknown_id = FFISlice::new(unknown_id);
         unsafe { (self.0)(message, unknown_id) }
@@ -152,12 +152,12 @@ impl PreparedQueryNotFoundExceptionConstructor {
 /// FFI constructor for C# `RequestInvalidException` (currently unused).
 #[repr(transparent)]
 pub struct RequestInvalidExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl RequestInvalidExceptionConstructor {
     #[expect(dead_code)] // Currently unused
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -166,11 +166,11 @@ impl RequestInvalidExceptionConstructor {
 /// FFI constructor for C# `AlreadyShutdownException`.
 #[repr(transparent)]
 pub struct AlreadyShutdownExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl AlreadyShutdownExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -179,11 +179,11 @@ impl AlreadyShutdownExceptionConstructor {
 /// FFI constructor for C# `SyntaxErrorException`.
 #[repr(transparent)]
 pub struct SyntaxErrorExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl SyntaxErrorExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -193,12 +193,12 @@ impl SyntaxErrorExceptionConstructor {
 /// FFI constructor for C# `TraceRetrievalException` (currently unused).
 #[repr(transparent)]
 pub struct TraceRetrievalExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl TraceRetrievalExceptionConstructor {
     #[expect(dead_code)] // Currently unused
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -206,10 +206,10 @@ impl TraceRetrievalExceptionConstructor {
 
 /// FFI constructor for C# `TruncateException`.
 #[repr(transparent)]
-pub struct TruncateExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr);
+pub struct TruncateExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException);
 
 impl TruncateExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -218,11 +218,11 @@ impl TruncateExceptionConstructor {
 /// FFI constructor for C# `UnauthorizedException`.
 #[repr(transparent)]
 pub struct UnauthorizedExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl UnauthorizedExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -231,12 +231,12 @@ impl UnauthorizedExceptionConstructor {
 /// FFI constructor for C# `AlreadyExistsException`.
 #[repr(transparent)]
 pub struct AlreadyExistsConstructor(
-    unsafe extern "C" fn(keyspace: FFIStr<'_>, table: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(keyspace: FFIStr<'_>, table: FFIStr<'_>) -> FFIException,
 );
 
 impl AlreadyExistsConstructor {
     /// Builds an `AlreadyExistsException` from keyspace and table names.
-    pub(crate) fn construct_from_rust(&self, keyspace: &str, table: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, keyspace: &str, table: &str) -> FFIException {
         let ks = FFIStr::new(keyspace);
         let tb = FFIStr::new(table);
         unsafe { (self.0)(ks, tb) }
@@ -246,11 +246,11 @@ impl AlreadyExistsConstructor {
 /// FFI constructor for C# `InvalidArgumentException`.
 #[repr(transparent)]
 pub struct InvalidArgumentExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl InvalidArgumentExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -258,10 +258,10 @@ impl InvalidArgumentExceptionConstructor {
 
 /// FFI constructor for C# `InvalidQueryException`.
 #[repr(transparent)]
-pub struct InvalidQueryConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr);
+pub struct InvalidQueryConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException);
 
 impl InvalidQueryConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -269,11 +269,11 @@ impl InvalidQueryConstructor {
 
 /// FFI constructor for C# `InvalidTypeException`.
 pub struct InvalidTypeExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl InvalidTypeExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -281,11 +281,11 @@ impl InvalidTypeExceptionConstructor {
 
 /// FFI constructor for C# `SerializationException`.
 pub struct SerializationExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl SerializationExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -293,11 +293,11 @@ impl SerializationExceptionConstructor {
 
 /// FFI constructor for C# `DeserializationException`.
 pub struct DeserializationExceptionConstructor(
-    unsafe extern "C" fn(message: FFIStr<'_>) -> ExceptionPtr,
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
 
 impl DeserializationExceptionConstructor {
-    pub(crate) fn construct_from_rust(&self, message: &str) -> ExceptionPtr {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
     }
@@ -328,23 +328,23 @@ pub(crate) enum MaybeShutdownError<E> {
 /// as exceptions in C#.
 ///
 /// # Safety
-/// The returned [`ExceptionPtr`] is an opaque handle pointer to a C# Exception object. Implementors must ensure
+/// The returned [`FFIException`] is an opaque handle pointer to a C# Exception object. Implementors must ensure
 /// that any pointers passed to the constructors are valid for the duration of the call.
 /// The handle must be freed on the C# side when no longer needed.
 pub trait ErrorToException {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr;
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException;
 }
 
 // This allows returning Infallible as an error type in functions that cannot fail.
 impl ErrorToException for std::convert::Infallible {
-    fn to_exception(self, _ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, _ctors: &ExceptionConstructors) -> FFIException {
         match self {}
     }
 }
 
-// This allows returning ExceptionPtr directly as an error type in functions that already produce C# exceptions.
-impl ErrorToException for ExceptionPtr {
-    fn to_exception(self, _ctors: &ExceptionConstructors) -> ExceptionPtr {
+// This allows returning FFIException directly as an error type in functions that already produce C# exceptions.
+impl ErrorToException for FFIException {
+    fn to_exception(self, _ctors: &ExceptionConstructors) -> FFIException {
         self
     }
 }
@@ -353,7 +353,7 @@ impl ErrorToException for ExceptionPtr {
 // For now it only maps specific connection-related error kinds (ConnectionRefused, TimedOut, NotConnected) to a C# NoHostAvailableException.
 // This mapping doesn't deny wildcard matches to ensure all other IO errors are still converted to Rust exceptions without needing to list them all.
 impl ErrorToException for Arc<std::io::Error> {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self.kind() {
             std::io::ErrorKind::ConnectionRefused
             | std::io::ErrorKind::TimedOut
@@ -369,7 +369,7 @@ impl ErrorToException for Arc<std::io::Error> {
 // Specific mapping for PagerExecutionError.
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for PagerExecutionError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             PagerExecutionError::PrepareError(e) => e.to_exception(ctors),
 
@@ -393,7 +393,7 @@ impl ErrorToException for PagerExecutionError {
 // Specific mapping for NextPageError.
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for NextPageError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             NextPageError::RequestFailure(e) => e.to_exception(ctors),
 
@@ -411,7 +411,7 @@ impl ErrorToException for NextPageError {
 // Specific mapping for RequestError.
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for RequestError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             RequestError::ConnectionPoolError(e) => e.to_exception(ctors),
 
@@ -431,7 +431,7 @@ impl ErrorToException for RequestError {
 // Specific mapping for RequestAttemptError.
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for RequestAttemptError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             RequestAttemptError::SerializationError(e) => e.to_exception(ctors),
 
@@ -460,7 +460,7 @@ impl ErrorToException for RequestAttemptError {
 // Specific mapping for PrepareError
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for PrepareError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             PrepareError::ConnectionPoolError(e) => e.to_exception(ctors),
 
@@ -478,7 +478,7 @@ impl ErrorToException for PrepareError {
 // Specific mapping for NewSessionError
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for NewSessionError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             NewSessionError::MetadataError(e) => e.to_exception(ctors),
 
@@ -496,7 +496,7 @@ impl ErrorToException for NewSessionError {
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for MetadataError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             MetadataError::ConnectionPoolError(e) => e.to_exception(ctors),
 
@@ -515,7 +515,7 @@ impl ErrorToException for MetadataError {
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for UseKeyspaceError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             UseKeyspaceError::BadKeyspaceName(e) => e.to_exception(ctors),
 
@@ -536,7 +536,7 @@ impl ErrorToException for UseKeyspaceError {
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for BadKeyspaceName {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             // Rust considers an empty keyspace name invalid, but the C# wrapper should never allow this to be passed in.
             // (At least for the case of setting a keyspace on Connect().)
@@ -560,7 +560,7 @@ impl ErrorToException for BadKeyspaceName {
 // Tuple-based mapping to include the server-provided message alongside DbError
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for (&DbError, &str) {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         let (db_error, message) = self;
         match db_error {
             DbError::AlreadyExists { keyspace, table } => ctors
@@ -617,7 +617,7 @@ impl ErrorToException for (&DbError, &str) {
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for ConnectionPoolError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             ConnectionPoolError::Broken {
                 last_connection_error: ConnectionError::IoError(io_err),
@@ -642,7 +642,7 @@ impl ErrorToException for ConnectionPoolError {
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for NextRowError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             NextRowError::NextPageError(e) => e.to_exception(ctors),
 
@@ -654,7 +654,7 @@ impl ErrorToException for NextRowError {
 }
 
 impl ErrorToException for DeserializationError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         ctors
             .deserialization_exception_constructor
             .construct_from_rust(&self.to_string())
@@ -662,7 +662,7 @@ impl ErrorToException for DeserializationError {
 }
 
 impl ErrorToException for SerializationError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         ctors
             .serialization_exception_constructor
             .construct_from_rust(&self.to_string())
@@ -670,7 +670,7 @@ impl ErrorToException for SerializationError {
 }
 
 impl ErrorToException for TypeCheckError {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         ctors
             .invalid_type_exception_constructor
             .construct_from_rust(&self.to_string())
@@ -681,7 +681,7 @@ impl<E> ErrorToException for MaybeShutdownError<E>
 where
     E: ErrorToException,
 {
-    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             MaybeShutdownError::Inner(e) => e.to_exception(ctors),
             MaybeShutdownError::AlreadyShutdown => ctors

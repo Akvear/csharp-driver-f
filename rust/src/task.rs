@@ -9,7 +9,7 @@ use tokio::runtime::Runtime;
 
 use crate::error_conversion::{
     AlreadyExistsConstructor, AlreadyShutdownExceptionConstructor,
-    DeserializationExceptionConstructor, ErrorToException, ExceptionPtr,
+    DeserializationExceptionConstructor, ErrorToException, FFIException,
     FunctionFailureExceptionConstructor, InvalidArgumentExceptionConstructor,
     InvalidConfigurationInQueryExceptionConstructor, InvalidQueryConstructor,
     InvalidTypeExceptionConstructor, NoHostAvailableExceptionConstructor,
@@ -143,7 +143,7 @@ pub struct Tcb<R> {
     /// Function pointer type to complete a TaskCompletionSource with a result.
     complete_task: unsafe extern "C" fn(tcs: FFIGCHandle<Tcs<R>>, result: R),
     /// Function pointer type to fail a TaskCompletionSource with an exception handle.
-    fail_task: unsafe extern "C" fn(tcs: FFIGCHandle<Tcs<R>>, exception_handle: ExceptionPtr),
+    fail_task: unsafe extern "C" fn(tcs: FFIGCHandle<Tcs<R>>, exception_handle: FFIException),
     /// Pointer to the collection of exception constructors.
     // SAFETY: The memory is a leaked unmanaged allocation on the C# side.
     // This guarantees that the pointer remains valid and is not moved or deallocated.
@@ -184,7 +184,7 @@ impl<R> Tcb<R> {
     }
 
     /// Fails the task with the provided exception, consuming the TCB.
-    pub(crate) fn fail_task(self, exception: ExceptionPtr) {
+    pub(crate) fn fail_task(self, exception: FFIException) {
         unsafe {
             (self.fail_task)(self.tcs, exception);
         }
