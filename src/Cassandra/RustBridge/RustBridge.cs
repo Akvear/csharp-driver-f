@@ -397,22 +397,30 @@ namespace Cassandra
                     // Recover the GCHandle that was allocated for the TaskCompletionSource.
                     var handle = GCHandle.FromIntPtr(tcsPtr);
 
-                    if (handle.Target is TaskCompletionSource<R> tcs)
+                    try
                     {
-                        // Pass R value back as the result.
-                        // The Rust code is responsible for interpreting the pointer's contents
-                        // memory is freed when the C# RustResource releases it.
-                        tcs.SetResult(result);
+                        if (handle.Target is TaskCompletionSource<R> tcs)
+                        {
+                            // Pass R value back as the result.
+                            // The Rust code is responsible for interpreting the pointer's contents
+                            // memory is freed when the C# RustResource releases it.
+                            tcs.SetResult(result);
 
-                        // Free the handle so the TCS can be collected once no longer used
-                        // by the C# code.
-                        handle.Free();
-
-                        Console.Error.WriteLine($"[FFI] CompleteTask done.");
+                            Console.Error.WriteLine($"[FFI] CompleteTask done.");
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException($"GCHandle did not reference a TaskCompletionSource<{typeof(R)}>.");
+                        }
                     }
-                    else
+                    finally
                     {
-                        throw new InvalidOperationException($"GCHandle did not reference a TaskCompletionSource<{typeof(R)}>.");
+                        if (handle.IsAllocated)
+                        {
+                            // Free the handle so the TCS can be collected once no longer used
+                            // by the C# code.
+                            handle.Free();
+                        }
                     }
                 }
                 catch (Exception ex)
