@@ -2,7 +2,7 @@ use scylla::client::pager::QueryPager;
 use scylla::cluster::metadata::CollectionType;
 use scylla::frame::response::result::{ColumnType, NativeType};
 
-use crate::error_conversion::FFIException;
+use crate::error_conversion::FFIMaybeException;
 use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIPtr, FFISlice, FFIStr, FromArc, FromRef, RefFFI,
 };
@@ -37,13 +37,13 @@ impl FFI for ColumnType<'_> {
 pub extern "C" fn row_set_get_columns_count(
     row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
     out_num_fields: *mut usize,
-) -> FFIException {
+) -> FFIMaybeException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
     let pager = row_set.pager.lock().unwrap();
     unsafe {
         *out_num_fields = pager.column_specs().len();
     }
-    FFIException::ok()
+    FFIMaybeException::ok()
 }
 
 // Function pointer type for setting column metadata in C#.
@@ -56,7 +56,7 @@ type SetMetadata = unsafe extern "C" fn(
     type_code: u8,
     type_info_handle: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
     is_frozen: u8,
-) -> FFIException;
+) -> FFIMaybeException;
 
 /// Calls back into C# for each column to provide metadata.
 /// `metadata_setter` is a function pointer supplied by C# - it will be called synchronously for each column.
@@ -68,7 +68,7 @@ pub extern "C" fn row_set_fill_columns_metadata(
     row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
     columns_ptr: ColumnsPtr,
     set_metadata: SetMetadata,
-) -> FFIException {
+) -> FFIMaybeException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
     let pager = row_set.pager.lock().unwrap();
 
@@ -110,7 +110,7 @@ pub extern "C" fn row_set_fill_columns_metadata(
             }
         }
     }
-    FFIException::ok()
+    FFIMaybeException::ok()
 }
 
 enum Columns {}
@@ -137,7 +137,7 @@ type DeserializeValue = unsafe extern "C" fn(
     value_index: usize,
     serializer_ptr: SerializerPtr,
     frame_slice: FFISlice<'_, u8>,
-) -> FFIException;
+) -> FFIMaybeException;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_next_row<'row_set>(
@@ -148,7 +148,7 @@ pub extern "C" fn row_set_next_row<'row_set>(
     serializer_ptr: SerializerPtr,
     out_has_row: *mut bool,
     constructors: &'static ExceptionConstructors,
-) -> FFIException {
+) -> FFIMaybeException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
     let mut pager = row_set.pager.lock().unwrap();
     let num_columns = pager.column_specs().len();
@@ -156,7 +156,7 @@ pub extern "C" fn row_set_next_row<'row_set>(
     let deserialize_fut = async {
         // Returns Ok(true) when a row was read and deserialized,
         // Ok(false) when there are no more rows,
-        // Err(FFIException) when an error occurs and should be propagated to C#.
+        // Err(FFIMaybeException) when an error occurs and should be propagated to C#.
         // TODO: consider how to handle possibility of the metadata to change between pages.
         // While unlikely, it's not impossible.
         // For now, we just assume it won't happen and ignore `_new_page_began`.
@@ -172,7 +172,7 @@ pub extern "C" fn row_set_next_row<'row_set>(
             // Successfully obtained the next row's column iterator
             Ok(values) => values,
             // Error while fetching the column value
-            Err(err) => return Err(FFIException::from_error(err, constructors)),
+            Err(err) => return Err(FFIMaybeException::from_error(err, constructors)),
         };
 
         for value_index in 0..num_columns {
@@ -185,12 +185,12 @@ pub extern "C" fn row_set_next_row<'row_set>(
                         "Row contains fewer columns ({} of {}) than metadata claims",
                         value_index, num_columns
                     ));
-                return Err(FFIException::from_exception(ex));
+                return Err(FFIMaybeException::from_exception(ex));
             };
 
             let raw_column = match column_res {
                 Ok(rc) => rc,
-                Err(err) => return Err(FFIException::from_error(err, constructors)),
+                Err(err) => return Err(FFIMaybeException::from_error(err, constructors)),
             };
 
             let Some(frame_slice) = raw_column.slice else {
@@ -219,7 +219,7 @@ pub extern "C" fn row_set_next_row<'row_set>(
     // This is inherently inefficient, but necessary due to blocking C# API upon page boundaries.
     // TODO: implement async C# API (IAsyncEnumerable) to avoid this.
     let (has_row, result) = match BridgedFuture::block_on(deserialize_fut) {
-        Ok(has_row) => (has_row, FFIException::ok()),
+        Ok(has_row) => (has_row, FFIMaybeException::ok()),
         Err(exception) => (false, exception),
     };
     unsafe {

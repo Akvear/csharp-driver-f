@@ -16,7 +16,7 @@ namespace Cassandra
         {
         }
 
-        internal override void RunWithIncrement(Func<IntPtr, RustBridge.FFIException> invoke)
+        internal override void RunWithIncrement(Func<IntPtr, RustBridge.FFIMaybeException> invoke)
         {
             Environment.FailFast("Attempted to use a null RustResource.");
         }

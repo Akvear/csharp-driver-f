@@ -123,10 +123,10 @@ namespace Cassandra
 
         internal static class FFIManagedStringWriter
         {
-            unsafe static internal readonly delegate* unmanaged[Cdecl]<FFIString, IntPtr, FFIException> WriteToStrPtr = &WriteToString;
+            unsafe static internal readonly delegate* unmanaged[Cdecl]<FFIString, IntPtr, FFIMaybeException> WriteToStrPtr = &WriteToString;
 
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-            internal static unsafe FFIException WriteToString(FFIString str, IntPtr ptr)
+            internal static unsafe FFIMaybeException WriteToString(FFIString str, IntPtr ptr)
             {
                 try
                 {
@@ -136,9 +136,9 @@ namespace Cassandra
                 catch (Exception ex)
                 {
                     Console.Error.WriteLine($"[FFI] WriteToString threw exception: {ex}");
-                    return FFIException.FromException(ex);
+                    return FFIMaybeException.FromException(ex);
                 }
-                return FFIException.Ok();
+                return FFIMaybeException.Ok();
             }
 
             internal class StringContainer
@@ -232,7 +232,7 @@ namespace Cassandra
             /// <summary>
             /// This must return a pointer to the appropriate [UnmanagedCallersOnly] FailTask method for the result type R.
             /// This MUST have the following signature:
-            /// unsafe static delegate* unmanaged[Cdecl]&lt;FFIGCHandle tcs, FFIException exception_ptr, void&gt;
+            /// unsafe static delegate* unmanaged[Cdecl]&lt;FFIGCHandle tcs, FFIMaybeException exception_ptr, void&gt;
             /// </summary>
             internal static abstract IntPtr FailTaskDelegate { get; }
         }
@@ -277,13 +277,13 @@ namespace Cassandra
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-            internal static void FailTask(FFIGCHandle tcsHandle, FFIException exceptionPtr)
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException exceptionPtr)
             {
                 Tcb<FFIBool>.FailTask(tcsHandle, exceptionPtr);
             }
 
             internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIBool, void> completeTaskDel = &CompleteTask;
-            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIException, void> failTaskDel = &FailTask;
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIMaybeException, void> failTaskDel = &FailTask;
 
             static IntPtr IBridgedTaskResult.CompleteTaskDelegate
             {
@@ -347,7 +347,7 @@ namespace Cassandra
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-            internal static void FailTask(FFIGCHandle tcsHandle, FFIException exceptionPtr)
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException exceptionPtr)
             {
                 Tcb<ManuallyDestructible>.FailTask(tcsHandle, exceptionPtr);
             }
@@ -366,7 +366,7 @@ namespace Cassandra
             // Note that we can get this pointer because the method is static and
             // decorated with [UnmanagedCallersOnly].
             internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, ManuallyDestructible, void> completeTaskDel = &CompleteTask;
-            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIException, void> failTaskDel = &FailTask;
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIMaybeException, void> failTaskDel = &FailTask;
 
             static IntPtr IBridgedTaskResult.CompleteTaskDelegate
             {
@@ -520,7 +520,7 @@ namespace Cassandra
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
-            internal static void FailTask(FFIGCHandle tcsHandle, FFIException exceptionPtr)
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException exceptionPtr)
             {
                 try
                 {
@@ -732,28 +732,28 @@ namespace Cassandra
         /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
-        internal struct FFIException
+        internal struct FFIMaybeException
         {
             // Fields:
             // Pointer to a GCHandle referencing the Exception.
             internal IntPtr exception;
 
             // Functions:
-            // Creates an FFIException from the given Exception.
-            internal static FFIException FromException(Exception ex)
+            // Creates an FFIMaybeException from the given Exception.
+            internal static FFIMaybeException FromException(Exception ex)
             {
                 var handle = GCHandle.Alloc(ex);
                 IntPtr handlePtr = GCHandle.ToIntPtr(handle);
-                return new FFIException
+                return new FFIMaybeException
                 {
                     exception = handlePtr
                 };
             }
 
-            // Creates an FFIException representing no exception.
-            internal static FFIException Ok()
+            // Creates an FFIMaybeException representing no exception.
+            internal static FFIMaybeException Ok()
             {
-                return new FFIException
+                return new FFIMaybeException
                 {
                     exception = IntPtr.Zero
                 };
@@ -763,11 +763,11 @@ namespace Cassandra
         }
 
         /// <summary>
-        /// Throws the exception contained in the FFIException if any.
+        /// Throws the exception contained in the FFIMaybeException if any.
         /// This mustn't be used in UnmanagedCallersOnly methods because throwing exceptions
         /// across FFI boundary is UB.
         /// </summary>
-        internal static void ThrowIfException(ref FFIException res)
+        internal static void ThrowIfException(ref FFIMaybeException res)
         {
             if (res.exception == IntPtr.Zero)
             {
@@ -804,7 +804,7 @@ namespace Cassandra
         /// Frees the exception handle contained in the package without throwing.
         /// Safe to call multiple times; subsequent calls become no-ops.
         /// </summary>
-        internal static void FreeExceptionHandle(ref FFIException res)
+        internal static void FreeExceptionHandle(ref FFIMaybeException res)
         {
             if (res.exception == IntPtr.Zero)
             {

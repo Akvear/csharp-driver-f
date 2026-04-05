@@ -5,23 +5,23 @@ using static Cassandra.RustBridge;
 
 namespace Cassandra
 {
-    /// <summary>  
-    /// Base class for Rust-owned native resources managed through <see cref="SafeHandle"/>.  
-    /// </summary>  
-    /// <remarks>  
-    /// <para>  
-    /// This type encapsulates a native pointer returned by Rust together with a corresponding  
-    /// destructor function. The destructor is invoked exactly once from <see cref="ReleaseHandle"/>  
-    /// when the handle is released by the <see cref="SafeHandle"/> infrastructure.  
-    /// </para>  
-    /// <para>  
-    /// Derive from this class for any Rust resource that needs to be lifetime-managed from C#.  
-    /// Implementations must not expose the raw <see cref="SafeHandle.handle"/> to callers except  
-    /// where it is safe to do so, and they must respect the ownership model: once wrapped in  
-    /// <see cref="RustResource"/>, the native pointer must only be freed by the associated  
-    /// destructor.  
-    /// </para>  
-    /// </remarks> 
+    /// <summary>
+    /// Base class for Rust-owned native resources managed through <see cref="SafeHandle"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This type encapsulates a native pointer returned by Rust together with a corresponding
+    /// destructor function. The destructor is invoked exactly once from <see cref="ReleaseHandle"/>
+    /// when the handle is released by the <see cref="SafeHandle"/> infrastructure.
+    /// </para>
+    /// <para>
+    /// Derive from this class for any Rust resource that needs to be lifetime-managed from C#.
+    /// Implementations must not expose the raw <see cref="SafeHandle.handle"/> to callers except
+    /// where it is safe to do so, and they must respect the ownership model: once wrapped in
+    /// <see cref="RustResource"/>, the native pointer must only be freed by the associated
+    /// destructor.
+    /// </para>
+    /// </remarks>
     internal abstract class RustResource : SafeHandle
     {
         private readonly IntPtr _destructor;
@@ -34,13 +34,13 @@ namespace Cassandra
 
         public sealed override bool IsInvalid => handle == IntPtr.Zero;
 
-        /// <summary>  
-        /// Releases the underlying native resource by invoking the Rust-provided destructor.  
-        /// </summary>  
-        /// <remarks>  
-        /// This method is called by the <see cref="SafeHandle"/> finalization and disposal  
-        /// mechanisms. It must not be called directly by user code. 
-        /// </remarks>  
+        /// <summary>
+        /// Releases the underlying native resource by invoking the Rust-provided destructor.
+        /// </summary>
+        /// <remarks>
+        /// This method is called by the <see cref="SafeHandle"/> finalization and disposal
+        /// mechanisms. It must not be called directly by user code.
+        /// </remarks>
         protected sealed override bool ReleaseHandle()
         {
             if (_destructor != IntPtr.Zero && handle != IntPtr.Zero)
@@ -103,14 +103,14 @@ namespace Cassandra
         /// Helper to encapsulate the common pattern for sync native calls with incremented ref count:
         /// DangerousAddRef, invoke native function, finally DangerousRelease.
         /// Using this method ensures that the handle remains valid for the duration of the native call.
-        /// Invoke must be a function that takes an IntPtr (the handle) and returns an FFIException.
+        /// Invoke must be a function that takes an IntPtr (the handle) and returns an FFIMaybeException.
         /// If the exception is not null, it will be thrown.
         /// </summary>
         /// <param name="invoke"></param>
-        internal virtual void RunWithIncrement(Func<IntPtr, RustBridge.FFIException> invoke)
+        internal virtual void RunWithIncrement(Func<IntPtr, RustBridge.FFIMaybeException> invoke)
         {
             bool refAdded = false;
-            RustBridge.FFIException exception;
+            RustBridge.FFIMaybeException exception;
             try
             {
                 DangerousAddRef(ref refAdded);

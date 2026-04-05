@@ -1,4 +1,4 @@
-use crate::error_conversion::FFIException;
+use crate::error_conversion::FFIMaybeException;
 use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, CSharpStr, FFI, FFIBool, FFIPtr, FFISlice, FFIStr, FromArc,
     RefFFI, ffi_callback_for_each,
@@ -56,7 +56,7 @@ pub extern "C" fn cluster_state_fill_nodes(
     cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
     refresh_context_ptr: RefreshContextPtr,
     callback: ConstructCSharpHost,
-) -> FFIException {
+) -> FFIMaybeException {
     let cluster_state =
         ArcFFI::as_ref(cluster_state_ptr).expect("valid and non-null ClusterState pointer");
 
@@ -115,7 +115,7 @@ pub extern "C" fn cluster_state_fill_nodes(
         }
     }
 
-    FFIException::ok()
+    FFIMaybeException::ok()
 }
 
 /// Opaque type representing the C# KeyspaceNameList.
@@ -136,7 +136,7 @@ pub struct KeyspaceNameListPtr(FFIPtr<'static, KeyspaceNameList>);
 type AddKeyspaceName = unsafe extern "C" fn(
     keyspace_name_list_ptr: KeyspaceNameListPtr,
     keyspace_name: FFIStr<'_>,
-) -> FFIException;
+) -> FFIMaybeException;
 
 /// Populates a C# List with keyspace names from the cluster state. For each keyspace in the cluster state,
 /// this function invokes the callback with a single keyspace name. The callback must synchronously copy
@@ -146,13 +146,13 @@ type AddKeyspaceName = unsafe extern "C" fn(
 /// - `keyspace_name_list_ptr` must point to a valid C# List that remains allocated during this call
 /// - All string pointers passed to the callback are temporary and only valid during that invocation
 /// - The callback must copy string data of keyspace names (e.g., via Marshal.PtrToStringUTF8) immediately.
-/// - The callback must return a valid FFIException.
+/// - The callback must return a valid FFIMaybeException.
 #[unsafe(no_mangle)]
 pub extern "C" fn cluster_state_get_keyspace_names(
     cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
     keyspace_name_list_ptr: KeyspaceNameListPtr,
     add_keyspace_name_callback: AddKeyspaceName,
-) -> FFIException {
+) -> FFIMaybeException {
     tracing::trace!("[FFI] cluster_state_get_keyspace_names called");
 
     let cluster_state =
@@ -171,7 +171,7 @@ pub extern "C" fn cluster_state_get_keyspace_names(
         }
     }
 
-    FFIException::ok()
+    FFIMaybeException::ok()
 }
 
 /// Opaque type representing the C# KeyspaceContext.
@@ -193,19 +193,19 @@ pub struct ReplicationOptionsPtr(FFIPtr<'static, ReplicationOptions>);
 type SimpleStrategyAddRepFactor = unsafe extern "C" fn(
     replication_options_ptr: ReplicationOptionsPtr,
     rep_factor: usize,
-) -> FFIException;
+) -> FFIMaybeException;
 
 type NetworkTopologyStrategyAddRepFactor = unsafe extern "C" fn(
     replication_options_ptr: ReplicationOptionsPtr,
     datacenter: FFIStr<'_>,
     rep_factor: usize,
-) -> FFIException;
+) -> FFIMaybeException;
 
 type OtherStrategyAddRepFactor = unsafe extern "C" fn(
     replication_options_ptr: ReplicationOptionsPtr,
     key: FFIStr<'_>,
     value: FFIStr<'_>,
-) -> FFIException;
+) -> FFIMaybeException;
 
 // Replication factor callbacks grouped into a single struct to simplify passing them to the keyspace metadata construction function.
 #[repr(C)]
@@ -224,13 +224,13 @@ pub struct StrategyAddRepFactor {
 /// - All pointer parameters must be immediately copied/consumed during the callback invocation.
 /// - String pointers (strategy_class, key-value pairs) are only valid for the duration of the callback.
 /// - The callback must not store these pointers or access them after returning.
-/// - The callback must return a valid FFIException.
+/// - The callback must return a valid FFIMaybeException.
 type ConstructCSharpKeyspaceMetadata = unsafe extern "C" fn(
     keyspace_context_ptr: KeyspaceContextPtr,
     durable_writes: bool,
     strategy_class: FFIStr<'_>,
     replication_options_ptr: ReplicationOptionsPtr,
-) -> FFIException;
+) -> FFIMaybeException;
 
 /// Populates a C# KeyspaceContext with keyspace metadata from the cluster state.
 /// For the specified keyspace in the cluster state, this function:
@@ -242,7 +242,7 @@ type ConstructCSharpKeyspaceMetadata = unsafe extern "C" fn(
 /// - `keyspace_context_ptr` and `replication_options_ptr` must point to valid C# KeyspaceContext and ReplicationOptions that remain allocated during this call.
 /// - All string pointers passed to the callback are temporary and only valid during that invocation.
 /// - The callback must copy string data (e.g., via Marshal.PtrToStringUTF8) immediately.
-/// - The callback must return a valid FFIException.
+/// - The callback must return a valid FFIMaybeException.
 #[unsafe(no_mangle)]
 pub extern "C" fn cluster_state_get_keyspace_metadata(
     cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
@@ -252,7 +252,7 @@ pub extern "C" fn cluster_state_get_keyspace_metadata(
     add_rep_factor_callback: StrategyAddRepFactor,
     construct_keyspace_callback: ConstructCSharpKeyspaceMetadata,
     constructors: &'static ExceptionConstructors,
-) -> FFIException {
+) -> FFIMaybeException {
     tracing::trace!("[FFI] cluster_state_get_keyspace_metadata");
 
     let cluster_state =
@@ -269,7 +269,7 @@ pub extern "C" fn cluster_state_get_keyspace_metadata(
         let ex = constructors
             .invalid_argument_exception_constructor
             .construct_from_rust("Keyspace not found in cluster metadata");
-        return FFIException::from_exception(ex);
+        return FFIMaybeException::from_exception(ex);
     };
 
     tracing::trace!("[FFI] Found keyspace: '{}'", keyspace_name);
@@ -368,7 +368,7 @@ pub struct TableNameListPtr(FFIPtr<'static, TableNameList>);
 type AddTableName = unsafe extern "C" fn(
     table_name_list_ptr: TableNameListPtr,
     table_name: FFIStr<'_>,
-) -> FFIException;
+) -> FFIMaybeException;
 
 /// Populates a C# List with table names from the cluster state. For each table in the cluster state,
 /// this function invokes the callback with a single table name. The callback must synchronously copy
@@ -378,7 +378,7 @@ type AddTableName = unsafe extern "C" fn(
 /// - `table_name_list_ptr` must point to a valid C# List that remains allocated during this call.
 /// - All string pointers passed to the callback are temporary and only valid during that invocation.
 /// - The callback must copy string data of table names (e.g., via Marshal.PtrToStringUTF8) immediately.
-/// - The callback must return a valid FFIException.
+/// - The callback must return a valid FFIMaybeException.
 #[unsafe(no_mangle)]
 pub extern "C" fn cluster_state_get_table_names(
     cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
@@ -386,7 +386,7 @@ pub extern "C" fn cluster_state_get_table_names(
     table_name_list_ptr: TableNameListPtr,
     callback: AddTableName,
     constructors: &'static ExceptionConstructors,
-) -> FFIException {
+) -> FFIMaybeException {
     let cluster_state =
         ArcFFI::as_ref(cluster_state_ptr).expect("valid and non-null ClusterState pointer");
 
@@ -401,7 +401,7 @@ pub extern "C" fn cluster_state_get_table_names(
         let ex = constructors
             .invalid_argument_exception_constructor
             .construct_from_rust("Keyspace not found in cluster metadata");
-        return FFIException::from_exception(ex);
+        return FFIMaybeException::from_exception(ex);
     };
 
     unsafe {
@@ -426,7 +426,7 @@ type ConstructCSharpTableColumn = unsafe extern "C" fn(
     type_info: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
     is_static: FFIBool,
     is_frozen: FFIBool,
-) -> FFIException;
+) -> FFIMaybeException;
 
 /// Opaque type representing the C# primary keys (PartitionKey or ClusteringKey).
 enum PrimaryKey {}
@@ -439,8 +439,10 @@ pub struct PrimaryKeysPtr(FFIPtr<'static, PrimaryKey>);
 /// Callback type for adding a single primary key column name to a C# PartitionKeys / ClusteringKeys.
 /// The callback receives a primary key name and is responsible for adding it to
 /// the C# PartitionKeys / ClusteringKeys referenced by primary_keys_ptr.
-type AddPrimaryKey =
-    unsafe extern "C" fn(primary_keys_ptr: PrimaryKeysPtr, primary_key: FFIStr<'_>) -> FFIException;
+type AddPrimaryKey = unsafe extern "C" fn(
+    primary_keys_ptr: PrimaryKeysPtr,
+    primary_key: FFIStr<'_>,
+) -> FFIMaybeException;
 
 /// Opaque type representing the C# TableContext.
 #[derive(Clone, Copy)]
@@ -456,7 +458,7 @@ type ConstructCSharpTableMetadata = unsafe extern "C" fn(
     table_columns_ptr: TableColumnsPtr,
     partition_keys: PrimaryKeysPtr,
     clustering_keys: PrimaryKeysPtr,
-) -> FFIException;
+) -> FFIMaybeException;
 
 /// Retrieves metadata for a single table and exposes it to C# via callbacks.
 ///
@@ -494,7 +496,7 @@ pub extern "C" fn cluster_state_get_table_metadata(
     table_context_ptr: TableContextPtr,
     construct_table_metadata: ConstructCSharpTableMetadata,
     constructors: &'static ExceptionConstructors,
-) -> FFIException {
+) -> FFIMaybeException {
     tracing::trace!("[FFI] cluster_state_get_table_metadata called");
 
     let cluster_state =
@@ -511,7 +513,7 @@ pub extern "C" fn cluster_state_get_table_metadata(
         let ex = constructors
             .invalid_argument_exception_constructor
             .construct_from_rust("Keyspace not found in cluster metadata");
-        return FFIException::from_exception(ex);
+        return FFIMaybeException::from_exception(ex);
     };
 
     let table_name = table_name
@@ -525,7 +527,7 @@ pub extern "C" fn cluster_state_get_table_metadata(
         let ex = constructors
             .invalid_argument_exception_constructor
             .construct_from_rust("Table not found in keyspace metadata");
-        return FFIException::from_exception(ex);
+        return FFIMaybeException::from_exception(ex);
     };
 
     for (column_name, column) in table.columns.iter() {
@@ -620,5 +622,5 @@ pub extern "C" fn cluster_state_get_table_metadata(
         }
     }
 
-    FFIException::ok()
+    FFIMaybeException::ok()
 }

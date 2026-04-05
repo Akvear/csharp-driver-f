@@ -37,7 +37,7 @@ namespace Cassandra
         unsafe private static extern void session_query(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        private static extern FFIException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
+        private static extern FFIMaybeException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
 
         /// <summary>
         /// Executes a query with already-serialized values.
@@ -59,7 +59,7 @@ namespace Cassandra
         unsafe private static extern void session_query_bound_with_values(Tcb<ManuallyDestructible> tcb, IntPtr session, IntPtr preparedStatement, IntPtr valuesPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
+        unsafe private static extern FFIMaybeException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
 
         /// <summary>
         /// Creates a new session connected to the specified Cassandra URI.
@@ -167,7 +167,7 @@ namespace Cassandra
         /// <summary>
         /// Gets the keyspace of the session. Returns the name of the current keyspace as a string, or null if no keyspace is set.
         /// Note: This method involves marshaling a string from native code, which can be expensive.
-        /// Exceptions thrown by the native code will be propagated as FFIException.
+        /// Exceptions thrown by the native code will be propagated as FFIMaybeException.
         /// </summary>
         internal string GetKeyspace()
         {

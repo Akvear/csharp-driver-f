@@ -1,4 +1,4 @@
-use crate::error_conversion::FFIException;
+use crate::error_conversion::FFIMaybeException;
 use std::ffi::{CStr, c_char, c_void};
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -847,7 +847,7 @@ enum CSharpManagedString {}
 pub(crate) struct CSharpManagedStringPtr(FFIPtr<'static, CSharpManagedString>);
 
 pub(crate) type WriteStringCallback =
-    extern "C" fn(FFIStr<'_>, CSharpManagedStringPtr) -> FFIException;
+    extern "C" fn(FFIStr<'_>, CSharpManagedStringPtr) -> FFIMaybeException;
 
 /// Feeds each item from an iterator to a C FFI callback, one at a time.
 ///
@@ -859,9 +859,9 @@ pub(crate) type WriteStringCallback =
 /// - `context` must remain valid for the duration of iteration
 pub(crate) unsafe fn ffi_callback_for_each<Ctx: Copy, T>(
     context: Ctx,
-    callback: unsafe extern "C" fn(Ctx, T) -> FFIException,
+    callback: unsafe extern "C" fn(Ctx, T) -> FFIMaybeException,
     iter: impl Iterator<Item = T>,
-) -> FFIException {
+) -> FFIMaybeException {
     for item in iter {
         unsafe {
             let res = callback(context, item);
@@ -870,7 +870,7 @@ pub(crate) unsafe fn ffi_callback_for_each<Ctx: Copy, T>(
             }
         }
     }
-    FFIException::ok()
+    FFIMaybeException::ok()
 }
 
 #[repr(transparent)]

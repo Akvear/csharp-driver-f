@@ -128,13 +128,13 @@ namespace Cassandra
         private static extern void pre_serialized_values_free(IntPtr ptr);
 
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
-        private static extern RustBridge.FFIException pre_serialized_values_add_unset(IntPtr valuesPtr, IntPtr constructorsPtr);
+        private static extern RustBridge.FFIMaybeException pre_serialized_values_add_unset(IntPtr valuesPtr, IntPtr constructorsPtr);
 
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
-        private static extern RustBridge.FFIException pre_serialized_values_add_null(IntPtr valuesPtr, IntPtr constructorsPtr);
+        private static extern RustBridge.FFIMaybeException pre_serialized_values_add_null(IntPtr valuesPtr, IntPtr constructorsPtr);
 
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
-        private static extern RustBridge.FFIException pre_serialized_values_add_value(
+        private static extern RustBridge.FFIMaybeException pre_serialized_values_add_value(
             IntPtr valuesPtr,
             RustBridge.FFISlice<byte> valueSlice,
             IntPtr constructorsPtr);

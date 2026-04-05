@@ -29,15 +29,15 @@ pub struct ExceptionPtr(NonNull<Exception>);
 /// All changes to this struct must be mirrored in C# code in the exact same order.
 #[repr(transparent)]
 #[must_use]
-pub struct FFIException {
+pub struct FFIMaybeException {
     pub exception: Option<ExceptionPtr>,
 }
 
-// Compile-time assertion that `FFIException` is pointer-sized.
+// Compile-time assertion that `FFIMaybeException` is pointer-sized.
 // Ensures ABI compatibility with C# (opaque GCHandle/IntPtr across FFI).
-const _: [(); size_of::<FFIException>()] = [(); size_of::<*const ()>()];
+const _: [(); size_of::<FFIMaybeException>()] = [(); size_of::<*const ()>()];
 
-impl FFIException {
+impl FFIMaybeException {
     pub(crate) fn ok() -> Self {
         Self { exception: None }
     }

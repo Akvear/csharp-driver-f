@@ -20,7 +20,7 @@ namespace Cassandra
         }
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        private static extern RustBridge.FFIException cluster_state_fill_nodes(
+        private static extern RustBridge.FFIMaybeException cluster_state_fill_nodes(
             IntPtr clusterState,
             IntPtr contextPtr,
             IntPtr callback);
@@ -37,7 +37,7 @@ namespace Cassandra
         {
             try
             {
-                // Safety: 
+                // Safety:
                 // contextPtr is a pointer to the stack slot holding the 'context' reference (not to the heap object itself).
                 // Unsafe.AsPointer(ref T) returns the address of the managed pointer (the stack local).
                 // The stack slot is stable for the duration of this callback since:
@@ -50,8 +50,8 @@ namespace Cassandra
 
                 var hostId = new Guid(idBytes.As<byte>().ToSpan());
 
-                // Construct IPAddress directly from bytes (4 for IPv4, 16 for IPv6). ipBytes is an FFISlice<byte> 
-                // and it accesses unmanaged memory that is only valid for the duration of this callback invocation. 
+                // Construct IPAddress directly from bytes (4 for IPv4, 16 for IPv6). ipBytes is an FFISlice<byte>
+                // and it accesses unmanaged memory that is only valid for the duration of this callback invocation.
                 // The IPAddress constructor must be called synchronously here so it can copy the data immediately.
                 var ipAddress = new IPAddress(ipBytes.As<byte>().ToSpan());
                 var address = new IPEndPoint(ipAddress, port);
@@ -100,7 +100,7 @@ namespace Cassandra
         }
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException cluster_state_get_keyspace_metadata(
+        unsafe private static extern FFIMaybeException cluster_state_get_keyspace_metadata(
             IntPtr clusterState,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspaceName,
             IntPtr contextPtr,
@@ -109,9 +109,9 @@ namespace Cassandra
             IntPtr callback,
             IntPtr constructorsPtr);
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, nuint, FFIException> SimpleStrategyAddRepFactorPtr = &SimpleStrategyAddRepFactor;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, nuint, FFIMaybeException> SimpleStrategyAddRepFactorPtr = &SimpleStrategyAddRepFactor;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe FFIException SimpleStrategyAddRepFactor(
+        private static unsafe FFIMaybeException SimpleStrategyAddRepFactor(
             IntPtr replicationOptionsPtr,
             nuint repFactor)
         {
@@ -122,15 +122,15 @@ namespace Cassandra
             }
             catch (Exception ex)
             {
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
 
-            return FFIException.Ok();
+            return FFIMaybeException.Ok();
         }
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, nuint, FFIException> NetworkTopologyStrategyAddRepFactorPtr = &NetworkTopologyStrategyAddRepFactor;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, nuint, FFIMaybeException> NetworkTopologyStrategyAddRepFactorPtr = &NetworkTopologyStrategyAddRepFactor;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe FFIException NetworkTopologyStrategyAddRepFactor(
+        private static unsafe FFIMaybeException NetworkTopologyStrategyAddRepFactor(
             IntPtr replicationOptionsPtr,
             FFIString datacenter,
             nuint repFactor)
@@ -142,15 +142,15 @@ namespace Cassandra
             }
             catch (Exception ex)
             {
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
 
-            return FFIException.Ok();
+            return FFIMaybeException.Ok();
         }
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, FFIString, FFIException> OtherStrategyAddRepFactorPtr = &OtherStrategyAddRepFactor;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, FFIString, FFIMaybeException> OtherStrategyAddRepFactorPtr = &OtherStrategyAddRepFactor;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe FFIException OtherStrategyAddRepFactor(
+        private static unsafe FFIMaybeException OtherStrategyAddRepFactor(
             IntPtr replicationOptionsPtr,
             FFIString strategyClass,
             FFIString repFactor)
@@ -162,10 +162,10 @@ namespace Cassandra
             }
             catch (Exception ex)
             {
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
 
-            return FFIException.Ok();
+            return FFIMaybeException.Ok();
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -183,9 +183,9 @@ namespace Cassandra
             }
         }
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIBool, FFIString, IntPtr, FFIException> FillKeyspaceMetadataPtr = &FillKeyspaceMetadata;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIBool, FFIString, IntPtr, FFIMaybeException> FillKeyspaceMetadataPtr = &FillKeyspaceMetadata;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe FFIException FillKeyspaceMetadata(
+        private static unsafe FFIMaybeException FillKeyspaceMetadata(
             IntPtr contextPtr,
             FFIBool durableWrites,
             FFIString strategyClass,
@@ -213,10 +213,10 @@ namespace Cassandra
             }
             catch (Exception ex)
             {
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
 
-            return FFIException.Ok();
+            return FFIMaybeException.Ok();
         }
 
         internal KeyspaceMetadata GetKeyspaceMetadata(BridgedClusterState clusterState, string keyspaceName)
@@ -259,14 +259,14 @@ namespace Cassandra
         }
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException cluster_state_get_keyspace_names(
+        unsafe private static extern FFIMaybeException cluster_state_get_keyspace_names(
             IntPtr clusterState,
             IntPtr keyspaceNameListPtr,
             IntPtr callback);
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, FFIException> AddKeyspaceNamePtr = &AddKeyspaceName;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, FFIMaybeException> AddKeyspaceNamePtr = &AddKeyspaceName;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe FFIException AddKeyspaceName(
+        private static unsafe FFIMaybeException AddKeyspaceName(
             IntPtr keyspaceNameListPtr,
             FFIString keyspaceName)
         {
@@ -277,10 +277,10 @@ namespace Cassandra
             }
             catch (Exception ex)
             {
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
 
-            return FFIException.Ok();
+            return FFIMaybeException.Ok();
         }
 
         internal List<string> GetKeyspaceNames()
@@ -302,16 +302,16 @@ namespace Cassandra
         }
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException cluster_state_get_table_names(
+        unsafe private static extern FFIMaybeException cluster_state_get_table_names(
             IntPtr clusterState,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspaceName,
             IntPtr tableNameListPtr,
             IntPtr callback,
             IntPtr constructorsPtr);
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, FFIException> AddTableNamesPtr = &AddTableName;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, FFIMaybeException> AddTableNamesPtr = &AddTableName;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe FFIException AddTableName(
+        private static unsafe FFIMaybeException AddTableName(
             IntPtr tableNameListPtr,
             FFIString tableName)
         {
@@ -322,10 +322,10 @@ namespace Cassandra
             }
             catch (Exception ex)
             {
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
 
-            return FFIException.Ok();
+            return FFIMaybeException.Ok();
         }
 
         internal List<string> GetTableNames(string keyspaceName)
@@ -361,9 +361,9 @@ namespace Cassandra
             return tableNames;
         }
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, byte, IntPtr, FFIBool, FFIBool, FFIException> ConstructTableColumnPtr = &ConstructTableColumn;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, byte, IntPtr, FFIBool, FFIBool, FFIMaybeException> ConstructTableColumnPtr = &ConstructTableColumn;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe FFIException ConstructTableColumn(
+        private static unsafe FFIMaybeException ConstructTableColumn(
             IntPtr tableColumnsListPtr,
             FFIString columnName,
             byte typeCode,
@@ -389,17 +389,17 @@ namespace Cassandra
                 };
                 tableColumnsList.Add(column);
 
-                return FFIException.Ok();
+                return FFIMaybeException.Ok();
             }
             catch (Exception ex)
             {
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
         }
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, FFIException> AddPrimaryKeyPtr = &AddPrimaryKey;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, FFIMaybeException> AddPrimaryKeyPtr = &AddPrimaryKey;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe FFIException AddPrimaryKey(
+        private static unsafe FFIMaybeException AddPrimaryKey(
             IntPtr keysListPtr,
             FFIString keyName)
         {
@@ -410,14 +410,14 @@ namespace Cassandra
             }
             catch (Exception ex)
             {
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
 
-            return FFIException.Ok();
+            return FFIMaybeException.Ok();
         }
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException cluster_state_get_table_metadata(
+        unsafe private static extern FFIMaybeException cluster_state_get_table_metadata(
             IntPtr clusterState,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspaceName,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string tableName,
@@ -430,9 +430,9 @@ namespace Cassandra
             IntPtr constructTableMetadataCallback,
             IntPtr constructorsPtr);
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, IntPtr, FFIException> FillTableMetadataPtr = &FillTableMetadata;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, IntPtr, IntPtr, IntPtr, FFIMaybeException> FillTableMetadataPtr = &FillTableMetadata;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe FFIException FillTableMetadata(
+        private static unsafe FFIMaybeException FillTableMetadata(
             IntPtr tableContextPtr,
             IntPtr tableColumnsListPtr,
             IntPtr partitionKeys,
@@ -479,11 +479,11 @@ namespace Cassandra
                 // TODO: bridge table options.
                 tableMetadata.SetValues(tableColumnsDictionary, partitionKeysColumns, clusteringKeysColumns, null);
 
-                return FFIException.Ok();
+                return FFIMaybeException.Ok();
             }
             catch (Exception ex)
             {
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
         }
 

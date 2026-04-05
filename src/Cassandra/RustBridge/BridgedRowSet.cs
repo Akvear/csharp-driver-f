@@ -87,13 +87,13 @@ namespace Cassandra
             return columns;
         }
 
-        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nuint, FFIString, FFIString, FFIString, byte, IntPtr, byte, FFIException> setColumnMetaPtr = &SetColumnMeta;
+        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, nuint, FFIString, FFIString, FFIString, byte, IntPtr, byte, FFIMaybeException> setColumnMetaPtr = &SetColumnMeta;
 
         /// <summary>
         /// This shall be called by Rust code for each column.
         /// </summary>
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static FFIException SetColumnMeta(
+        internal static FFIMaybeException SetColumnMeta(
             IntPtr columnsPtr,
             nuint columnIndex,
             FFIString name,
@@ -122,7 +122,7 @@ namespace Cassandra
                     if (index < 0 || index >= columns.Length)
                     {
                         // I am not sure whether this warrant panicking or returning an error.
-                        return FFIException.FromException(
+                        return FFIMaybeException.FromException(
                             new IndexOutOfRangeException($"Column index {index} is out of range (0..{columns.Length - 1})")
                         );
                     }
@@ -142,20 +142,20 @@ namespace Cassandra
                         col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode);
                     }
                 }
-                return FFIException.Ok();
+                return FFIMaybeException.Ok();
             }
         }
 
         // Private methods and P/Invoke
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr, out FFIBool hasRow, IntPtr constructorsPtr);
+        unsafe private static extern FFIMaybeException row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr, out FFIBool hasRow, IntPtr constructorsPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException row_set_get_columns_count(IntPtr rowSetPtr, out nuint count);
+        unsafe private static extern FFIMaybeException row_set_get_columns_count(IntPtr rowSetPtr, out nuint count);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIException row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter);
+        unsafe private static extern FFIMaybeException row_set_fill_columns_metadata(IntPtr rowSetPtr, IntPtr columnsPtr, IntPtr metadataSetter);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern byte row_set_type_info_get_code(IntPtr typeInfoHandle);
@@ -304,13 +304,13 @@ namespace Cassandra
             }
         }
 
-        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, nuint, IntPtr, FFISliceRaw, FFIException> deserializeValue = &DeserializeValue;
+        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, nuint, IntPtr, FFISliceRaw, FFIMaybeException> deserializeValue = &DeserializeValue;
 
         /// <summary>
         /// This shall be called by Rust code for each column in a row.
         /// </summary>
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static FFIException DeserializeValue(
+        private static FFIMaybeException DeserializeValue(
             IntPtr columnsPtr,
             IntPtr valuesPtr,
             nuint valueIndex,
@@ -337,12 +337,12 @@ namespace Cassandra
                 {
                     throw new InvalidOperationException("GCHandle referenced type mismatch.");
                 }
-                return FFIException.Ok();
+                return FFIMaybeException.Ok();
             }
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[FFI] DeserializeValue threw exception: {ex}");
-                return FFIException.FromException(ex);
+                return FFIMaybeException.FromException(ex);
             }
         }
 

@@ -7,7 +7,7 @@ use scylla::errors::{NewSessionError, PagerExecutionError, PrepareError};
 use scylla_cql::serialize::row::SerializedValues;
 use tokio::sync::RwLock;
 
-use crate::error_conversion::{FFIException, MaybeShutdownError};
+use crate::error_conversion::{FFIMaybeException, MaybeShutdownError};
 use crate::ffi::{
     ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr,
     CSharpManagedStringPtr, CSharpStr, FFI, FFIStr, FromArc, WriteStringCallback,
@@ -375,7 +375,7 @@ pub extern "C" fn session_get_keyspace(
     write_cs_str: WriteStringCallback,
     cs_string: CSharpManagedStringPtr,
     constructors: &'static ExceptionConstructors,
-) -> FFIException {
+) -> FFIMaybeException {
     let session_arc =
         ArcFFI::as_ref(session_ptr).expect("valid and non-null BridgedSession pointer");
 
@@ -385,7 +385,7 @@ pub extern "C" fn session_get_keyspace(
         let ex = constructors
             .already_shutdown_exception_constructor
             .construct_from_rust("Session has been shut down and can no longer execute operations");
-        return FFIException::from_exception(ex);
+        return FFIMaybeException::from_exception(ex);
     };
 
     // Check if session is connected or if it has been shut down.
@@ -393,13 +393,13 @@ pub extern "C" fn session_get_keyspace(
         let ex = constructors
             .already_shutdown_exception_constructor
             .construct_from_rust("Session has been shut down and can no longer execute operations");
-        return FFIException::from_exception(ex);
+        return FFIMaybeException::from_exception(ex);
     };
 
     let Some(keyspace) = session.get_keyspace() else {
         // If no keyspace is set, we don't set FFIStr.
         // This will be treated as null on the C# side.
-        return FFIException::ok();
+        return FFIMaybeException::ok();
     };
 
     let ffi_str = FFIStr::new(keyspace.as_ref());
@@ -417,7 +417,7 @@ pub extern "C" fn session_get_cluster_state(
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
     out_cluster_state: *mut ManuallyDestructible,
     constructors: &'static ExceptionConstructors,
-) -> FFIException {
+) -> FFIMaybeException {
     let session_arc =
         ArcFFI::as_ref(session_ptr).expect("valid and non-null BridgedSession pointer");
 
@@ -427,7 +427,7 @@ pub extern "C" fn session_get_cluster_state(
         let ex = constructors
             .already_shutdown_exception_constructor
             .construct_from_rust("Session has been shut down and can no longer execute operations");
-        return FFIException::from_exception(ex);
+        return FFIMaybeException::from_exception(ex);
     };
 
     // Check if session is connected or if it has been shut down.
@@ -435,7 +435,7 @@ pub extern "C" fn session_get_cluster_state(
         let ex = constructors
             .already_shutdown_exception_constructor
             .construct_from_rust("Session has been shut down and can no longer execute operations");
-        return FFIException::from_exception(ex);
+        return FFIMaybeException::from_exception(ex);
     };
 
     // Get the cluster state from the session and convert it into an ArcFFI-wrapped pointer.
@@ -444,5 +444,5 @@ pub extern "C" fn session_get_cluster_state(
     unsafe {
         *out_cluster_state = md;
     }
-    FFIException::ok()
+    FFIMaybeException::ok()
 }
