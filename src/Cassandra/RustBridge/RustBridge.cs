@@ -317,7 +317,7 @@ namespace Cassandra
         internal readonly struct Tcb<R> where R : IBridgedTaskResult
         {
             /// <summary>
-            ///  Pointer to a GCHandle referencing a TaskCompletionSource&lt;IntPtr&gt;.
+            ///  A (pointer to) GCHandle referencing a TaskCompletionSource&lt;R&gt;.
             ///  This shall be allocated by the C# code before calling into Rust,
             ///  and freed by the C# callback executed by the Rust code once the operation
             ///  is completed (either successfully or with an error).
