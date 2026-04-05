@@ -970,6 +970,23 @@ impl<T> FFIMaybeGCHandle<T> {
             .as_ref()
             .map(|&GCHandlePtr(ptr)| GCHandlePtr(ptr))
     }
+
+    pub(crate) fn try_into_ffi_gc_handle(self) -> Option<FFIGCHandle<T>> {
+        // We perform a move wrt ownership: RustFreeableHandle now owns the gchandle, not we.
+        let (Some(gchandle), Some(free)) = (&self.gchandle, self.free) else {
+            return None;
+        };
+
+        let ret = FFIGCHandle {
+            gchandle: GCHandlePtr(gchandle.0),
+            free,
+        };
+
+        // This is crucial: we must prevent freeing the GCHandle here.
+        std::mem::forget(self);
+
+        Some(ret)
+    }
 }
 
 impl<T> Debug for FFIMaybeGCHandle<T> {
