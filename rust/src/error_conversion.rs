@@ -17,7 +17,7 @@ enum Exception {}
 
 /// A pointer to a C# Exception.
 /// This is used across the FFI boundary to represent exceptions created on the C# side.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct ExceptionPtr(NonNull<Exception>);
 
@@ -332,20 +332,20 @@ pub(crate) enum MaybeShutdownError<E> {
 /// that any pointers passed to the constructors are valid for the duration of the call.
 /// The handle must be freed on the C# side when no longer needed.
 pub trait ErrorToException {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr;
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr;
 }
 
 // This allows returning Infallible as an error type in functions that cannot fail.
 impl ErrorToException for std::convert::Infallible {
-    fn to_exception(&self, _ctors: &ExceptionConstructors) -> ExceptionPtr {
-        match *self {}
+    fn to_exception(self, _ctors: &ExceptionConstructors) -> ExceptionPtr {
+        match self {}
     }
 }
 
 // This allows returning ExceptionPtr directly as an error type in functions that already produce C# exceptions.
 impl ErrorToException for ExceptionPtr {
-    fn to_exception(&self, _ctors: &ExceptionConstructors) -> ExceptionPtr {
-        *self
+    fn to_exception(self, _ctors: &ExceptionConstructors) -> ExceptionPtr {
+        self
     }
 }
 
@@ -353,7 +353,7 @@ impl ErrorToException for ExceptionPtr {
 // For now it only maps specific connection-related error kinds (ConnectionRefused, TimedOut, NotConnected) to a C# NoHostAvailableException.
 // This mapping doesn't deny wildcard matches to ensure all other IO errors are still converted to Rust exceptions without needing to list them all.
 impl ErrorToException for Arc<std::io::Error> {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self.kind() {
             std::io::ErrorKind::ConnectionRefused
             | std::io::ErrorKind::TimedOut
@@ -361,7 +361,7 @@ impl ErrorToException for Arc<std::io::Error> {
                 .no_host_available_exception_constructor
                 .construct_from_rust(self.to_string().as_str()),
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
@@ -369,7 +369,7 @@ impl ErrorToException for Arc<std::io::Error> {
 // Specific mapping for PagerExecutionError.
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for PagerExecutionError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             PagerExecutionError::PrepareError(e) => e.to_exception(ctors),
 
@@ -380,12 +380,12 @@ impl ErrorToException for PagerExecutionError {
             PagerExecutionError::UseKeyspaceError(e) => e.to_exception(ctors),
 
             PagerExecutionError::SchemaAgreementError(_) => {
-                ctors.rust_exception_constructor.construct_from_rust(self)
+                ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
             PagerExecutionError::MetadataError(e) => e.to_exception(ctors),
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
@@ -393,17 +393,17 @@ impl ErrorToException for PagerExecutionError {
 // Specific mapping for NextPageError.
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for NextPageError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             NextPageError::RequestFailure(e) => e.to_exception(ctors),
 
             NextPageError::TypeCheckError(e) => e.to_exception(ctors),
 
             NextPageError::PartitionKeyError(_) | NextPageError::ResultMetadataParseError(_) => {
-                ctors.rust_exception_constructor.construct_from_rust(self)
+                ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
@@ -411,7 +411,7 @@ impl ErrorToException for NextPageError {
 // Specific mapping for RequestError.
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for RequestError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             RequestError::ConnectionPoolError(e) => e.to_exception(ctors),
 
@@ -421,9 +421,9 @@ impl ErrorToException for RequestError {
 
             RequestError::LastAttemptError(e) => e.to_exception(ctors),
 
-            RequestError::EmptyPlan => ctors.rust_exception_constructor.construct_from_rust(self),
+            RequestError::EmptyPlan => ctors.rust_exception_constructor.construct_from_rust(&self),
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
@@ -431,12 +431,12 @@ impl ErrorToException for RequestError {
 // Specific mapping for RequestAttemptError.
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for RequestAttemptError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             RequestAttemptError::SerializationError(e) => e.to_exception(ctors),
 
             RequestAttemptError::DbError(db_error, message) => {
-                (db_error, message.as_str()).to_exception(ctors)
+                (&db_error, message.as_str()).to_exception(ctors)
             }
 
             RequestAttemptError::CqlRequestSerialization(_)
@@ -449,10 +449,10 @@ impl ErrorToException for RequestAttemptError {
             | RequestAttemptError::RepreparedIdChanged { .. }
             | RequestAttemptError::RepreparedIdMissingInBatch
             | RequestAttemptError::NonfinishedPagingState => {
-                ctors.rust_exception_constructor.construct_from_rust(self)
+                ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
@@ -460,17 +460,17 @@ impl ErrorToException for RequestAttemptError {
 // Specific mapping for PrepareError
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for PrepareError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             PrepareError::ConnectionPoolError(e) => e.to_exception(ctors),
 
             PrepareError::AllAttemptsFailed { first_attempt } => first_attempt.to_exception(ctors),
 
             PrepareError::PreparedStatementIdsMismatch => {
-                ctors.rust_exception_constructor.construct_from_rust(self)
+                ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
@@ -478,7 +478,7 @@ impl ErrorToException for PrepareError {
 // Specific mapping for NewSessionError
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for NewSessionError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             NewSessionError::MetadataError(e) => e.to_exception(ctors),
 
@@ -486,17 +486,17 @@ impl ErrorToException for NewSessionError {
 
             NewSessionError::FailedToResolveAnyHostname(_)
             | NewSessionError::EmptyKnownNodesList => {
-                ctors.rust_exception_constructor.construct_from_rust(self)
+                ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for MetadataError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             MetadataError::ConnectionPoolError(e) => e.to_exception(ctors),
 
@@ -505,38 +505,38 @@ impl ErrorToException for MetadataError {
             | MetadataError::Keyspaces(_)
             | MetadataError::Udts(_)
             | MetadataError::Tables(_) => {
-                ctors.rust_exception_constructor.construct_from_rust(self)
+                ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for UseKeyspaceError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             UseKeyspaceError::BadKeyspaceName(e) => e.to_exception(ctors),
 
             UseKeyspaceError::RequestError(e) => e.to_exception(ctors),
 
             UseKeyspaceError::KeyspaceNameMismatch { .. } => {
-                ctors.rust_exception_constructor.construct_from_rust(self)
+                ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
             UseKeyspaceError::RequestTimeout(duration) => ctors
                 .operation_timed_out_exception_constructor
                 .construct_from_rust(duration.as_millis().clamp(0, i32::MAX as u128) as i32),
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for BadKeyspaceName {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             // Rust considers an empty keyspace name invalid, but the C# wrapper should never allow this to be passed in.
             // (At least for the case of setting a keyspace on Connect().)
@@ -552,7 +552,7 @@ impl ErrorToException for BadKeyspaceName {
                 .invalid_query_constructor
                 .construct_from_rust(self.to_string().as_str()),
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
@@ -560,7 +560,7 @@ impl ErrorToException for BadKeyspaceName {
 // Tuple-based mapping to include the server-provided message alongside DbError
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for (&DbError, &str) {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         let (db_error, message) = self;
         match db_error {
             DbError::AlreadyExists { keyspace, table } => ctors
@@ -617,7 +617,7 @@ impl ErrorToException for (&DbError, &str) {
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for ConnectionPoolError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             ConnectionPoolError::Broken {
                 last_connection_error: ConnectionError::IoError(io_err),
@@ -632,29 +632,29 @@ impl ErrorToException for ConnectionPoolError {
             ConnectionPoolError::Broken { .. }
             | ConnectionPoolError::NodeDisabledByHostFilter
             | ConnectionPoolError::Initializing => {
-                ctors.rust_exception_constructor.construct_from_rust(self)
+                ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
 
 #[deny(clippy::wildcard_enum_match_arm)]
 impl ErrorToException for NextRowError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             NextRowError::NextPageError(e) => e.to_exception(ctors),
 
             NextRowError::RowDeserializationError(e) => e.to_exception(ctors),
 
-            _ => ctors.rust_exception_constructor.construct_from_rust(self),
+            _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
 }
 
 impl ErrorToException for DeserializationError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         ctors
             .deserialization_exception_constructor
             .construct_from_rust(&self.to_string())
@@ -662,7 +662,7 @@ impl ErrorToException for DeserializationError {
 }
 
 impl ErrorToException for SerializationError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         ctors
             .serialization_exception_constructor
             .construct_from_rust(&self.to_string())
@@ -670,7 +670,7 @@ impl ErrorToException for SerializationError {
 }
 
 impl ErrorToException for TypeCheckError {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         ctors
             .invalid_type_exception_constructor
             .construct_from_rust(&self.to_string())
@@ -681,7 +681,7 @@ impl<E> ErrorToException for MaybeShutdownError<E>
 where
     E: ErrorToException,
 {
-    fn to_exception(&self, ctors: &ExceptionConstructors) -> ExceptionPtr {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> ExceptionPtr {
         match self {
             MaybeShutdownError::Inner(e) => e.to_exception(ctors),
             MaybeShutdownError::AlreadyShutdown => ctors
