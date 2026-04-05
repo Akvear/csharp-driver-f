@@ -908,7 +908,6 @@ impl<T> FFIGCHandle<T> {
     /// Borrows the GCHandle, for use by C#.
     /// Borrow checker prevents use-after-free, ensuring that FFIGCHandle
     /// is kept alive.
-    #[expect(dead_code)] // Will be used soon.
     pub(crate) fn borrow<'gc>(&'gc self) -> GCHandlePtr<'gc, T> {
         GCHandlePtr(self.gchandle.0)
     }

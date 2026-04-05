@@ -2,6 +2,7 @@ using System;
 
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Cassandra.Serialization;
 using static Cassandra.RustBridge;
 
@@ -26,17 +27,18 @@ namespace Cassandra
         /// <param name="Columns">The columns metadata for the row.</param>
         /// <param name="serializer">The serializer to use for deserialization.</param>
         /// <returns>True if a row was retrieved; false if there are no more rows.</returns>
-        internal bool NextRow(object[] values, CqlColumn[] Columns, IGenericSerializer serializer)
+        internal async Task<bool> NextRow(object[] values, CqlColumn[] Columns, IGenericSerializer serializer)
         {
             var columnsHandle = new FFIGCHandle(GCHandle.Alloc(Columns));
             var valuesHandle = new FFIGCHandle(GCHandle.Alloc(values));
             var serializerHandle = new FFIGCHandle(GCHandle.Alloc(serializer));
-            FFIBool hasRow = false;
+
+            Task<FFIBool> task;
             unsafe
             {
-                RunWithIncrement(handle => row_set_next_row(handle, (IntPtr)deserializeValue, columnsHandle, valuesHandle, serializerHandle, out hasRow, (IntPtr)Globals.ConstructorsPtr));
+                task = RunAsyncWithIncrement<FFIBool>((tcb, row_set) => row_set_next_row_async(tcb, row_set, (IntPtr)deserializeValue, columnsHandle, valuesHandle, serializerHandle, (IntPtr)Globals.ConstructorsPtr));
             }
-            return hasRow;
+            return await task.ConfigureAwait(false);
         }
 
         /// <summary>
@@ -134,7 +136,7 @@ namespace Cassandra
         // Private methods and P/Invoke
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIMaybeException row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, FFIGCHandle columnsPtr, FFIGCHandle valuesPtr, FFIGCHandle serializerPtr, out FFIBool hasRow, IntPtr constructorsPtr);
+        unsafe private static extern void row_set_next_row_async(Tcb<FFIBool> tcb, IntPtr rowSetPtr, IntPtr deserializeValue, FFIGCHandle columnsHandle, FFIGCHandle valuesHandle, FFIGCHandle serializerHandle, IntPtr constructorsPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException row_set_get_columns_count(IntPtr rowSetPtr, out nuint count);

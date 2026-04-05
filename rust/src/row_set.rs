@@ -8,8 +8,7 @@ use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIGCHandle, FFINonNullPtr, FFISlice, FFIStr, FromArc,
     FromRef, GCHandlePtr, RefFFI,
 };
-use crate::task::BridgedFuture;
-use crate::task::ExceptionConstructors;
+use crate::task::{BridgedFuture, ExceptionConstructors, Tcb};
 
 #[derive(Debug)]
 pub(crate) struct RowSet {
@@ -196,6 +195,8 @@ fn deserialize_next_row(
     Ok(true)
 }
 
+// Replaced by async version in row_set_next_row_async, but this will be
+// still used in some way in next commits. Stay tuned!
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_next_row<'row_set>(
     row_set_ptr: BridgedBorrowedSharedPtr<'row_set, RowSet>,
@@ -239,6 +240,40 @@ pub extern "C" fn row_set_next_row<'row_set>(
     }
 
     result
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn row_set_next_row_async<'row_set>(
+    tcb: Tcb<bool>,
+    row_set_ptr: BridgedBorrowedSharedPtr<'row_set, RowSet>,
+    deserialize_value: DeserializeValue,
+    columns_handle: FFIGCHandle<Columns>,
+    values_handle: FFIGCHandle<Values>,
+    serializer_handle: FFIGCHandle<Serializer>,
+    constructors: &'static ExceptionConstructors,
+) {
+    let row_set = ArcFFI::cloned_from_ptr(row_set_ptr).unwrap();
+    BridgedFuture::spawn(tcb, async move {
+        let mut pager = row_set.pager.lock().await;
+        let num_columns = pager.column_specs().len();
+
+        let next = pager.next_column_iterator().await;
+
+        deserialize_next_row(
+            next,
+            num_columns,
+            |value_index, frame_slice| unsafe {
+                deserialize_value(
+                    columns_handle.borrow(),
+                    values_handle.borrow(),
+                    value_index,
+                    serializer_handle.borrow(),
+                    FFISlice::new(frame_slice.as_slice()),
+                )
+            },
+            constructors,
+        )
+    });
 }
 
 #[unsafe(no_mangle)]

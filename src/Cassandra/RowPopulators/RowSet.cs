@@ -139,7 +139,7 @@ namespace Cassandra
         }
 
 #nullable enable
-        private Row? DeserializeRow()
+        private async Task<Row?> DeserializeRow()
 #nullable disable
         {
             if (bridgedRowSet == null)
@@ -150,7 +150,7 @@ namespace Cassandra
 
             IGenericSerializer serializer = _genericSerializer;
 
-            var hasRow = bridgedRowSet.NextRow(values, Columns, serializer);
+            var hasRow = await bridgedRowSet.NextRow(values, Columns, serializer).ConfigureAwait(false);
             if (!hasRow)
             {
                 _exhausted = true;
@@ -213,7 +213,7 @@ namespace Cassandra
         {
             while (!IsExhausted())
             {
-                Row row = DeserializeRow();
+                Row row = DeserializeRow().GetAwaiter().GetResult();
                 if (row == null)
                     yield break;
 
