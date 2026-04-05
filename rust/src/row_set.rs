@@ -9,7 +9,6 @@ use crate::ffi::{
 use crate::task::BridgedFuture;
 use crate::task::ExceptionConstructors;
 
-// TO DO: Don't use mock RowSet - remove Option<> from the pager field
 #[derive(Debug)]
 pub(crate) struct RowSet {
     // FIXME: consider if this Mutex is necessary. Perhaps BoxFFI is a better fit?
