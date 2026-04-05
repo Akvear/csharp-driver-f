@@ -36,20 +36,6 @@ pub extern "C" fn init_rust_logging() {
     crate::logging::init_logging();
 }
 
-enum TcsInner {}
-
-/// Opaque type representing a C# TaskCompletionSource<T>.
-struct Tcs<T> {
-    _tcs: TcsInner,
-    _phantom: PhantomData<T>,
-}
-
-/// A pointer to a TaskCompletionSource<T> on the C# side.
-#[repr(transparent)]
-pub struct TcsPtr<T>(FFIPtr<'static, Tcs<T>>);
-
-unsafe impl<T> Send for TcsPtr<T> {}
-
 /// A struct representing a manually destructible resource passed across the FFI boundary.
 /// It contains a pointer to the resource and a function pointer to its destructor.
 /// All changes to this struct's fields must be mirrored in C# code in the exact same order.
@@ -137,6 +123,20 @@ impl<T: Destructible> From<Option<Arc<T>>> for ManuallyDestructible {
         }
     }
 }
+
+enum TcsInner {}
+
+/// Opaque type representing a C# TaskCompletionSource<T>.
+struct Tcs<T> {
+    _tcs: TcsInner,
+    _phantom: PhantomData<T>,
+}
+
+/// A pointer to a TaskCompletionSource<T> on the C# side.
+#[repr(transparent)]
+pub struct TcsPtr<T>(FFIPtr<'static, Tcs<T>>);
+
+unsafe impl<T> Send for TcsPtr<T> {}
 
 /// **Task Control Block** (TCB)
 ///
