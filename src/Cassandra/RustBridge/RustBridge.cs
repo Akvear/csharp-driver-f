@@ -436,12 +436,13 @@ namespace Cassandra
                     // Recover the GCHandle that was allocated for the TaskCompletionSource.
                     var handle = GCHandle.FromIntPtr(tcsPtr);
 
-                    if (handle.Target is TaskCompletionSource<R> tcsMd)
+                    try
                     {
-                        // Create the exception to pass to the TCS.
-                        Exception exception;
-                        try
+
+                        if (handle.Target is TaskCompletionSource<R> tcsMd)
                         {
+                            // Create the exception to pass to the TCS.
+                            Exception exception;
                             if (exceptionPtr.exception != IntPtr.Zero)
                             {
                                 // Recover the exception from the GCHandle passed from Rust.
@@ -473,23 +474,22 @@ namespace Cassandra
                                 exception = new RustException("Unknown error from Rust");
                             }
                             tcsMd.SetException(exception);
+                            Console.Error.WriteLine($"[FFI] FailTask done.");
+
                         }
-                        finally
+                        else
                         {
-                            // Free the handle so the TCS can be collected once no longer used
-                            // by the C# code.
-                            if (handle.IsAllocated)
-                            {
-                                handle.Free();
-                            }
+                            throw new InvalidOperationException($"GCHandle did not reference a TaskCompletionSource<{typeof(R)}>.");
                         }
-
-                        Console.Error.WriteLine($"[FFI] FailTask done.");
-
                     }
-                    else
+                    finally
                     {
-                        throw new InvalidOperationException($"GCHandle did not reference a TaskCompletionSource<{typeof(R)}>.");
+                        // Free the handle so the TCS can be collected once no longer used
+                        // by the C# code.
+                        if (handle.IsAllocated)
+                        {
+                            handle.Free();
+                        }
                     }
                 }
                 catch (Exception ex)
