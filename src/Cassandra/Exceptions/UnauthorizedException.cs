@@ -17,6 +17,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using static Cassandra.RustBridge;
 
 namespace Cassandra
 {
@@ -30,13 +31,13 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr UnauthorizedExceptionFromRust(RustBridge.FFIString message)
+        internal static FFIGCHandle UnauthorizedExceptionFromRust(FFIString message)
         {
             string messageStr = message.ToManagedString();
             var exception = new UnauthorizedException(messageStr);
 
             GCHandle handle = GCHandle.Alloc(exception);
-            return GCHandle.ToIntPtr(handle);
+            return new(handle);
         }
     }
 }

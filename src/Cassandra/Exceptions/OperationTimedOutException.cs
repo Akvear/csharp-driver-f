@@ -18,6 +18,7 @@ using System.Net;
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using static Cassandra.RustBridge;
 
 // ReSharper disable once CheckNamespace
 namespace Cassandra
@@ -40,13 +41,12 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr OperationTimedOutExceptionFromRust(int timeout)
+        internal static FFIGCHandle OperationTimedOutExceptionFromRust(int timeout)
         {
             Exception exception = new OperationTimedOutException(timeout);
 
             GCHandle handle = GCHandle.Alloc(exception);
-            IntPtr handlePtr = GCHandle.ToIntPtr(handle);
-            return handlePtr;
+            return new(handle);
         }
     }
 }

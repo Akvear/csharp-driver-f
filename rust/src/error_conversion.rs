@@ -1,4 +1,4 @@
-use crate::ffi::{FFISlice, FFIStr};
+use crate::ffi::{FFIGCHandle, FFIMaybeGCHandle, FFISlice, FFIStr};
 use scylla::errors::{
     BadKeyspaceName, ConnectionError, ConnectionPoolError, DbError, DeserializationError,
     MetadataError, NewSessionError, NextPageError, NextRowError, PagerExecutionError, PrepareError,
@@ -6,7 +6,6 @@ use scylla::errors::{
 };
 use std::fmt::{Debug, Display};
 use std::mem::size_of;
-use std::ptr::NonNull;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -15,11 +14,15 @@ use crate::task::ExceptionConstructors;
 // Opaque type representing a C# Exception.
 enum Exception {}
 
-/// A pointer to a C# Exception.
+/// A GCHandle'd C# Exception.
 /// This is used across the FFI boundary to represent exceptions created on the C# side.
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct FFIException(NonNull<Exception>);
+pub struct FFIException(FFIGCHandle<Exception>);
+
+// Compile-time assertion that `FFI` is double-pointer-sized.
+// Ensures ABI compatibility with C# (opaque FFIGCHandle across FFI).
+const _: [(); size_of::<FFIException>()] = [(); size_of::<(*const (), *const ())>()];
 
 /// Wrapper struct for returning exceptions over FFI.
 ///
@@ -29,23 +32,19 @@ pub struct FFIException(NonNull<Exception>);
 /// All changes to this struct must be mirrored in C# code in the exact same order.
 #[repr(transparent)]
 #[must_use]
-pub struct FFIMaybeException {
-    pub exception: Option<FFIException>,
-}
+pub struct FFIMaybeException(FFIMaybeGCHandle<Exception>);
 
-// Compile-time assertion that `FFIMaybeException` is pointer-sized.
-// Ensures ABI compatibility with C# (opaque GCHandle/IntPtr across FFI).
-const _: [(); size_of::<FFIMaybeException>()] = [(); size_of::<*const ()>()];
+// Compile-time assertion that `FFIMaybeException` is double-pointer-sized.
+// Ensures ABI compatibility with C# (opaque FFIMaybeGCHandle across FFI).
+const _: [(); size_of::<FFIMaybeException>()] = [(); size_of::<(*const (), *const ())>()];
 
 impl FFIMaybeException {
     pub(crate) fn ok() -> Self {
-        Self { exception: None }
+        Self(FFIMaybeGCHandle::empty())
     }
 
     pub(crate) fn from_exception(exception: FFIException) -> Self {
-        Self {
-            exception: Some(exception),
-        }
+        Self(exception.0.into_ffi_maybe_gc_handle())
     }
 
     pub(crate) fn from_error<E>(error: E, constructors: &ExceptionConstructors) -> Self
@@ -57,7 +56,7 @@ impl FFIMaybeException {
     }
 
     pub(crate) fn has_exception(&self) -> bool {
-        self.exception.is_some()
+        !self.0.is_empty()
     }
 }
 

@@ -22,6 +22,7 @@ using System.Runtime.Serialization;
 using System.Text;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using static Cassandra.RustBridge;
 
 namespace Cassandra
 {
@@ -102,14 +103,13 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr NoHostAvailableExceptionFromRust(RustBridge.FFIString message)
+        internal static FFIGCHandle NoHostAvailableExceptionFromRust(FFIString message)
         {
             string msg = message.ToManagedString();
             var exception = new NoHostAvailableException(msg);
 
             GCHandle handle = GCHandle.Alloc(exception);
-            IntPtr handlePtr = GCHandle.ToIntPtr(handle);
-            return handlePtr;
+            return new(handle);
         }
     }
 }

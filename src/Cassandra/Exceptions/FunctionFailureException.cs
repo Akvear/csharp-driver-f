@@ -18,6 +18,7 @@ using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
+using static Cassandra.RustBridge;
 
 // ReSharper disable once CheckNamespace
 namespace Cassandra
@@ -55,13 +56,13 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr FunctionFailureExceptionFromRust(RustBridge.FFIString message)
+        internal static FFIGCHandle FunctionFailureExceptionFromRust(FFIString message)
         {
             string msg = message.ToManagedString();
             var exception = new FunctionFailureException(msg);
 
             GCHandle handle = GCHandle.Alloc(exception);
-            return GCHandle.ToIntPtr(handle);
+            return new(handle);
         }
     }
 }

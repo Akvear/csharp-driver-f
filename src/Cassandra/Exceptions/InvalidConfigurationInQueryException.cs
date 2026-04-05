@@ -17,6 +17,7 @@
 using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using static Cassandra.RustBridge;
 
 namespace Cassandra
 {
@@ -33,13 +34,13 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr InvalidConfigurationInQueryExceptionFromRust(RustBridge.FFIString message)
+        internal static FFIGCHandle InvalidConfigurationInQueryExceptionFromRust(FFIString message)
         {
             string msg = message.ToManagedString();
             var exception = new InvalidConfigurationInQueryException(msg);
 
-            var handle = GCHandle.Alloc(exception);
-            return GCHandle.ToIntPtr(handle);
+            GCHandle handle = GCHandle.Alloc(exception);
+            return new(handle);
         }
     }
 }

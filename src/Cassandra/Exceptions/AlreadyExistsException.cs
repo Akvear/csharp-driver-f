@@ -16,6 +16,7 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using static Cassandra.RustBridge;
 
 namespace Cassandra
 {
@@ -53,7 +54,7 @@ namespace Cassandra
         }
 
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        internal static IntPtr AlreadyExistsExceptionFromRust(RustBridge.FFIString keyspace, RustBridge.FFIString table)
+        internal static FFIGCHandle AlreadyExistsExceptionFromRust(FFIString keyspace, FFIString table)
         {
             string keyspaceStr = keyspace.ToManagedString();
             string tableStr = table.ToManagedString();
@@ -61,8 +62,7 @@ namespace Cassandra
             var exception = new AlreadyExistsException(keyspaceStr, tableStr);
 
             GCHandle handle = GCHandle.Alloc(exception);
-            IntPtr handlePtr = GCHandle.ToIntPtr(handle);
-            return handlePtr;
+            return new(handle);
         }
 
         private static string MakeMsg(string keyspace, string table)
