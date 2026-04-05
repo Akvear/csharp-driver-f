@@ -19,7 +19,7 @@ use crate::error_conversion::{
     TraceRetrievalExceptionConstructor, TruncateExceptionConstructor,
     UnauthorizedExceptionConstructor,
 };
-use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr, FFIPtr};
+use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr, FFIGCHandle};
 
 /// The global Tokio runtime used to execute async tasks.
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
@@ -123,7 +123,6 @@ impl<T: Destructible> From<Option<Arc<T>>> for ManuallyDestructible {
         }
     }
 }
-
 enum TcsInner {}
 
 /// Opaque type representing a C# TaskCompletionSource<T>.
@@ -131,12 +130,6 @@ struct Tcs<T> {
     _tcs: TcsInner,
     _phantom: PhantomData<T>,
 }
-
-/// A pointer to a TaskCompletionSource<T> on the C# side.
-#[repr(transparent)]
-pub struct TcsPtr<T>(FFIPtr<'static, Tcs<T>>);
-
-unsafe impl<T> Send for TcsPtr<T> {}
 
 /// **Task Control Block** (TCB)
 ///
@@ -146,11 +139,11 @@ unsafe impl<T> Send for TcsPtr<T> {}
 /// or fail (set an exception) the task.
 #[repr(C)] // <- Ensure FFI-compatible layout
 pub struct Tcb<R> {
-    tcs: TcsPtr<R>,
+    tcs: FFIGCHandle<Tcs<R>>,
     /// Function pointer type to complete a TaskCompletionSource with a result.
-    complete_task: unsafe extern "C" fn(tcs: TcsPtr<R>, result: R),
+    complete_task: unsafe extern "C" fn(tcs: FFIGCHandle<Tcs<R>>, result: R),
     /// Function pointer type to fail a TaskCompletionSource with an exception handle.
-    fail_task: unsafe extern "C" fn(tcs: TcsPtr<R>, exception_handle: ExceptionPtr),
+    fail_task: unsafe extern "C" fn(tcs: FFIGCHandle<Tcs<R>>, exception_handle: ExceptionPtr),
     /// Pointer to the collection of exception constructors.
     // SAFETY: The memory is a leaked unmanaged allocation on the C# side.
     // This guarantees that the pointer remains valid and is not moved or deallocated.

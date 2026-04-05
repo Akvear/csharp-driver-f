@@ -225,14 +225,14 @@ namespace Cassandra
             /// <summary>
             /// This must return a pointer to the appropriate [UnmanagedCallersOnly] CompleteTask method for the result type R.
             /// This MUST have the following signature:
-            /// unsafe static delegate* unmanaged[Cdecl]&lt;IntPtr tcs, Self this, void&gt;
+            /// unsafe static delegate* unmanaged[Cdecl]&lt;FFIGCHandle tcs, Self this, void&gt;
             /// </summary>
             internal static abstract IntPtr CompleteTaskDelegate { get; }
 
             /// <summary>
             /// This must return a pointer to the appropriate [UnmanagedCallersOnly] FailTask method for the result type R.
             /// This MUST have the following signature:
-            /// unsafe static delegate* unmanaged[Cdecl]&lt;IntPtr tcs, FFIException exception_ptr, void&gt;
+            /// unsafe static delegate* unmanaged[Cdecl]&lt;FFIGCHandle tcs, FFIException exception_ptr, void&gt;
             /// </summary>
             internal static abstract IntPtr FailTaskDelegate { get; }
         }
@@ -258,32 +258,32 @@ namespace Cassandra
             /// <summary>
             /// This shall be called by Rust code when the operation is completed.
             /// </summary>
-            // Signature in Rust: extern "C" fn(tcs: *mut c_void, res: bool)
+            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, res: bool)
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-            internal static void CompleteTask(IntPtr tcsPtr, FFIBool result)
+            internal static void CompleteTask(FFIGCHandle tcsHandle, FFIBool result)
             {
-                Tcb<FFIBool>.CompleteTask(tcsPtr, result);
+                Tcb<FFIBool>.CompleteTask(tcsHandle, result);
             }
 
             /// <summary>
             /// This shall be called by Rust code when the operation failed.
             /// </summary>
             //
-            // Signature in Rust: extern "C" fn(tcs: *mut c_void, exception_handle: ExceptionPtr)
+            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, exception_handle: ExceptionPtr)
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-            internal static void FailTask(IntPtr tcsPtr, FFIException exceptionPtr)
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIException exceptionPtr)
             {
-                Tcb<FFIBool>.FailTask(tcsPtr, exceptionPtr);
+                Tcb<FFIBool>.FailTask(tcsHandle, exceptionPtr);
             }
 
-            internal unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, FFIBool, void> completeTaskDel = &CompleteTask;
-            internal unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, FFIException, void> failTaskDel = &FailTask;
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIBool, void> completeTaskDel = &CompleteTask;
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIException, void> failTaskDel = &FailTask;
 
             static IntPtr IBridgedTaskResult.CompleteTaskDelegate
             {
@@ -328,28 +328,28 @@ namespace Cassandra
             /// <summary>
             /// This shall be called by Rust code when the operation is completed.
             /// </summary>
-            // Signature in Rust: extern "C" fn(tcs: *mut c_void, res: ManuallyDestructible)
+            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, res: ManuallyDestructible)
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-            internal static void CompleteTask(IntPtr tcsPtr, ManuallyDestructible manuallyDestructible)
+            internal static void CompleteTask(FFIGCHandle tcsHandle, ManuallyDestructible manuallyDestructible)
             {
-                Tcb<ManuallyDestructible>.CompleteTask(tcsPtr, manuallyDestructible);
+                Tcb<ManuallyDestructible>.CompleteTask(tcsHandle, manuallyDestructible);
             }
 
             /// <summary>
             /// This shall be called by Rust code when the operation failed.
             /// </summary>
             //
-            // Signature in Rust: extern "C" fn(tcs: *mut c_void, exception_handle: ExceptionPtr)
+            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, exception_handle: ExceptionPtr)
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-            internal static void FailTask(IntPtr tcsPtr, FFIException exceptionPtr)
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIException exceptionPtr)
             {
-                Tcb<ManuallyDestructible>.FailTask(tcsPtr, exceptionPtr);
+                Tcb<ManuallyDestructible>.FailTask(tcsHandle, exceptionPtr);
             }
 
 
@@ -365,8 +365,8 @@ namespace Cassandra
             // `unsafe` is required to get a function pointer to a static method.
             // Note that we can get this pointer because the method is static and
             // decorated with [UnmanagedCallersOnly].
-            internal unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, ManuallyDestructible, void> completeTaskDel = &CompleteTask;
-            internal unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, FFIException, void> failTaskDel = &FailTask;
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, ManuallyDestructible, void> completeTaskDel = &CompleteTask;
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIException, void> failTaskDel = &FailTask;
 
             static IntPtr IBridgedTaskResult.CompleteTaskDelegate
             {
@@ -407,7 +407,7 @@ namespace Cassandra
             ///  and freed by the C# callback executed by the Rust code once the operation
             ///  is completed (either successfully or with an error).
             /// </summary>
-            internal readonly IntPtr tcs;
+            internal readonly FFIGCHandle tcs;
 
             /// <summary>
             ///  Pointer to the C# method to call when the operation is completed successfully.
@@ -427,7 +427,7 @@ namespace Cassandra
             /// </summary>
             private readonly IntPtr constructors;
 
-            private Tcb(IntPtr tcs, IntPtr completeTask, IntPtr failTask)
+            private Tcb(FFIGCHandle tcs, IntPtr completeTask, IntPtr failTask)
             {
                 this.tcs = tcs;
                 this.complete_task = completeTask;
@@ -455,32 +455,30 @@ namespace Cassandra
                  * We must remember to free the handle later when the TCS is completed (see CompleteTask
                  * method).
                  */
-                var handle = GCHandle.Alloc(tcs);
-
-                IntPtr tcsPtr = GCHandle.ToIntPtr(handle);
+                var tcsHandle = new FFIGCHandle(GCHandle.Alloc(tcs));
 
                 // `unsafe` is required to get a function pointer to a static method.
                 unsafe
                 {
                     IntPtr completeTaskPtr = R.CompleteTaskDelegate;
                     IntPtr failTaskPtr = R.FailTaskDelegate;
-                    return new Tcb<R>(tcsPtr, completeTaskPtr, failTaskPtr);
+                    return new Tcb<R>(tcsHandle, completeTaskPtr, failTaskPtr);
                 }
             }
 
             /// <summary>
             /// This shall be called by Rust code when the operation is completed.
             /// </summary>
-            // Signature in Rust: extern "C" fn(tcs: *mut c_void, res: R)
+            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, res: R)
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
-            internal static void CompleteTask(IntPtr tcsPtr, R result)
+            internal static void CompleteTask(FFIGCHandle tcsHandle, R result)
             {
                 try
                 {
                     // Recover the GCHandle that was allocated for the TaskCompletionSource.
-                    var handle = GCHandle.FromIntPtr(tcsPtr);
+                    var handle = GCHandle.FromIntPtr(tcsHandle.gchandle);
 
                     try
                     {
@@ -518,16 +516,16 @@ namespace Cassandra
             /// This shall be called by Rust code when the operation failed.
             /// </summary>
             //
-            // Signature in Rust: extern "C" fn(tcs: *mut c_void, exception_handle: ExceptionPtr)
+            // Signature in Rust: extern "C" fn(tcs: FFIGCHandle, exception_handle: ExceptionPtr)
             //
             // This attribute makes the method callable from native code.
             // It also allows taking a function pointer to the method.
-            internal static void FailTask(IntPtr tcsPtr, FFIException exceptionPtr)
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIException exceptionPtr)
             {
                 try
                 {
                     // Recover the GCHandle that was allocated for the TaskCompletionSource.
-                    var handle = GCHandle.FromIntPtr(tcsPtr);
+                    var handle = GCHandle.FromIntPtr(tcsHandle.gchandle);
 
                     try
                     {
