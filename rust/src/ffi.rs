@@ -803,7 +803,6 @@ pub struct FFINonNullPtr<'a, T: Sized> {
 }
 
 impl<'a, T> FFINonNullPtr<'a, T> {
-    #[expect(dead_code)]
     pub(crate) fn from_ref(value: &'a T) -> Self {
         Self {
             ptr: NonNull::from(value),

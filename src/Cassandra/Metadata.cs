@@ -15,9 +15,7 @@
 //
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -37,7 +35,6 @@ namespace Cassandra
 
         public event SchemaChangedEventHandler SchemaChangedEvent;
 #pragma warning restore CS0067
-
         /// <summary>
         ///  Returns the name of currently connected cluster.
         /// </summary>
@@ -244,19 +241,6 @@ namespace Cassandra
         }
 
         /// <summary>
-        /// Get the replicas for a given partition key and keyspace
-        /// </summary>
-        public ICollection<HostShard> GetReplicas(string keyspaceName, byte[] partitionKey)
-        {
-            throw new NotImplementedException();
-        }
-
-        public ICollection<HostShard> GetReplicas(byte[] partitionKey)
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
         /// Returns a registry instance, refreshing topology if needed.
         /// </summary>
         private ClusterSnapshot GetSnapshot()
@@ -356,6 +340,39 @@ namespace Cassandra
                     _session.DecreaseReferenceCount();
                 }
             }
+        }
+
+        /// <summary>
+        /// When the caller doesn't specify a keyspace (either by passing `null` or using
+        /// the overload that omits the keyspace), we send this empty sentinel value to
+        /// the Rust bridge. No keyspace matches the empty name in cluster metadata, so the
+        /// bridge applies its fallback replication strategy (LocalStrategy), which resolves
+        /// to the single primary token owner.
+        /// </summary>
+        private const string NoSpecifiedKeyspace = "";
+
+        /// <summary>
+        /// Get the replicas for a given partition key and keyspace
+        /// </summary>
+        public ICollection<HostShard> GetReplicas(string keyspaceName, byte[] partitionKey)
+        {
+            ArgumentNullException.ThrowIfNull(partitionKey);
+
+            using var snapshot = GetSnapshot();
+
+            // This legacy overload takes no table name, so token computation is forced to
+            // Murmur3. The original driver resolved the partitioner from system.local instead;
+            // FIXME: bridge that lookup from the Rust driver so non-Murmur3 clusters are handled.
+
+            // Coalesce null keyspace to the empty sentinel; with no matching keyspace the Rust
+            // side falls back to LocalStrategy, returning only the primary token owner.
+            return snapshot.State.GetReplicasLegacyMurmur3(
+                keyspaceName ?? NoSpecifiedKeyspace, snapshot.Registry.HostsById, partitionKey);
+        }
+
+        public ICollection<HostShard> GetReplicas(byte[] partitionKey)
+        {
+            return GetReplicas(NoSpecifiedKeyspace, partitionKey);
         }
 
         /// <summary>
