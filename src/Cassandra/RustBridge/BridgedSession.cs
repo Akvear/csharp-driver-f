@@ -41,14 +41,15 @@ namespace Cassandra
         private static extern FFIMaybeException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
 
         /// <summary>
-        /// Executes a query with already-serialized values.
-        ///
-        /// Note: This method transfers ownership of valuesPtr to native code, thus invalidating the SerializedValues instance after use.
-        /// Values, once passed to this method, should not be used again in managed code, it's the Rust side's responsibility to handle retries
-        /// and to free the memory.
+        /// Executes a query with values supplied via the populate-callback pattern.
+        /// Rust invokes <paramref name="populateValuesCallback"/> synchronously during this call,
+        /// passing a pointer to a stack-allocated <c>PreSerializedValues</c>. The callback
+        /// populates it by calling <c>psv_add_value</c> / <c>psv_add_null</c> / <c>psv_add_unset</c>.
+        /// The <paramref name="populateValuesContext"/> pointer must remain valid for the duration
+        /// of the call; it is not used after this function returns.
         /// </summary>
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void session_query_with_values(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr valuesPtr);
+        unsafe private static extern void session_query_with_values(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr populateValuesContext, IntPtr populateValuesCallback);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_prepare(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
@@ -57,7 +58,7 @@ namespace Cassandra
         unsafe private static extern void session_query_bound(Tcb<ManuallyDestructible> tcb, IntPtr session, IntPtr preparedStatement);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void session_query_bound_with_values(Tcb<ManuallyDestructible> tcb, IntPtr session, IntPtr preparedStatement, IntPtr valuesPtr);
+        unsafe private static extern void session_query_bound_with_values(Tcb<ManuallyDestructible> tcb, IntPtr session, IntPtr preparedStatement, IntPtr populateValuesContext, IntPtr populateValuesCallback);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
@@ -116,12 +117,19 @@ namespace Cassandra
         /// Executes a query with serialized values.
         /// </summary>
         /// <param name="statement">CQL statement to be executed on the session.</param>
-        /// <param name="queryValues">Values to be serialized and bound to the query.</param>
-        /// <param name="serializer">Serializer to use for serializing the values.</param>
-        internal Task<ManuallyDestructible> QueryWithValues(string statement, object[] queryValues, ISerializer serializer)
+        /// <param name="queryValues">Values to be serialized on demand and bound to the query.</param>
+        /// <param name="serializer">Serializer to use for converting CLR values to CQL bytes.</param>
+        internal unsafe Task<ManuallyDestructible> QueryWithValues(string statement, object[] queryValues, ISerializer serializer)
         {
-            IntPtr valuesPtr = SerializationHandler.InitializeSerializedValues(queryValues, serializer).TakeNativeHandle();
-            return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query_with_values(tcb, ptr, statement, valuesPtr));
+            var populateCtx = SerializationHandler.CreateContext(queryValues, serializer);
+            var ctxIntPtr = (IntPtr)Unsafe.AsPointer(ref populateCtx);
+            var task = RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) =>
+                session_query_with_values(
+                    tcb, ptr, statement,
+                    ctxIntPtr,
+                    (IntPtr)SerializationHandler.PopulateValuesPtr));
+            GC.KeepAlive(populateCtx);
+            return task;
         }
 
         /// <summary>
@@ -146,12 +154,19 @@ namespace Cassandra
         /// Executes a prepared statement with bound values.
         /// </summary>
         /// <param name="preparedStatement">Pointer to the prepared statement handle.</param>
-        /// <param name="queryValues">Values to be serialized and bound to the prepared statement.</param>
-        /// <param name="serializer">Serializer to use for serializing the values.</param>
-        internal Task<ManuallyDestructible> QueryBoundWithValues(IntPtr preparedStatement, object[] queryValues, ISerializer serializer)
+        /// <param name="queryValues">Values to be serialized on demand and bound to the prepared statement.</param>
+        /// <param name="serializer">Serializer to use for converting CLR values to CQL bytes.</param>
+        internal unsafe Task<ManuallyDestructible> QueryBoundWithValues(IntPtr preparedStatement, object[] queryValues, ISerializer serializer)
         {
-            IntPtr valuesPtr = SerializationHandler.InitializeSerializedValues(queryValues, serializer).TakeNativeHandle();
-            return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query_bound_with_values(tcb, ptr, preparedStatement, valuesPtr));
+            var populateCtx = SerializationHandler.CreateContext(queryValues, serializer);
+            var ctxIntPtr = (IntPtr)Unsafe.AsPointer(ref populateCtx);
+            var task = RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) =>
+                session_query_bound_with_values(
+                    tcb, ptr, preparedStatement,
+                    ctxIntPtr,
+                    (IntPtr)SerializationHandler.PopulateValuesPtr));
+            GC.KeepAlive(populateCtx);
+            return task;
         }
 
         /// <summary>

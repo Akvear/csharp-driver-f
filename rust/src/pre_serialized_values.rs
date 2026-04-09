@@ -1,7 +1,5 @@
-use crate::error_conversion::FFIMaybeException;
-use crate::ffi::{
-    BoxFFI, BridgedBorrowedExclusivePtr, BridgedOwnedExclusivePtr, FFI, FFISlice, FromBox,
-};
+use crate::error_conversion::{FFIException, FFIMaybeException};
+use crate::ffi::{BridgedBorrowedExclusivePtr, FFI, FFIPtr, FFISlice, FromBox};
 use crate::task::ExceptionConstructors;
 use scylla_cql::frame::response::result::{ColumnType, NativeType};
 use scylla_cql::serialize::SerializationError;
@@ -11,7 +9,7 @@ use scylla_cql::serialize::writers::CellWriter;
 
 /// A single pre-serialized cell: either a C#-backed value, or a
 /// logical null/unset marker.
-pub enum PreSerializedCell<'a> {
+enum PreSerializedCell<'a> {
     Value(FFISlice<'a, u8>),
     Null,
     Unset,
@@ -37,40 +35,60 @@ impl SerializeValue for PreSerializedCell<'_> {
 
 /// Holds the final serialized values that can be used with queries.
 /// Wraps scylla_cql::SerializedValues.
-pub struct PreSerializedValues {
+pub(crate) struct PreSerializedValues {
     serialized_values: SerializedValues,
 }
 
 impl PreSerializedValues {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             serialized_values: SerializedValues::new(),
         }
     }
 
     /// Consume and return the inner SerializedValues.
-    pub fn into_serialized_values(self) -> SerializedValues {
+    pub(crate) fn into_serialized_values(self) -> SerializedValues {
         self.serialized_values
     }
 
     /// Add a value that was pre-serialized by C#.
     ///
-    /// Safety:
-    /// - The C# buffer pointed to by `value` must remain valid and pinned for the duration
-    ///   of this call. The data is copied into the internal buffer immediately.
-    pub(super) fn add_value(&mut self, value: FFISlice<'_, u8>) -> Result<(), SerializationError> {
+    /// The C# buffer pointed to by `value` must remain valid and pinned for the
+    /// duration of this call. The data is copied into the internal buffer immediately.
+    pub(crate) fn add_value(&mut self, value: FFISlice<'_, u8>) -> Result<(), SerializationError> {
         let cell = PreSerializedCell::Value(value);
         self.serialized_values.add_value(&cell, dummy_column_type())
     }
 
-    pub(super) fn add_null(&mut self) -> Result<(), SerializationError> {
+    pub(crate) fn add_null(&mut self) -> Result<(), SerializationError> {
         let cell = PreSerializedCell::Null;
         self.serialized_values.add_value(&cell, dummy_column_type())
     }
 
-    pub(super) fn add_unset(&mut self) -> Result<(), SerializationError> {
+    pub(crate) fn add_unset(&mut self) -> Result<(), SerializationError> {
         let cell = PreSerializedCell::Unset;
         self.serialized_values.add_value(&cell, dummy_column_type())
+    }
+
+    /// Builds `PreSerializedValues` on the stack by asking C# to populate it.
+    ///
+    /// Rust creates the PSV, then calls the C# `populate` callback, passing a raw
+    /// pointer to the stack-allocated PSV. The C# side iterates its values and calls
+    /// back into Rust via [`psv_add_value`] / [`psv_add_null`] / [`psv_add_unset`]
+    /// for each value. When the callback returns, the PSV is fully built.
+    pub(crate) fn from_populate_callback(
+        context: PopulateValuesContext<'_>,
+        populate: PopulateValues,
+    ) -> Result<Self, FFIException> {
+        let mut psv = PreSerializedValues::new();
+
+        // SAFETY: The callback must only use the pointer to
+        // call the exported `psv_add_*` functions and must not store it.
+        let result = unsafe { populate(context, &mut psv as *mut _) };
+        match result.try_into_ffi_exception() {
+            None => Ok(psv),
+            Some(exception) => Err(exception),
+        }
     }
 }
 
@@ -85,65 +103,78 @@ fn dummy_column_type() -> &'static ColumnType<'static> {
     &DUMMY_COLUMN_TYPE
 }
 
-#[unsafe(no_mangle)]
-pub extern "C" fn pre_serialized_values_new() -> BridgedOwnedExclusivePtr<PreSerializedValues> {
-    BoxFFI::into_ptr(Box::new(PreSerializedValues::new()))
-}
-
-/// Adds a pre-serialized value from a C#-owned buffer to the builder.
 ///
 /// # Safety
-/// `value_ptr` and the data it points to must remain valid for the duration of this call.
+/// - `psv` must be a valid pointer to a `PreSerializedValues` (obtained from the
+///   populate callback's `psv` argument).
+/// - `value` must point to pinned memory that remains valid for this call
+///   (Rust copies immediately).
+/// - `constructors` must point to a valid `ExceptionConstructors`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn pre_serialized_values_add_value(
-    values_ptr: BridgedBorrowedExclusivePtr<'_, PreSerializedValues>,
+pub extern "C" fn psv_add_value(
+    psv: BridgedBorrowedExclusivePtr<'_, PreSerializedValues>,
     value: FFISlice<'_, u8>,
     constructors: &'static ExceptionConstructors,
 ) -> FFIMaybeException {
-    let Some(values) = BoxFFI::as_mut_ref(values_ptr) else {
-        panic!("invalid PreSerializedValues pointer in pre_serialized_values_add_value");
-    };
-    match values.add_value(value) {
+    let psv = psv
+        .into_mut_ref()
+        .expect("valid and non-null PreSerializedValues pointer");
+    match psv.add_value(value) {
         Ok(()) => FFIMaybeException::ok(),
         Err(e) => FFIMaybeException::from_error(e, constructors),
     }
 }
 
-/// Adds a null cell to the builder.
+/// Add a NULL cell to the builder.
+///
+/// # Safety
+/// - `psv` must be a valid pointer to a `PreSerializedValues`.
+/// - `constructors` must point to a valid `ExceptionConstructors`.
 #[unsafe(no_mangle)]
-pub extern "C" fn pre_serialized_values_add_null(
-    values_ptr: BridgedBorrowedExclusivePtr<'_, PreSerializedValues>,
+pub extern "C" fn psv_add_null(
+    psv: BridgedBorrowedExclusivePtr<'_, PreSerializedValues>,
     constructors: &'static ExceptionConstructors,
 ) -> FFIMaybeException {
-    let Some(values) = BoxFFI::as_mut_ref(values_ptr) else {
-        panic!("invalid PreSerializedValues pointer in pre_serialized_values_add_null");
-    };
-    match values.add_null() {
+    let psv = psv
+        .into_mut_ref()
+        .expect("valid and non-null PreSerializedValues pointer");
+    match psv.add_null() {
         Ok(()) => FFIMaybeException::ok(),
         Err(e) => FFIMaybeException::from_error(e, constructors),
     }
 }
 
-/// Adds an unset cell to the builder.
+/// Add an UNSET cell to the builder.
+///
+/// # Safety
+/// - `psv` must be a valid pointer to a `PreSerializedValues`.
+/// - `constructors` must point to a valid `ExceptionConstructors`.
 #[unsafe(no_mangle)]
-pub extern "C" fn pre_serialized_values_add_unset(
-    values_ptr: BridgedBorrowedExclusivePtr<'_, PreSerializedValues>,
+pub extern "C" fn psv_add_unset(
+    psv: BridgedBorrowedExclusivePtr<'_, PreSerializedValues>,
     constructors: &'static ExceptionConstructors,
 ) -> FFIMaybeException {
-    let Some(values) = BoxFFI::as_mut_ref(values_ptr) else {
-        panic!("invalid PreSerializedValues pointer in pre_serialized_values_add_unset");
-    };
-    match values.add_unset() {
+    let psv = psv
+        .into_mut_ref()
+        .expect("valid and non-null PreSerializedValues pointer");
+    match psv.add_unset() {
         Ok(()) => FFIMaybeException::ok(),
         Err(e) => FFIMaybeException::from_error(e, constructors),
     }
 }
 
-/// Frees the PreSerializedValues if it was not consumed by a query.
-#[unsafe(no_mangle)]
-pub extern "C" fn pre_serialized_values_free(
-    values_ptr: BridgedOwnedExclusivePtr<PreSerializedValues>,
-) {
-    // Simply drop the Box<PreSerializedValues>
-    let _ = BoxFFI::from_ptr(values_ptr);
-}
+/// Opaque type for the C# populate-values callback context.
+enum CSharpPopulateState {}
+
+/// Opaque context pointer passed from C# to Rust and handed back to the
+/// populate callback so C# can locate its managed state.
+#[repr(transparent)]
+pub(crate) struct PopulateValuesContext<'a>(FFIPtr<'a, CSharpPopulateState>);
+
+/// Callback type: Rust hands C# a mutable PSV pointer, C# populates it
+/// by calling `psv_add_value` / `psv_add_null` / `psv_add_unset`, then
+/// returns `FFIMaybeException::ok()` on success or an exception on error.
+pub(crate) type PopulateValues = unsafe extern "C" fn(
+    context: PopulateValuesContext<'_>,
+    psv: *mut PreSerializedValues,
+) -> FFIMaybeException;

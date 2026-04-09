@@ -266,11 +266,10 @@ namespace Cassandra
                     }
                     else
                     {
-                        var serializer = _serializerManager.GetCurrentSerializer();
                         task = bridgedSession.QueryWithValues(
                             queryString,
                             queryValues,
-                            serializer
+                            _serializerManager.GetCurrentSerializer()
                         );
                     }
 
@@ -302,11 +301,10 @@ namespace Cassandra
                     }
                     else
                     {
-                        var serializer = _serializerManager.GetCurrentSerializer();
                         boundTask = bridgedSession.QueryBoundWithValues(
                             queryPrepared,
                             queryValuesBound,
-                            serializer
+                            _serializerManager.GetCurrentSerializer()
                         );
                     }
 

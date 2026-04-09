@@ -59,7 +59,6 @@ impl FFIMaybeException {
         !self.0.is_empty()
     }
 
-    #[expect(dead_code)] // Will be used in a follow-up PR.
     pub(crate) fn try_into_ffi_exception(self) -> Option<FFIException> {
         self.0.try_into_ffi_gc_handle().map(FFIException)
     }

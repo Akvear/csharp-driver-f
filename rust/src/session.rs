@@ -9,10 +9,10 @@ use tokio::sync::RwLock;
 
 use crate::error_conversion::{FFIMaybeException, MaybeShutdownError};
 use crate::ffi::{
-    ArcFFI, BoxFFI, BridgedBorrowedSharedPtr, BridgedOwnedExclusivePtr, BridgedOwnedSharedPtr,
-    CSharpManagedStringPtr, CSharpStr, FFI, FFIStr, FromArc, WriteStringCallback,
+    ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, CSharpManagedStringPtr, CSharpStr,
+    FFI, FFIStr, FromArc, WriteStringCallback,
 };
-use crate::pre_serialized_values::PreSerializedValues;
+use crate::pre_serialized_values::{PopulateValues, PopulateValuesContext, PreSerializedValues};
 use crate::prepared_statement::BridgedPreparedStatement;
 use crate::row_set::RowSet;
 use crate::session_config::BridgedSessionConfig;
@@ -164,13 +164,18 @@ pub extern "C" fn session_query_with_values(
     tcb: Tcb<ManuallyDestructible>,
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
     statement: CSharpStr<'_>,
-    values_ptr: BridgedOwnedExclusivePtr<PreSerializedValues>,
+    populate_values_context: PopulateValuesContext<'_>,
+    populate_values: PopulateValues,
 ) {
-    // Take ownership of the pre-serialized values box so we can move it into the async task.
-    // Important: the order of operations here matters. We need to ensure we take ownership of the box first. In case any further operations panic,
-    // we don't want to leak the pointer.
-    // Note: this transfers ownership, so the C# side must not free it!
-    let values_box = BoxFFI::from_ptr(values_ptr).expect("non-null PreSerializedValues pointer");
+    let psv =
+        match PreSerializedValues::from_populate_callback(populate_values_context, populate_values)
+        {
+            Ok(v) => v,
+            Err(exception) => {
+                tcb.fail_task(exception);
+                return;
+            }
+        };
 
     // Convert the raw C string to a Rust string.
     let statement = statement.as_cstr().unwrap().to_str().unwrap().to_owned();
@@ -206,7 +211,7 @@ pub extern "C" fn session_query_with_values(
             .map_err(|e| MaybeShutdownError::Inner(PagerExecutionError::PrepareError(e)))?;
 
         // Convert our FFI wrapper into SerializedValues by consuming it.
-        let serialized_values: SerializedValues = values_box.into_serialized_values();
+        let serialized_values: SerializedValues = psv.into_serialized_values();
 
         // Now execute using the internal execute_iter_preserialized helper.
         // Map to appropriate error type.
@@ -322,13 +327,18 @@ pub extern "C" fn session_query_bound_with_values(
     tcb: Tcb<ManuallyDestructible>,
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
     prepared_statement_ptr: BridgedBorrowedSharedPtr<'_, BridgedPreparedStatement>,
-    values_ptr: BridgedOwnedExclusivePtr<PreSerializedValues>,
+    populate_values_context: PopulateValuesContext<'_>,
+    populate_values: PopulateValues,
 ) {
-    // Take ownership of the pre-serialized values box so we can move it into the async task.
-    // Important: the order of operations here matters. We need to ensure we take ownership of the box first. In case any further operations panic,
-    // we don't want to leak the pointer.
-    // Note: this transfers ownership, so the C# side must not free it!
-    let values_box = BoxFFI::from_ptr(values_ptr).expect("non-null PreSerializedValues pointer");
+    let psv =
+        match PreSerializedValues::from_populate_callback(populate_values_context, populate_values)
+        {
+            Ok(v) => v,
+            Err(exception) => {
+                tcb.fail_task(exception);
+                return;
+            }
+        };
 
     let bridged_prepared = ArcFFI::cloned_from_ptr(prepared_statement_ptr).unwrap();
     let session_arc = ArcFFI::cloned_from_ptr(session_ptr).unwrap();
@@ -354,7 +364,7 @@ pub extern "C" fn session_query_bound_with_values(
         };
 
         // Convert our FFI wrapper into SerializedValues by consuming it.
-        let serialized_values: SerializedValues = values_box.into_serialized_values();
+        let serialized_values: SerializedValues = psv.into_serialized_values();
 
         let query_pager = session
             .execute_iter_preserialized(bridged_prepared.inner.clone(), serialized_values)

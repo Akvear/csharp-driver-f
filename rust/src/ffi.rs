@@ -193,7 +193,7 @@ impl<'a, T: Sized, P: Properties> BridgedPtr<'a, T, P> {
 impl<'a, T: Sized> BridgedPtr<'a, T, Exclusive> {
     /// Converts a pointer to an optional valid mutable reference.
     /// The reference inherits the lifetime of the pointer.
-    fn into_mut_ref(self) -> Option<&'a mut T> {
+    pub(crate) fn into_mut_ref(self) -> Option<&'a mut T> {
         // SAFETY: Thanks to the validity and aliasing ^ mutability guarantees,
         // we can safely convert the pointer to valid mutable (and exclusive) reference with
         // correct lifetime.
