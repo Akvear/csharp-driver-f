@@ -131,3 +131,9 @@ public SocketOptions SetReadTimeoutMillis(int milliseconds)
 The underlying Rust driver only supports a global, session-level request timeout configured at session creation time. It does not expose a mechanism for per-attempt timeouts. As a result, the value set through `SetReadTimeoutMillis` is accepted by the API but currently has no effect.
 
 **Migration Impact:** Remove any calls to `SetReadTimeoutMillis`. Once the Rust driver gains support for per-attempt timeouts, this option will usable again.
+
+## SimpleStatement API
+
+### Removed APIs
+
+Removed `Bind` / `BindObjects` methods from `SimpleStatement`. These methods have been marked as obsolete in the original C# driver for a while. To set values for a `SimpleStatement`, one should pass them as parameters to the constructor. Generally, the recommended approach is to use `PreparedStatement` for queries with parameters, which provides better performance and security.
