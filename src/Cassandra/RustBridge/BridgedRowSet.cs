@@ -139,7 +139,7 @@ namespace Cassandra
                     // If a non-null type-info handle was provided by Rust, build the corresponding IColumnInfo
                     if (typeInfoPtr != IntPtr.Zero)
                     {
-                        col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode);
+                        col.TypeInfo = BuildTypeInfoFromHandle(typeInfoPtr, col.TypeCode, col.Keyspace);
                     }
                 }
                 return FFIMaybeException.Ok();
@@ -203,7 +203,7 @@ namespace Cassandra
         }
 
         // This function is called from UnmanagedCallersOnly context - it must not throw exceptions.
-        internal static IColumnInfo BuildTypeInfoFromHandle(IntPtr handle, ColumnTypeCode code)
+        internal static IColumnInfo BuildTypeInfoFromHandle(IntPtr handle, ColumnTypeCode code, string keyspaceHint = null)
         {
             if (handle == IntPtr.Zero) return null;
             try
@@ -216,7 +216,7 @@ namespace Cassandra
                         {
                             row_set_type_info_get_list_child(handle, out IntPtr child);
                             var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
-                            var childInfo = BuildTypeInfoFromHandle(child, childCode);
+                            var childInfo = BuildTypeInfoFromHandle(child, childCode, keyspaceHint);
                             var listInfo = new ListColumnInfo { ValueTypeCode = childCode, ValueTypeInfo = childInfo };
                             return listInfo;
                         }
@@ -227,8 +227,8 @@ namespace Cassandra
                             row_set_type_info_get_map_children(handle, out IntPtr keyHandle, out IntPtr valueHandle);
                             var keyCode = (ColumnTypeCode)row_set_type_info_get_code(keyHandle);
                             var valueCode = (ColumnTypeCode)row_set_type_info_get_code(valueHandle);
-                            var keyInfo = BuildTypeInfoFromHandle(keyHandle, keyCode);
-                            var valueInfo = BuildTypeInfoFromHandle(valueHandle, valueCode);
+                            var keyInfo = BuildTypeInfoFromHandle(keyHandle, keyCode, keyspaceHint);
+                            var valueInfo = BuildTypeInfoFromHandle(valueHandle, valueCode, keyspaceHint);
                             var mapInfo = new MapColumnInfo { KeyTypeCode = keyCode, KeyTypeInfo = keyInfo, ValueTypeCode = valueCode, ValueTypeInfo = valueInfo };
                             return mapInfo;
                         }
@@ -242,7 +242,7 @@ namespace Cassandra
                             {
                                 row_set_type_info_get_tuple_field(handle, i, out IntPtr fieldHandle);
                                 var fCode = (ColumnTypeCode)row_set_type_info_get_code(fieldHandle);
-                                var fInfo = BuildTypeInfoFromHandle(fieldHandle, fCode);
+                                var fInfo = BuildTypeInfoFromHandle(fieldHandle, fCode, keyspaceHint);
                                 var desc = new ColumnDesc { TypeCode = fCode, TypeInfo = fInfo };
                                 tupleInfo.Elements.Add(desc);
                             }
@@ -254,6 +254,10 @@ namespace Cassandra
                         {
                             row_set_type_info_get_udt_name(handle, out FFIString udtName);
                             var name = udtName.ToManagedString();
+                            if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(keyspaceHint))
+                            {
+                                name = $"{keyspaceHint}.{name}";
+                            }
                             var udtInfo = new UdtColumnInfo(name ?? "");
                             nuint fcount = row_set_type_info_get_udt_field_count(handle);
                             for (nuint i = 0; i < fcount; i++)
@@ -262,7 +266,7 @@ namespace Cassandra
                                 {
                                     var fname = fieldName.ToManagedString();
                                     var fcode = (ColumnTypeCode)row_set_type_info_get_code(fieldTypeHandle);
-                                    var fInfo = BuildTypeInfoFromHandle(fieldTypeHandle, fcode);
+                                    var fInfo = BuildTypeInfoFromHandle(fieldTypeHandle, fcode, keyspaceHint);
                                     var desc = new ColumnDesc { Name = fname, TypeCode = fcode, TypeInfo = fInfo };
                                     udtInfo.Fields.Add(desc);
                                 }
@@ -276,7 +280,7 @@ namespace Cassandra
                             row_set_type_info_get_set_child(handle, out IntPtr child);
                             {
                                 var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
-                                var childInfo = BuildTypeInfoFromHandle(child, childCode);
+                                var childInfo = BuildTypeInfoFromHandle(child, childCode, keyspaceHint);
                                 var setInfo = new SetColumnInfo { KeyTypeCode = childCode, KeyTypeInfo = childInfo };
                                 return setInfo;
                             }
@@ -287,7 +291,7 @@ namespace Cassandra
                         {
                             row_set_type_info_get_vector_child(handle, out IntPtr child);
                             var childCode = (ColumnTypeCode)row_set_type_info_get_code(child);
-                            var childInfo = BuildTypeInfoFromHandle(child, childCode);
+                            var childInfo = BuildTypeInfoFromHandle(child, childCode, keyspaceHint);
                             var dims = (int)row_set_type_info_get_vector_dimensions(handle);
                             var vectorInfo = new VectorColumnInfo { ValueTypeCode = childCode, ValueTypeInfo = childInfo, Dimensions = dims };
                             return vectorInfo;
