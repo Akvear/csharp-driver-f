@@ -107,6 +107,7 @@ namespace Cassandra.IntegrationTests.Core
                     new TestCaseData("mixed_type_two", (Func<MixedTypeTwo>)(()=>new MixedTypeTwo { a = (long)r.NextDouble(), b = r.Next()}), defaultAssert),
                     new TestCaseData("var_type", (Func<VarType>)(()=>new VarType { a = (long)r.NextDouble(), b = (long)r.NextDouble()}), defaultAssert),
                     new TestCaseData("complex_vector_udt", (Func<ComplexVectorUdt>)(()=>new ComplexVectorUdt { a = new CqlVector<int>(r.Next(), r.Next(), r.Next()), b = new CqlVector<BigInteger>(r.Next(), r.Next(), r.Next())}), defaultAssert),
+                    new TestCaseData("nested_type", (Func<NestedType>)(()=>new NestedType { a = r.Next(), b = new FixedType { a = r.Next(), b = r.Next() } }), defaultAssert),
                 };
         }
 
@@ -356,13 +357,15 @@ namespace Cassandra.IntegrationTests.Core
                 Session.Execute("create type if not exists mixed_type_two (a varint, b int)");
                 Session.Execute("create type if not exists var_type (a varint, b varint)");
                 Session.Execute("create type if not exists complex_vector_udt (a vector<int, 3>, b vector<varint, 3>)");
+                Session.Execute("create type if not exists nested_type (a int, b frozen<fixed_type>)");
             }
             Session.UserDefinedTypes.Define(
                 UdtMap.For<FixedType>("fixed_type"),
                 UdtMap.For<MixedTypeOne>("mixed_type_one"),
                 UdtMap.For<MixedTypeTwo>("mixed_type_two"),
                 UdtMap.For<VarType>("var_type"),
-                UdtMap.For<ComplexVectorUdt>("complex_vector_udt"));
+                UdtMap.For<ComplexVectorUdt>("complex_vector_udt"),
+                UdtMap.For<NestedType>("nested_type"));
         }
 
         public class FixedType
@@ -503,6 +506,34 @@ namespace Cassandra.IntegrationTests.Core
             public CqlVector<int> a { get; set; }
 
             public CqlVector<BigInteger> b { get; set; }
+        }
+
+        public class NestedType
+        {
+            protected bool Equals(NestedType other)
+            {
+                return a == other.a && Equals(b, other.b);
+            }
+
+            public override bool Equals(object obj)
+            {
+                if (obj is null) return false;
+                if (ReferenceEquals(this, obj)) return true;
+                if (obj.GetType() != GetType()) return false;
+                return Equals((NestedType)obj);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    return (a * 397) ^ (b != null ? b.GetHashCode() : 0);
+                }
+            }
+
+            public int a { get; set; }
+
+            public FixedType b { get; set; }
         }
     }
 }
