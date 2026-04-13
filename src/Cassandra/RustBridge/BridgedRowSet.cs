@@ -202,12 +202,16 @@ namespace Cassandra
             return count;
         }
 
-        // This function is called from UnmanagedCallersOnly context - it must not throw exceptions.
-        internal static IColumnInfo BuildTypeInfoFromHandle(IntPtr handle, ColumnTypeCode code, string keyspaceHint = null)
+        // This function is called from UnmanagedCallersOnly context - make sure no exceptions cross the FFI boundary.
+        internal static IColumnInfo BuildTypeInfoFromHandle(IntPtr handle, ColumnTypeCode code, string keyspaceHint)
         {
             if (handle == IntPtr.Zero) return null;
             try
             {
+                if (keyspaceHint == null)
+                {
+                    throw new ArgumentNullException(nameof(keyspaceHint), "Keyspace hint cannot be null when building column type info from handle.");
+                }
                 switch (code)
                 {
                     case ColumnTypeCode.List:
@@ -253,12 +257,8 @@ namespace Cassandra
                         unsafe
                         {
                             row_set_type_info_get_udt_name(handle, out FFIString udtName);
-                            var name = udtName.ToManagedString();
-                            if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(keyspaceHint))
-                            {
-                                name = $"{keyspaceHint}.{name}";
-                            }
-                            var udtInfo = new UdtColumnInfo(name ?? "");
+                            var name = $"{keyspaceHint}.{udtName.ToManagedString() ?? ""}";
+                            var udtInfo = new UdtColumnInfo(name);
                             nuint fcount = row_set_type_info_get_udt_field_count(handle);
                             for (nuint i = 0; i < fcount; i++)
                             {

@@ -476,10 +476,22 @@ namespace Cassandra
             return udtContext.UdtDefinition;
         }
 
+        private sealed class TableColumnsContext
+        {
+            internal string KeyspaceName;
+            internal List<TableColumn> Columns;
+
+            internal TableColumnsContext(string keyspaceName)
+            {
+                KeyspaceName = keyspaceName;
+                Columns = new List<TableColumn>();
+            }
+        }
+
         private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFIString, byte, IntPtr, FFIBool, FFIBool, FFIMaybeException> ConstructTableColumnPtr = &ConstructTableColumn;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
         private static unsafe FFIMaybeException ConstructTableColumn(
-            IntPtr tableColumnsListPtr,
+            IntPtr tableColumnsContextPtr,
             FFIString columnName,
             byte typeCode,
             IntPtr typeInfoPtr,
@@ -488,7 +500,7 @@ namespace Cassandra
         {
             try
             {
-                var tableColumnsList = Unsafe.AsRef<List<TableColumn>>((void*)tableColumnsListPtr);
+                var tableColumnsContext = Unsafe.AsRef<TableColumnsContext>((void*)tableColumnsContextPtr);
 
                 var column = new TableColumn
                 {
@@ -498,11 +510,11 @@ namespace Cassandra
                     // From `ColumnDesc`
                     Name = columnName.ToManagedString(),
                     TypeCode = (ColumnTypeCode)typeCode,
-                    TypeInfo = typeInfoPtr != IntPtr.Zero ? BridgedRowSet.BuildTypeInfoFromHandle(typeInfoPtr, (ColumnTypeCode)typeCode) : null,
+                    TypeInfo = typeInfoPtr != IntPtr.Zero ? BridgedRowSet.BuildTypeInfoFromHandle(typeInfoPtr, (ColumnTypeCode)typeCode, tableColumnsContext.KeyspaceName) : null,
                     IsStatic = isStatic,
                     IsFrozen = isFrozen
                 };
-                tableColumnsList.Add(column);
+                tableColumnsContext.Columns.Add(column);
 
                 return FFIMaybeException.Ok();
             }
@@ -536,7 +548,7 @@ namespace Cassandra
             IntPtr clusterState,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspaceName,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string tableName,
-            IntPtr tableColumnsListPtr,
+            IntPtr tableColumnsContextPtr,
             IntPtr constructTableColumnCallback,
             IntPtr partitionKeysListPtr,
             IntPtr clusteringKeysListPtr,
@@ -549,14 +561,15 @@ namespace Cassandra
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
         private static unsafe FFIMaybeException FillTableMetadata(
             IntPtr tableContextPtr,
-            IntPtr tableColumnsListPtr,
+            IntPtr tableColumnsContextPtr,
             IntPtr partitionKeys,
             IntPtr clusteringKeys)
         {
             try
             {
                 var tableMetadata = Unsafe.AsRef<TableMetadata>((void*)tableContextPtr);
-                var tableColumnsList = Unsafe.AsRef<List<TableColumn>>((void*)tableColumnsListPtr);
+                var tableColumnsContext = Unsafe.AsRef<TableColumnsContext>((void*)tableColumnsContextPtr);
+                var tableColumnsList = tableColumnsContext.Columns;
 
                 var tableColumnsDictionary = new Dictionary<string, TableColumn>();
                 foreach (var tc in tableColumnsList)
@@ -605,7 +618,7 @@ namespace Cassandra
         internal TableMetadata GetTableMetadata(string keyspaceName, string tableName)
         {
             var tmd = new TableMetadata(keyspaceName, tableName);
-            var tableColumnsList = new List<TableColumn>();
+            var tableColumnsContext = new TableColumnsContext(keyspaceName);
             var partitionKeys = new List<string>();
             var clusteringKeys = new List<string>();
 
@@ -618,7 +631,7 @@ namespace Cassandra
                             handle,
                             keyspaceName,
                             tableName,
-                            (IntPtr)Unsafe.AsPointer(ref tableColumnsList),
+                            (IntPtr)Unsafe.AsPointer(ref tableColumnsContext),
                             (IntPtr)ConstructTableColumnPtr,
                             (IntPtr)Unsafe.AsPointer(ref partitionKeys),
                             (IntPtr)Unsafe.AsPointer(ref clusteringKeys),
@@ -641,7 +654,7 @@ namespace Cassandra
                 throw new InvalidOperationException($"Error retrieving metadata for table '{tableName}' in keyspace '{keyspaceName}'.", ex);
             }
 
-            GC.KeepAlive(tableColumnsList);
+            GC.KeepAlive(tableColumnsContext);
             GC.KeepAlive(partitionKeys);
             GC.KeepAlive(clusteringKeys);
 
