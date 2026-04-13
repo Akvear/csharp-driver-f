@@ -47,4 +47,34 @@
     <PackageReference Include="System.Runtime.InteropServices.RuntimeInformation" Version="4.3.0" />
     <PackageReference Include="System.Threading.Tasks.Dataflow" Version="9.0.13" />
   </ItemGroup>
+
+  <Target Name="BuildRustNativeWrapperDebug"
+          BeforeTargets="Build"
+      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Debug' and '$(IsCrossTargetingBuild)' == 'true'">
+    <PropertyGroup>
+      <RepoRootDir>$(MSBuildThisFileDirectory)../..</RepoRootDir>
+    </PropertyGroup>
+
+    <Exec WorkingDirectory="$(RepoRootDir)" Command="make build-rust" />
+  </Target>
+
+  <Target Name="BuildRustNativeWrapperRelease"
+          BeforeTargets="Build"
+      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Release' and '$(IsCrossTargetingBuild)' == 'true'">
+    <PropertyGroup>
+      <RustProjectDir>$(MSBuildThisFileDirectory)../../rust</RustProjectDir>
+    </PropertyGroup>
+
+    <Exec WorkingDirectory="$(RustProjectDir)" Command="cargo build --release" />
+  </Target>
+
+  <Target Name="LinkRustNativeWrapperDebug"
+          AfterTargets="Build"
+      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Debug' and '$(IsCrossTargetingBuild)' == 'true'">
+    <PropertyGroup>
+      <RepoRootDir>$(MSBuildThisFileDirectory)../..</RepoRootDir>
+    </PropertyGroup>
+
+    <Exec WorkingDirectory="$(RepoRootDir)" Command="make create-rust-lib-symlinks" />
+  </Target>
 </Project>
