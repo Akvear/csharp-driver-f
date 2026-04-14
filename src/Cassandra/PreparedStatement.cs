@@ -287,12 +287,6 @@ namespace Cassandra
             return this;
         }
 
-        public PreparedStatement SetLwt(bool isLwt)
-        {
-            _isLwt = isLwt;
-            return this;
-        }
-
         /// <summary>
         /// Returns the string of the query that was prepared to yield this PreparedStatement.
         /// </summary>

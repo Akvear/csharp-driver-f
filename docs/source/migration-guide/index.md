@@ -137,3 +137,15 @@ The underlying Rust driver only supports a global, session-level request timeout
 ### Removed APIs
 
 Removed `Bind` / `BindObjects` methods from `SimpleStatement`. These methods have been marked as obsolete in the original C# driver for a while. To set values for a `SimpleStatement`, one should pass them as parameters to the constructor. Generally, the recommended approach is to use `PreparedStatement` for queries with parameters, which provides better performance and security.
+
+## PreparedStatement API
+
+### Removed APIs
+
+Removed `SetLwt` method from `PreparedStatement`. It was mistakenly added to the public API in the original C# driver, but it was never intended to be used for any purpose.
+
+## BoundStatement API
+
+### Removed APIs
+
+Removed `SetLwt` method from `BoundStatement`. It was mistakenly added to the public API in the original C# driver, but it was never intended to be used for any purpose.

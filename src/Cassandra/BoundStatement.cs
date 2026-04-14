@@ -82,12 +82,6 @@ namespace Cassandra
             return _preparedStatement.IsLwt;
         }
 
-        public BoundStatement SetLwt(bool isLwt)
-        {
-            _preparedStatement.SetLwt(isLwt);
-            return this;
-        }
-
         /// <summary>
         /// Initializes a new instance of the Cassandra.BoundStatement class
         /// </summary>
