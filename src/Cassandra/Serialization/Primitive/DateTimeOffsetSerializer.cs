@@ -26,9 +26,9 @@ namespace Cassandra.Serialization.Primitive
             get { return ColumnTypeCode.Timestamp; }
         }
 
-        internal static DateTimeOffset Deserialize(byte[] buffer, int offset)
+        internal static DateTimeOffset Deserialize(ReadOnlySpan<byte> buffer)
         {
-            var milliseconds = BinaryPrimitives.ReadInt64BigEndian(buffer.AsSpan(offset));
+            var milliseconds = BinaryPrimitives.ReadInt64BigEndian(buffer);
             return UnixStart.AddTicks(TimeSpan.TicksPerMillisecond * milliseconds);
         }
 
@@ -40,9 +40,9 @@ namespace Cassandra.Serialization.Primitive
             return buffer;
         }
 
-        public override DateTimeOffset Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override DateTimeOffset Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            return Deserialize(buffer, offset);
+            return Deserialize(buffer);
         }
 
         public override byte[] Serialize(ushort protocolVersion, DateTimeOffset value)

@@ -31,7 +31,7 @@ namespace Cassandra.Serialization
             get { throw new NotSupportedException("CollectionSerializer does not represent to a single CQL type"); }
         }
 
-        public override IEnumerable Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override IEnumerable Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
             ColumnTypeCode? childTypeCode = null;
             IColumnInfo childTypeInfo = null;
@@ -52,13 +52,14 @@ namespace Cassandra.Serialization
                 throw new DriverInternalError(string.Format("CollectionSerializer can not deserialize CQL values of type {0}",
                     typeInfo == null ? "null" : typeInfo.GetType().FullName));
             }
-            var count = DecodeCollectionLength((ProtocolVersion)protocolVersion, buffer, ref offset);
+            var remaining = buffer;
+            var count = DecodeCollectionLength((ProtocolVersion)protocolVersion, ref remaining);
             var childType = GetClrType(childTypeCode.Value, childTypeInfo);
             var result = Array.CreateInstance(childType, count);
             bool? isNullable = null;
             for (var i = 0; i < count; i++)
             {
-                var itemLength = DecodeCollectionLength((ProtocolVersion)protocolVersion, buffer, ref offset);
+                var itemLength = DecodeCollectionLength((ProtocolVersion)protocolVersion, ref remaining);
                 if (itemLength < 0)
                 {
                     if (isNullable == null)
@@ -83,8 +84,8 @@ namespace Cassandra.Serialization
                 }
                 else
                 {
-                    result.SetValue(DeserializeChild(protocolVersion, buffer, offset, itemLength, childTypeCode.Value, childTypeInfo), i);
-                    offset += itemLength;
+                    result.SetValue(DeserializeChild(protocolVersion, remaining.Slice(0, itemLength), childTypeCode.Value, childTypeInfo), i);
+                    remaining = remaining.Slice(itemLength);
                 }
             }
             return result;

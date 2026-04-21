@@ -14,6 +14,9 @@
 //   limitations under the License.
 //
 
+using System;
+using System.Buffers.Binary;
+
 namespace Cassandra.Serialization.Primitive
 {
     internal class LocalDateSerializer : TypeSerializer<LocalDate>
@@ -23,12 +26,9 @@ namespace Cassandra.Serialization.Primitive
             get { return ColumnTypeCode.Date; }
         }
 
-        public override LocalDate Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override LocalDate Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            var days = unchecked((uint)((buffer[offset] << 24)
-                   | (buffer[offset + 1] << 16)
-                   | (buffer[offset + 2] << 8)
-                   | (buffer[offset + 3])));
+            var days = BinaryPrimitives.ReadUInt32BigEndian(buffer);
             return new LocalDate(days);
         }
 

@@ -14,6 +14,8 @@
 //   limitations under the License.
 //
 
+using System;
+
 namespace Cassandra.Serialization.Primitive
 {
     internal class BooleanSerializer : TypeSerializer<bool>
@@ -23,9 +25,9 @@ namespace Cassandra.Serialization.Primitive
             get { return ColumnTypeCode.Boolean; }
         }
 
-        public override bool Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override bool Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            return buffer[offset] == 1;
+            return buffer[0] == 1;
         }
 
         public override byte[] Serialize(ushort protocolVersion, bool value)

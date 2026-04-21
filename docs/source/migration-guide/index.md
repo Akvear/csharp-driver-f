@@ -58,6 +58,24 @@ With `ITypeAdapter` removed, these classes are no longer needed. The built-in `T
 
 **Migration Impact:** No action required unless you were subclassing or referencing these types directly. The built-in serializers continue to handle `decimal` and `varint` automatically.
 
+### Changed APIs
+
+#### `TypeSerializer<T>.Deserialize`
+
+```csharp
+// BEFORE
+public abstract T Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo);
+
+// AFTER
+public abstract T Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo);
+```
+
+The `Deserialize` method on `TypeSerializer<T>` — the base class for all custom type serializers — now receives a `ReadOnlySpan<byte>` that contains exactly the serialized value, instead of a `byte[]` with separate `offset` and `length` parameters.
+
+This change eliminates intermediate `byte[]` allocations on the deserialization path. The Rust driver provides row data as a contiguous memory region; previously, each column value had to be copied into a fresh `byte[]` before deserialization. With `ReadOnlySpan<byte>`, the serializer reads directly from the Rust-owned buffer without copying.
+
+**Migration Impact:** If you have a custom `TypeSerializer<T>` subclass, update your `Deserialize` override to accept `ReadOnlySpan<byte>` instead of `byte[]` with offset/length. In most cases this simplifies the implementation — remove manual offset arithmetic and replace `buffer[offset + i]` indexing with `buffer[i]`. If your implementation needs a `byte[]` (e.g. to pass to an API that does not accept spans), call `buffer.ToArray()`.
+
 ## Host API
 
 ### Deleted as no longer supported APIs

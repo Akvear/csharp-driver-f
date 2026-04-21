@@ -71,7 +71,9 @@ namespace Cassandra.Tests
             var rnd = new Random();
             var buffer = new byte[16];
             rnd.NextBytes(buffer);
-            var expected = new Guid(TypeSerializer.GuidShuffle(buffer));
+            Span<byte> shuffled = stackalloc byte[16];
+            TypeSerializer.GuidShuffle(buffer, shuffled);
+            var expected = new Guid(shuffled);
             var body = new MemoryStream(buffer);
             var frame = new Frame(header, body, new SerializerManager(ProtocolVersion.V4).GetCurrentSerializer(), null);
 

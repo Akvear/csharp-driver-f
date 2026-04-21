@@ -91,7 +91,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
                 return null;
             }
 
-            return serializer.Deserialize(decrypted, typeCode, typeInfo);
+            return serializer.Deserialize(decrypted.AsSpan(), typeCode, typeInfo);
         }
 
         public override void OneTimeSetUp()

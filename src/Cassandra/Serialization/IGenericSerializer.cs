@@ -23,7 +23,7 @@ namespace Cassandra.Serialization
     /// </summary>
     internal interface IGenericSerializer
     {
-        object Deserialize(ProtocolVersion version, byte[] buffer, int offset, int length, ColumnTypeCode typeCode, IColumnInfo typeInfo);
+        object Deserialize(ProtocolVersion version, ReadOnlySpan<byte> buffer, ColumnTypeCode typeCode, IColumnInfo typeInfo);
 
         byte[] Serialize(ProtocolVersion version, object value);
 

@@ -200,7 +200,6 @@ namespace Cassandra.Tests
             BinaryPrimitives.WriteUInt16BigEndian(buf, value);
             return buf;
         }
-        }
 
         private static TException IsErrorResponse<TException>(Response response) where TException : DriverException
         {

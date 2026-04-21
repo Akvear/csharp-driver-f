@@ -27,23 +27,24 @@ namespace Cassandra.Serialization
             get { return ColumnTypeCode.Map; }
         }
 
-        public override IDictionary Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override IDictionary Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
             var mapInfo = (MapColumnInfo)typeInfo;
             var keyType = GetClrType(mapInfo.KeyTypeCode, mapInfo.KeyTypeInfo);
             var valueType = GetClrType(mapInfo.ValueTypeCode, mapInfo.ValueTypeInfo);
-            var count = DecodeCollectionLength((ProtocolVersion)protocolVersion, buffer, ref offset);
+            var remaining = buffer;
+            var count = DecodeCollectionLength((ProtocolVersion)protocolVersion, ref remaining);
             var dicType = typeof(SortedDictionary<,>).MakeGenericType(keyType, valueType);
             var result = (IDictionary)Activator.CreateInstance(dicType);
             for (var i = 0; i < count; i++)
             {
-                var keyLength = DecodeCollectionLength((ProtocolVersion)protocolVersion, buffer, ref offset);
-                var key = DeserializeChild(protocolVersion, buffer, offset, keyLength, mapInfo.KeyTypeCode, mapInfo.KeyTypeInfo);
-                offset += keyLength;
+                var keyLength = DecodeCollectionLength((ProtocolVersion)protocolVersion, ref remaining);
+                var key = DeserializeChild(protocolVersion, remaining.Slice(0, keyLength), mapInfo.KeyTypeCode, mapInfo.KeyTypeInfo);
+                remaining = remaining.Slice(keyLength);
 
-                var valueLength = DecodeCollectionLength((ProtocolVersion)protocolVersion, buffer, ref offset);
-                var value = DeserializeChild(protocolVersion, buffer, offset, valueLength, mapInfo.ValueTypeCode, mapInfo.ValueTypeInfo);
-                offset += valueLength;
+                var valueLength = DecodeCollectionLength((ProtocolVersion)protocolVersion, ref remaining);
+                var value = DeserializeChild(protocolVersion, remaining.Slice(0, valueLength), mapInfo.ValueTypeCode, mapInfo.ValueTypeInfo);
+                remaining = remaining.Slice(valueLength);
 
                 result.Add(key, value);
             }

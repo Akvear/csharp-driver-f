@@ -42,11 +42,12 @@ namespace Cassandra.Serialization
             get { return new CustomColumnInfo("org.apache.cassandra.db.marshal.DurationType"); }
         }
 
-        public override Duration Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override Duration Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            var months = (int)VintSerializer.ReadVInt(buffer, ref offset);
-            var days = (int)VintSerializer.ReadVInt(buffer, ref offset);
-            var nanoseconds = VintSerializer.ReadVInt(buffer, ref offset);
+            var remaining = buffer;
+            var months = (int)VintSerializer.ReadVInt(ref remaining);
+            var days = (int)VintSerializer.ReadVInt(ref remaining);
+            var nanoseconds = VintSerializer.ReadVInt(ref remaining);
             return new Duration(months, days, nanoseconds);
         }
 

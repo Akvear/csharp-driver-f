@@ -151,7 +151,7 @@ namespace Cassandra.Tests
             foreach (var value in Values)
             {
                 var buffer = FromHex(value.Item2);
-                Assert.AreEqual(value.Item1, serializer.Deserialize(4, buffer, 0, buffer.Length, null));
+                Assert.AreEqual(value.Item1, serializer.Deserialize(4, (ReadOnlySpan<byte>)buffer, null));
             }
         }
 

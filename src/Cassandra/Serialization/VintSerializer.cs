@@ -1,16 +1,18 @@
 // Copyright (C) DataStax Inc.
-// 
+//
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
 //    You may obtain a copy of the License at
-// 
+//
 //       http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 //    Unless required by applicable law or agreed to in writing, software
 //    distributed under the License is distributed on an "AS IS" BASIS,
 //    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
+
+using System;
 
 namespace Cassandra.Serialization
 {
@@ -99,9 +101,10 @@ namespace Cassandra.Serialization
             return WriteUnsignedVInt(EncodeZigZag64(value), buffer);
         }
 
-        public static long ReadUnsignedVInt(byte[] input, ref int offset)
+        public static long ReadUnsignedVInt(ref ReadOnlySpan<byte> input)
         {
-            var firstByte = input[offset++];
+            var firstByte = input[0];
+            input = input.Slice(1);
             if ((firstByte & 0x80) == 0)
             {
                 return firstByte;
@@ -110,16 +113,17 @@ namespace Cassandra.Serialization
             long result = firstByte & FirstByteValueMask(size);
             for (var ii = 0; ii < size; ii++)
             {
-                long b = input[offset++];
+                long b = input[0];
+                input = input.Slice(1);
                 result <<= 8;
                 result |= b & 0xff;
             }
             return result;
         }
 
-        public static long ReadVInt(byte[] buffer, ref int offset)
+        public static long ReadVInt(ref ReadOnlySpan<byte> buffer)
         {
-            return DecodeZigZag64(ReadUnsignedVInt(buffer, ref offset));
+            return DecodeZigZag64(ReadUnsignedVInt(ref buffer));
         }
     }
 }

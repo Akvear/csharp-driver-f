@@ -14,6 +14,8 @@
 //   limitations under the License.
 //
 
+using System;
+
 namespace Cassandra.Serialization.Primitive
 {
     internal class ByteArraySerializer : TypeSerializer<byte[]>
@@ -23,9 +25,9 @@ namespace Cassandra.Serialization.Primitive
             get { return ColumnTypeCode.Blob; }
         }
 
-        public override byte[] Deserialize(ushort protocolVersion, byte[] buffer, int offset, int length, IColumnInfo typeInfo)
+        public override byte[] Deserialize(ushort protocolVersion, ReadOnlySpan<byte> buffer, IColumnInfo typeInfo)
         {
-            return Utils.FromOffset(buffer, offset, length);
+            return buffer.ToArray();
         }
 
         public override byte[] Serialize(ushort protocolVersion, byte[] value)
