@@ -329,8 +329,20 @@ pub(crate) enum MetadataBridgeError {
     #[error("Keyspace name is null")]
     NullKeyspaceName,
 
+    #[error("Keyspace name is empty")]
+    EmptyKeyspaceName,
+
     #[error("Keyspace name is not valid UTF-8")]
     InvalidKeyspaceNameUtf8(#[source] std::str::Utf8Error),
+
+    #[error("Table name is null")]
+    NullTableName,
+
+    #[error("Table name is empty")]
+    EmptyTableName,
+
+    #[error("Table name is not valid UTF-8")]
+    InvalidTableNameUtf8(#[source] std::str::Utf8Error),
 
     #[error("Invalid partition key encoding: {0}")]
     InvalidPartitionKeyEncoding(#[from] SerializationError),
@@ -705,7 +717,11 @@ impl ErrorToException for MetadataBridgeError {
     fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
             MetadataBridgeError::NullKeyspaceName
-            | MetadataBridgeError::InvalidKeyspaceNameUtf8(_) => ctors
+            | MetadataBridgeError::EmptyKeyspaceName
+            | MetadataBridgeError::InvalidKeyspaceNameUtf8(_)
+            | MetadataBridgeError::NullTableName
+            | MetadataBridgeError::EmptyTableName
+            | MetadataBridgeError::InvalidTableNameUtf8(_) => ctors
                 .invalid_argument_exception_constructor
                 .construct_from_rust(&self.to_string()),
 

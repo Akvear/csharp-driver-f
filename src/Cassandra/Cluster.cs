@@ -138,7 +138,6 @@ namespace Cassandra
         private Cluster(IEnumerable<object> contactPoints, Configuration configuration)
         {
             Configuration = configuration;
-            _metadata = new Metadata(configuration, GetActiveSessionOrThrow);
             var protocolVersion = _maxProtocolVersion;
             if (Configuration.ProtocolOptions.MaxProtocolVersionValue != null &&
                 Configuration.ProtocolOptions.MaxProtocolVersionValue.Value.IsSupported(configuration))
@@ -149,6 +148,7 @@ namespace Cassandra
                 protocolVersion,
                 Configuration.Policies.ColumnEncryptionPolicy,
                 Configuration.TypeSerializers);
+            _metadata = new Metadata(configuration, GetActiveSessionOrThrow, _serializerManager);
             _contactPoints = configuration.ParseContactPoints(contactPoints);
         }
 
@@ -253,6 +253,12 @@ namespace Cassandra
         public ICollection<HostShard> GetReplicas(string keyspace, byte[] partitionKey)
         {
             return Metadata.GetReplicas(keyspace, partitionKey);
+        }
+
+        /// <inheritdoc />
+        public ICollection<HostShard> GetReplicas(string keyspace, string table, IReadOnlyList<object> partitionKeyValues)
+        {
+            return Metadata.GetReplicas(keyspace, table, partitionKeyValues);
         }
 
         /// <inheritdoc />

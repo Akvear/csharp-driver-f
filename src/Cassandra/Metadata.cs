@@ -20,6 +20,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Cassandra.Data.Linq;
+using Cassandra.Serialization;
 using Cassandra.Tasks;
 
 namespace Cassandra
@@ -55,6 +56,11 @@ namespace Cassandra
         // Provided by Cluster during construction. It never returns null.
         // It either returns a valid Session or throws InvalidOperationException.
         private readonly Func<Session> _getActiveSessionOrThrow;
+
+        // Cluster's serializer manager — carries protocol version, custom type serializers,
+        // UDT mappings, and column encryption policy. Used wherever the partition key (or
+        // other CLR values) must be encoded to the same bytes the server would see on the wire.
+        private readonly ISerializerManager _serializerManager;
 
         internal class RefreshContext(IReadOnlyDictionary<Guid, Host> oldHosts)
         {
@@ -194,10 +200,14 @@ namespace Cassandra
 
         private readonly object _hostLock = new object();
 
-        internal Metadata(Configuration configuration, Func<Session> getActiveSessionOrThrow)
+        internal Metadata(
+            Configuration configuration,
+            Func<Session> getActiveSessionOrThrow,
+            ISerializerManager serializerManager)
         {
             Configuration = configuration;
             _getActiveSessionOrThrow = getActiveSessionOrThrow ?? throw new ArgumentNullException(nameof(getActiveSessionOrThrow));
+            _serializerManager = serializerManager ?? throw new ArgumentNullException(nameof(serializerManager));
         }
 
         public void Dispose()
@@ -301,7 +311,6 @@ namespace Cassandra
             }
         }
 
-
         private ClusterStateLease AcquireClusterState()
         {
             var session = _getActiveSessionOrThrow();
@@ -354,6 +363,15 @@ namespace Cassandra
         /// <summary>
         /// Get the replicas for a given partition key and keyspace
         /// </summary>
+        /// <remarks>
+        /// This overload is not table-aware and always uses the Murmur3 partitioner.
+        /// It does not support tablet-aware routing. Prefer
+        /// <see cref="GetReplicas(string, string, IReadOnlyList{object})"/> instead.
+        /// The <paramref name="partitionKey"/> must already be serialized in routing-key format.
+        /// There is no dedicated public serializer for this legacy API; existing code can often reuse
+        /// a routing key already computed by the driver, for example from
+        /// <c>prepared.Bind(values).RoutingKey.RawRoutingKey</c>.
+        /// </remarks>
         public ICollection<HostShard> GetReplicas(string keyspaceName, byte[] partitionKey)
         {
             ArgumentNullException.ThrowIfNull(partitionKey);
@@ -373,6 +391,30 @@ namespace Cassandra
         public ICollection<HostShard> GetReplicas(byte[] partitionKey)
         {
             return GetReplicas(NoSpecifiedKeyspace, partitionKey);
+        }
+
+        /// <summary>
+        /// Gets replicas for a partition key using table-aware routing.
+        /// Each partition key column value is serialized individually and passed to the Rust bridge,
+        /// enabling tablet-aware replica lookup and proper partitioner selection.
+        /// </summary>
+        public ICollection<HostShard> GetReplicas(string keyspace, string table, IReadOnlyList<object> partitionKeyValues)
+        {
+            ArgumentNullException.ThrowIfNull(keyspace);
+            ArgumentNullException.ThrowIfNull(table);
+            ArgumentNullException.ThrowIfNull(partitionKeyValues);
+
+            if (partitionKeyValues.Count == 0)
+                throw new ArgumentException("Partition key values cannot be empty", nameof(partitionKeyValues));
+
+            // The borrowed clone keeps the native state's refcount elevated for the duration
+            // of the FFI call, so a concurrent cache swap on another thread can only bring it
+            // down to 1, never to 0 — the native pointer stays valid until `using` disposes
+            // the clone here.
+            using var snapshot = GetSnapshot();
+            return snapshot.State.GetReplicas(
+                keyspace, table, snapshot.Registry.HostsById, partitionKeyValues,
+                _serializerManager.GetCurrentSerializer());
         }
 
         /// <summary>

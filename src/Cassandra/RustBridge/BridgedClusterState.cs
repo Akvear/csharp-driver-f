@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Net;
 using System.Runtime.CompilerServices;
+using Cassandra.Serialization;
 using static Cassandra.RustBridge;
 
 namespace Cassandra
@@ -42,6 +43,17 @@ namespace Cassandra
             [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspace,
             RustBridge.FFISlice<byte> partitionKey,
             IntPtr callbackContext,
+            IntPtr callback,
+            IntPtr constructors);
+
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        private static extern RustBridge.FFIMaybeException cluster_state_get_replicas(
+            IntPtr clusterStatePtr,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspace,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string table,
+            IntPtr populateValuesContext,
+            IntPtr populateValuesCallback,
+            IntPtr callbackState,
             IntPtr callback,
             IntPtr constructors);
 
@@ -189,6 +201,37 @@ namespace Cassandra
             GC.KeepAlive(context);
             return context.Replicas;
         }
+
+        /// <summary>
+        /// Gets replicas using table-aware routing.
+        /// Each partition key value is serialized individually via the populate-callback pattern.
+        /// </summary>
+        internal unsafe ICollection<HostShard> GetReplicas(
+            string keyspace,
+            string table,
+            IReadOnlyDictionary<Guid, Host> hostsById,
+            IReadOnlyList<object> partitionKeyValues,
+            ISerializer serializer)
+        {
+            var context = new GetReplicasContext(hostsById);
+            var populateCtx = SerializationHandler.CreateContext(partitionKeyValues, serializer);
+
+            RunWithIncrement(ptr => cluster_state_get_replicas(
+                ptr,
+                keyspace,
+                table,
+                (IntPtr)Unsafe.AsPointer(ref populateCtx),
+                (IntPtr)SerializationHandler.PopulateValuesPtr,
+                (IntPtr)Unsafe.AsPointer(ref context),
+                (IntPtr)OnReplicaPairPtr,
+                (IntPtr)Globals.ConstructorsPtr
+            ));
+
+            GC.KeepAlive(populateCtx);
+            GC.KeepAlive(context);
+            return context.Replicas;
+        }
+
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException cluster_state_get_keyspace_metadata(
             IntPtr clusterState,
