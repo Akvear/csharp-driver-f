@@ -94,7 +94,7 @@ impl<'a> BridgedSessionConfig<'a> {
         let uri = self.uri.as_cstr().unwrap().to_str().unwrap();
         let keyspace = self.keyspace.as_cstr().unwrap().to_str().unwrap();
 
-        let mut builder = SessionBuilder::new().known_node(uri);
+        let mut builder = SessionBuilder::new().known_nodes(uri.split(',').map(|s| s.trim()));
 
         // Rust considers an empty string an invalid keyspace name, while C# treats it
         // as "no keyspace". Setting keyspace via Connect() on the C# side is
