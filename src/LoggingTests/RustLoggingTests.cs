@@ -201,7 +201,7 @@ namespace Cassandra.LoggingTests
             }
         }
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         private static extern void emit_all_log_levels();
     }
 }

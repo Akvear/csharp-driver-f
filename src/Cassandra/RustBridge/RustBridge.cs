@@ -700,7 +700,7 @@ namespace Cassandra
             /// This must be called early to ensure logging is properly initialized.
             /// </summary>
 
-            [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+            [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
             private static unsafe extern void configure_rust_logging(IntPtr callback, byte min_level);
 
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]

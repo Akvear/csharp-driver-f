@@ -28,16 +28,16 @@ namespace Cassandra
         }
 
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_create(Tcb<ManuallyDestructible> tcb, BridgedSessionConfig config);
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_shutdown(Tcb<ManuallyDestructible> tcb, IntPtr session);
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, SimpleStatementExecutionOptions executionOptions);
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         private static extern FFIMaybeException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
 
         /// <summary>
@@ -48,20 +48,20 @@ namespace Cassandra
         /// The <paramref name="populateValuesContext"/> pointer must remain valid for the duration
         /// of the call; it is not used after this function returns.
         /// </summary>
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query_with_values(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr populateValuesContext, IntPtr populateValuesCallback, SimpleStatementExecutionOptions executionOptions);
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_prepare(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query_bound(
             Tcb<ManuallyDestructible> tcb,
             IntPtr session,
             IntPtr preparedStatement,
             PreparedStatementExecutionOptions executionOptions);
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query_bound_with_values(
             Tcb<ManuallyDestructible> tcb,
             IntPtr session,
@@ -69,7 +69,7 @@ namespace Cassandra
             IntPtr populateValuesContext, IntPtr populateValuesCallback,
             PreparedStatementExecutionOptions executionOptions);
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
 
         /// <summary>
