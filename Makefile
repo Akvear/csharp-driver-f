@@ -203,10 +203,21 @@ clean-rust:
 LINK_PROJECTS 	 := Cassandra Cassandra.IntegrationTests LoggingTests Cassandra.Tests
 FRAMEWORKS    	 := net9 net8
 
+UNAME_S := $(shell uname -s)
+ifeq ($(OS),Windows_NT)
+	RUST_LIB_FILENAME := csharp_wrapper.dll
+else ifeq ($(UNAME_S),Darwin)
+	RUST_LIB_FILENAME := libcsharp_wrapper.dylib
+else
+	RUST_LIB_FILENAME := libcsharp_wrapper.so
+endif
+
+RUST_LIB_RELATIVE_PATH := ../../../../../rust/target/debug/$(RUST_LIB_FILENAME)
+
 define symlink-to-rust
 	mkdir -p $(1); \
 	cd $(1); \
-	ln -f -s ../../../../../rust/target/debug/libcsharp_wrapper.so || true; \
+	ln -f -s $(RUST_LIB_RELATIVE_PATH) || true; \
 	cd - >/dev/null
 endef
 
