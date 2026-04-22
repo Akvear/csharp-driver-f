@@ -244,15 +244,21 @@ namespace Cassandra
         }
 
         /// <inheritdoc />
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         public ICollection<HostShard> GetReplicas(byte[] partitionKey)
         {
+#pragma warning disable CS0618
             return Metadata.GetReplicas(partitionKey);
+#pragma warning restore CS0618
         }
 
         /// <inheritdoc />
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         public ICollection<HostShard> GetReplicas(string keyspace, byte[] partitionKey)
         {
+#pragma warning disable CS0618
             return Metadata.GetReplicas(keyspace, partitionKey);
+#pragma warning restore CS0618
         }
 
         /// <inheritdoc />

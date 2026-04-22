@@ -112,6 +112,7 @@ namespace Cassandra
         /// </summary>
         /// <param name="partitionKey">Byte array representing the partition key</param>
         /// <returns></returns>
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         ICollection<HostShard> GetReplicas(byte[] partitionKey);
 
         /// <summary>
@@ -120,6 +121,7 @@ namespace Cassandra
         /// <param name="keyspace">Byte array representing the partition key</param>
         /// <param name="partitionKey">Byte array representing the partition key</param>
         /// <returns></returns>
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         ICollection<HostShard> GetReplicas(string keyspace, byte[] partitionKey);
 
         /// <summary>

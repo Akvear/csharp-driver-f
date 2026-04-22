@@ -372,6 +372,7 @@ namespace Cassandra
         /// a routing key already computed by the driver, for example from
         /// <c>prepared.Bind(values).RoutingKey.RawRoutingKey</c>.
         /// </remarks>
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         public ICollection<HostShard> GetReplicas(string keyspaceName, byte[] partitionKey)
         {
             ArgumentNullException.ThrowIfNull(partitionKey);
@@ -388,9 +389,12 @@ namespace Cassandra
                 keyspaceName ?? NoSpecifiedKeyspace, snapshot.Registry.HostsById, partitionKey);
         }
 
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         public ICollection<HostShard> GetReplicas(byte[] partitionKey)
         {
+#pragma warning disable CS0618
             return GetReplicas(NoSpecifiedKeyspace, partitionKey);
+#pragma warning restore CS0618
         }
 
         /// <summary>
