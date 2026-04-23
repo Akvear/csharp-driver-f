@@ -502,14 +502,17 @@ pub extern "C" fn cluster_state_get_udt_metadata(
     unsafe { construct_udt_metadata(udt_context_ptr, FFIStr::new(udt.name.as_ref())) }
 }
 
-enum TableColumns {}
+/// Opaque type representing the C# TableColumnsContext.
+enum TableColumnsContext {}
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
-pub struct TableColumnsPtr(FFIPtr<'static, TableColumns>);
+pub struct TableColumnsContextPtr(FFIPtr<'static, TableColumnsContext>);
 
+/// Callback type for constructing one C# TableColumn and adding it to the
+/// TableColumnsContext referenced by `table_columns_context_ptr`.
 type ConstructCSharpTableColumn = unsafe extern "C" fn(
-    columns_ptr: TableColumnsPtr,
+    table_columns_context_ptr: TableColumnsContextPtr,
     column_name: FFIStr<'_>,
     type_code: u8,
     type_info: BridgedBorrowedSharedPtr<'_, ColumnType<'_>>,
@@ -544,7 +547,7 @@ pub struct TableContextPtr(FFIPtr<'static, TableContext>);
 
 type ConstructCSharpTableMetadata = unsafe extern "C" fn(
     table_context_ptr: TableContextPtr,
-    table_columns_ptr: TableColumnsPtr,
+    table_columns_context_ptr: TableColumnsContextPtr,
     partition_keys: PrimaryKeysPtr,
     clustering_keys: PrimaryKeysPtr,
 ) -> FFIMaybeException;
@@ -553,20 +556,21 @@ type ConstructCSharpTableMetadata = unsafe extern "C" fn(
 ///
 /// For the specified `(keyspace_name, table_name)` this function:
 /// 1. Iterates over all columns of the table and invokes `construct_table_column`,
-///    using `table_columns_ptr` to let C# accumulate column metadata.
+///    using `table_columns_context_ptr` to let C# accumulate column metadata.
 /// 2. Iterates over the partition key columns and invokes `add_primary_key_callback`
 ///    for each, using `partition_keys_ptr`.
 /// 3. Iterates over the clustering key columns and invokes `add_primary_key_callback`
 ///    for each, using `clustering_keys_ptr`.
 /// 4. Finally invokes `construct_table_metadata` with `table_context_ptr`,
-///    `table_columns_ptr`, `partition_keys_ptr`, and `clustering_keys_ptr` so C# can
-///    construct the final table metadata object.
+///    `table_columns_context_ptr`, `partition_keys_ptr`, and `clustering_keys_ptr`
+///    so C# can construct the final table metadata object.
 ///
 /// # Safety
 /// - `cluster_state_ptr` must point to a valid `ClusterState` that remains alive for
 ///   the duration of this call.
-/// - All FFI pointers (`table_columns_ptr`, `partition_keys_ptr`, `clustering_keys_ptr`,
-///   and `table_context_ptr`) must reference valid C# objects for the duration of this call.
+/// - All FFI pointers (`table_columns_context_ptr`, `partition_keys_ptr`,
+///   `clustering_keys_ptr`, and `table_context_ptr`) must reference valid C# objects for
+///   the duration of this call.
 /// - Any string or buffer pointers passed to the callbacks are temporary and only valid
 ///   for the duration of the respective callback invocation; the callbacks must
 ///   synchronously copy any data they need (e.g., via `Marshal.PtrToStringUTF8`).
@@ -577,7 +581,7 @@ pub extern "C" fn cluster_state_get_table_metadata(
     cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
     keyspace_name: CSharpStr<'_>,
     table_name: CSharpStr<'_>,
-    table_columns_ptr: TableColumnsPtr,
+    table_columns_context_ptr: TableColumnsContextPtr,
     construct_table_column: ConstructCSharpTableColumn,
     partition_keys_ptr: PrimaryKeysPtr,
     clustering_keys_ptr: PrimaryKeysPtr,
@@ -644,7 +648,7 @@ pub extern "C" fn cluster_state_get_table_metadata(
 
         unsafe {
             let ffi_exception = construct_table_column(
-                table_columns_ptr,
+                table_columns_context_ptr,
                 FFIStr::new(column_name),
                 type_code,
                 type_info_handle,
@@ -702,7 +706,7 @@ pub extern "C" fn cluster_state_get_table_metadata(
         );
         let ffi_exception = construct_table_metadata(
             table_context_ptr,
-            table_columns_ptr,
+            table_columns_context_ptr,
             partition_keys_ptr,
             clustering_keys_ptr,
         );
