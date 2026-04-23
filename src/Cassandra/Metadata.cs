@@ -249,7 +249,7 @@ namespace Cassandra
             try
             {
                 var clusterState = session.GetClusterState();
-                return clusterState.GetKeyspaceMetadata(clusterState, keyspace);
+                return clusterState.GetKeyspaceMetadata(keyspace);
             }
             finally
             {
@@ -267,7 +267,10 @@ namespace Cassandra
             var session = _getActiveSessionOrThrow();
             try
             {
-                return session.GetClusterState().GetKeyspaceNames();
+                using (var clusterState = session.GetClusterState())
+                {
+                    return clusterState.GetKeyspaceNames();
+                }
             }
             finally
             {
@@ -288,7 +291,10 @@ namespace Cassandra
             var session = _getActiveSessionOrThrow();
             try
             {
-                return session.GetClusterState().GetTableNames(keyspace);
+                using (var clusterState = session.GetClusterState())
+                {
+                    return clusterState.GetTableNames(keyspace);
+                }
             }
             finally
             {
@@ -308,7 +314,10 @@ namespace Cassandra
             var session = _getActiveSessionOrThrow();
             try
             {
-                return session.GetClusterState().GetTableMetadata(keyspace, tableName);
+                using (var clusterState = session.GetClusterState())
+                {
+                    return clusterState.GetTableMetadata(keyspace, tableName);
+                }
             }
             finally
             {
@@ -334,13 +343,12 @@ namespace Cassandra
         public UdtColumnInfo GetUdtDefinition(string keyspace, string typeName)
         {
             var session = _getActiveSessionOrThrow();
-            BridgedClusterState clusterState;
             try
             {
-                clusterState = session.GetClusterState();
-                var result = clusterState.GetUdtMetadata(keyspace, typeName);
-                clusterState.Dispose();
-                return result;
+                using (var clusterState = session.GetClusterState())
+                {
+                    return clusterState.GetUdtMetadata(keyspace, typeName);
+                }
             }
             finally
             {

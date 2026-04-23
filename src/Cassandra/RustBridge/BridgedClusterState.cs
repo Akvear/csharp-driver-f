@@ -219,9 +219,9 @@ namespace Cassandra
             return FFIMaybeException.Ok();
         }
 
-        internal KeyspaceMetadata GetKeyspaceMetadata(BridgedClusterState clusterState, string keyspaceName)
+        internal KeyspaceMetadata GetKeyspaceMetadata(string keyspaceName)
         {
-            var ksmd = new KeyspaceMetadata(clusterState, keyspaceName);
+            var ksmd = new KeyspaceMetadata(this, keyspaceName);
             var replicationOptions = new Dictionary<string, string>();
             var addRepFactorCallbacks = new StrategyAddRepFactorCallbacks();
             try

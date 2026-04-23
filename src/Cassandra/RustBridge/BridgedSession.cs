@@ -98,10 +98,7 @@ namespace Cassandra
         /// </summary>
         internal Task<ManuallyDestructible> Shutdown()
         {
-            TaskCompletionSource<ManuallyDestructible> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            var tcb = Tcb<ManuallyDestructible>.WithTcs(tcs);
-            session_shutdown(tcb, handle);
-            return tcs.Task;
+            return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_shutdown(tcb, ptr));
         }
 
         /// <summary>
