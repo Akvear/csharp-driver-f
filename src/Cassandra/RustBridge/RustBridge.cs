@@ -489,8 +489,6 @@ namespace Cassandra
                             // The Rust code is responsible for interpreting the pointer's contents
                             // memory is freed when the C# RustResource releases it.
                             tcs.SetResult(result);
-
-                            Console.Error.WriteLine($"[FFI] CompleteTask done.");
                         }
                         else
                         {
@@ -566,8 +564,6 @@ namespace Cassandra
                                 exception = new RustException("Unknown error from Rust");
                             }
                             tcsMd.SetException(exception);
-                            Console.Error.WriteLine($"[FFI] FailTask done.");
-
                         }
                         else
                         {
