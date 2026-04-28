@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -688,12 +689,64 @@ namespace Cassandra
 
             internal static readonly Constructors* ConstructorsPtr;
 
+            // Enum to use as the logger type for messages forwarded from Rust code. 
+            private enum Rust { }
+
+            // Logger used for messages forwarded from Rust code. The logger is static so all callbacks reuse
+            // a single logger instead of creating a new Logger instance for each callback.
+            private static readonly Logger RustLogger = new Logger(typeof(Rust));
+
+            // Callback function pointer for Rust to call to log messages in C#.
+            unsafe readonly static delegate* unmanaged[Cdecl]<byte, FFIString, FFIString, void> RustLogCallbackPtr = &ForwardRustLog;
+
             /// <summary>
-            /// Initializes the Rust driver components.
+            /// Initializes the Rust driver components with a specified minimum log level.
             /// This must be called early to ensure logging is properly initialized.
             /// </summary>
+
             [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-            private static extern void init_rust_logging();
+            private static unsafe extern void configure_rust_logging(IntPtr callback, byte min_level);
+
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            private static void ForwardRustLog(byte level, FFIString target, FFIString message)
+            {
+                var rustTarget = target.ToManagedString() ?? "unknown target";
+                var rustMessage = message.ToManagedString() ?? string.Empty;
+
+                var levelStr = ((TraceLevel)level).ToString().ToUpperInvariant();
+
+                var finalMessage = $"{levelStr} [{rustTarget}] {rustMessage}";
+
+                switch ((TraceLevel)level)
+                {
+                    case TraceLevel.Info:
+                        RustLogger.Info(finalMessage);
+                        break;
+                    case TraceLevel.Verbose:
+                        RustLogger.Verbose(finalMessage);
+                        break;
+                    case TraceLevel.Warning:
+                        RustLogger.Warning(finalMessage);
+                        break;
+                    case TraceLevel.Error:
+                        RustLogger.Error(finalMessage);
+                        break;
+                    default:
+                        RustLogger.Verbose(finalMessage);
+                        break;
+                }
+            }
+
+            private static byte GetRustMinLogLevel()
+            {
+                if (Diagnostics.UseLoggerFactory)
+                {
+                    // Defer filtering to ILogger providers.
+                    return (byte)TraceLevel.Verbose;
+                }
+
+                return (byte)Diagnostics.CassandraTraceSwitch.Level;
+            }
 
             static Globals()
             {
@@ -720,7 +773,7 @@ namespace Cassandra
                     (IntPtr)UnauthorizedExceptionConstructorPtr
                 );
 
-                init_rust_logging();
+                configure_rust_logging((IntPtr)RustLogCallbackPtr, GetRustMinLogLevel());
             }
         }
 

@@ -24,18 +24,6 @@ use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr, FFIGCHandle};
 /// The global Tokio runtime used to execute async tasks.
 static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| Runtime::new().unwrap());
 
-/// Initialize the Rust logging early.
-///
-/// This function should be called early during driver initialization to ensure
-/// that logging is set up before any operations that might emit logs.
-///
-/// Calling this function multiple times is safe; subsequent calls will be no-ops.
-#[unsafe(no_mangle)]
-pub extern "C" fn init_rust_logging() {
-    // Force initialization of logging
-    crate::logging::init_logging();
-}
-
 /// A struct representing a manually destructible resource passed across the FFI boundary.
 /// It contains a pointer to the resource and a function pointer to its destructor.
 /// All changes to this struct's fields must be mirrored in C# code in the exact same order.
