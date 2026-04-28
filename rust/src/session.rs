@@ -28,10 +28,8 @@ use crate::task::{BridgedFuture, ExceptionConstructors, ManuallyDestructible, Tc
 use uuid::Uuid;
 
 // Number of bytes in an RFC-4122 UUID.
-// NOTE: Used in the next commit when bridging WaitForSchemaAgreement with a required node.
 const UUID_BYTE_LEN: usize = 16;
 
-// NOTE: Used in the next commit when bridging WaitForSchemaAgreement with a required node.
 enum HostId {}
 
 #[repr(transparent)]
@@ -46,7 +44,6 @@ impl HostIdPtr<'_> {
     /// - When non-null, assumes the caller provided exactly `UUID_BYTE_LEN` bytes at the
     ///   address in big-endian order.
     /// - The caller (managed side) is responsible for ensuring the memory is valid and pinned.
-    #[expect(dead_code, reason = "Used in a further commit")]
     pub fn parse_uuid(&self) -> Result<Option<Uuid>, HostIdError> {
         let Some(nn) = self.inner.as_non_null() else {
             return Ok(None);
@@ -726,6 +723,16 @@ impl<'a> SchemaAgreementBridge<'a> {
         })
     }
 
+    fn new_with_required_node(
+        session_ptr: BridgedBorrowedSharedPtr<'a, BridgedSession>,
+        host_id: HostIdPtr<'_>,
+    ) -> Result<Self, HostIdError> {
+        Ok(Self {
+            session_ptr,
+            required_node: host_id.parse_uuid()?,
+        })
+    }
+
     fn spawn(self, tcb: Tcb<EmptyAsyncResult>) {
         let Some(session_arc) = ArcFFI::cloned_from_ptr(self.session_ptr) else {
             tcb.fail_sync(InvalidArgumentError("invalid or null session pointer"));
@@ -777,6 +784,18 @@ pub extern "C" fn session_await_schema_agreement_with_row_set(
     row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
 ) {
     match SchemaAgreementBridge::new_from_row_set(session_ptr, row_set_ptr) {
+        Ok(bridge) => bridge.spawn(tcb),
+        Err(e) => tcb.fail_sync(e),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn session_await_schema_agreement_with_required_node(
+    tcb: Tcb<EmptyAsyncResult>,
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+    host_id: HostIdPtr<'_>,
+) {
+    match SchemaAgreementBridge::new_with_required_node(session_ptr, host_id) {
         Ok(bridge) => bridge.spawn(tcb),
         Err(e) => tcb.fail_sync(e),
     }

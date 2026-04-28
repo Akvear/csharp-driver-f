@@ -297,8 +297,9 @@ namespace Cassandra
         /// When there's no requirement for a specific host to return its schema version, use
         /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
         /// </remarks>
-        /// FIXME: Mention result / exception when the host does not return its schema version or is not reachable
-        /// when it's implemented.
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="forHost"/> is null.</exception>
+        /// <exception cref="ArgumentException">Thrown if <paramref name="forHost"/> is not a known host in this cluster.</exception>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including when the required host does not return its schema version.</exception>
         bool WaitForSchemaAgreement(IPEndPoint forHost);
 
         /// <summary>
@@ -326,8 +327,9 @@ namespace Cassandra
         /// <remarks> When there's no requirement for a specific host to return its schema version, use
         /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
         /// </remarks>
-        /// FIXME: Mention result / exception when the host does not return its schema version or is not reachable
-        /// when it's implemented.
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="hostAddress"/> is null.</exception>
+        /// <exception cref="ArgumentException">Thrown if <paramref name="hostAddress"/> is not a known host in this cluster.</exception>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including when the required host does not return its schema version.</exception>
         Task WaitForSchemaAgreementAsync(IPEndPoint hostAddress);
 
         /// <summary>

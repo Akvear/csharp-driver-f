@@ -453,8 +453,8 @@ namespace Cassandra
 
         public bool WaitForSchemaAgreement(IPEndPoint hostAddress)
         {
-            // Deprecated and implemented as no-op.
-            return false;
+            TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync(hostAddress));
+            return true;
         }
 
         public Task WaitForSchemaAgreementAsync(RowSet rs)
@@ -469,8 +469,16 @@ namespace Cassandra
 
         public Task WaitForSchemaAgreementAsync(IPEndPoint hostAddress)
         {
-            throw new NotImplementedException("WaitForSchemaAgreementAsync(IPEndPoint) is not yet supported. " +
-                                              "Use WaitForSchemaAgreementAsync().");
+            if (hostAddress == null)
+            {
+                throw new ArgumentNullException(nameof(hostAddress));
+            }
+
+            var hostId = _cluster.Metadata.GetHostIdByIp(hostAddress)
+                ?? throw new ArgumentException(
+                    $"No known host with address {hostAddress} was found in the cluster.", nameof(hostAddress));
+
+            return bridgedSession.WaitForSchemaAgreementWithRequiredNode(hostId);
         }
 
         public void WaitForSchemaAgreement() => TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync());

@@ -83,6 +83,9 @@ namespace Cassandra
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_await_schema_agreement_with_row_set(Tcb<EmptyAsyncResult> tcb, IntPtr session, IntPtr rowSet);
 
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void session_await_schema_agreement_with_required_node(Tcb<EmptyAsyncResult> tcb, IntPtr session, byte* hostId);
+
         /// <summary>
         /// Creates a new session connected to the specified Cassandra URI. 
         /// Checks the existence of the configured local datacenter.
@@ -311,6 +314,27 @@ namespace Cassandra
         {
             return RunAsyncWithIncrement<EmptyAsyncResult>(
                 (tcb, ptr) => session_await_schema_agreement(tcb, ptr));
+        }
+
+        /// <summary>
+        /// Waits for schema agreement on the session, requiring agreement from the node
+        /// identified by <paramref name="hostId"/>.
+        /// </summary>
+        /// <param name="hostId">The host ID (UUID) of the node that must agree.</param>
+        internal Task WaitForSchemaAgreementWithRequiredNode(Guid hostId)
+        {
+            Span<byte> hostIdBytes = stackalloc byte[16];
+            GuidToFFIFormat(hostId, hostIdBytes);
+
+            unsafe
+            {
+                fixed (byte* hostIdPtr = hostIdBytes)
+                {
+                    var hostIdAddr = (IntPtr)hostIdPtr; //pointer-typed variables cannot be captured in lambdas, thus this trick
+                    return RunAsyncWithIncrement<EmptyAsyncResult>(
+                        (tcb, ptr) => session_await_schema_agreement_with_required_node(tcb, ptr, (byte*)hostIdAddr));
+                }
+            }
         }
 
         /// <summary>
