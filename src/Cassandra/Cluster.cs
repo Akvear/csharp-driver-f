@@ -205,11 +205,9 @@ namespace Cassandra
         /// <param name="keyspace">Case-sensitive keyspace name to use</param>
         public async Task<ISession> ConnectAsync(string keyspace)
         {
-            // TODO: Handle multiple contact points (join into a comma-separated list
-            // and then split on the Rust side).
-            string firstContactPoint = _contactPoints.First();
+            string contactPointsCsv = string.Join(",", _contactPoints);
 
-            var session = await Session.CreateAsync(this, firstContactPoint, keyspace, _serializerManager).ConfigureAwait(false);
+            var session = await Session.CreateAsync(this, contactPointsCsv, keyspace, _serializerManager).ConfigureAwait(false);
 
             _connectedSessions.Add(session);
             Logger.Info("Session connected ({0})", session.GetHashCode());
