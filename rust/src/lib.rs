@@ -1,6 +1,6 @@
 mod error_conversion;
 pub mod ffi;
-mod logging;
+pub mod logging;
 mod metadata;
 mod pre_serialized_values;
 mod prepared_statement;

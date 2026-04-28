@@ -108,26 +108,53 @@ namespace Cassandra
 
             public void Error(string message, Exception ex = null)
             {
-                _logger.LogError(0, ex, message);
+                _logger.LogError(ex, "{Message}", message);
             }
 
             public void Error(string message, params object[] args)
             {
+                // We split into two cases:
+                // - No args: Use "{Message}" to prevent Microsoft.Extensions.Logging from parsing curly braces from Rust as templates.
+                // - With args: Pass directly so MEL can format the existing driver log templates.
+                if (args == null || args.Length == 0)
+                {
+                    _logger.LogError("{Message}", message);
+                    return;
+                }
+
                 _logger.LogError(message, args);
             }
 
             public void Verbose(string message, params object[] args)
             {
+                if (args == null || args.Length == 0)
+                {
+                    _logger.LogDebug("{Message}", message);
+                    return;
+                }
+
                 _logger.LogDebug(message, args);
             }
 
             public void Info(string message, params object[] args)
             {
+                if (args == null || args.Length == 0)
+                {
+                    _logger.LogInformation("{Message}", message);
+                    return;
+                }
+
                 _logger.LogInformation(message, args);
             }
 
             public void Warning(string message, params object[] args)
             {
+                if (args == null || args.Length == 0)
+                {
+                    _logger.LogWarning("{Message}", message);
+                    return;
+                }
+
                 _logger.LogWarning(message, args);
             }
         }
