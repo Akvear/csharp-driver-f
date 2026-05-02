@@ -14,6 +14,7 @@
 //   limitations under the License.
 //
 
+using System;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
@@ -47,6 +48,22 @@ namespace Cassandra
         /// <seealso cref="AddLoggerProvider"/>
         public static readonly TraceSwitch CassandraTraceSwitch = new TraceSwitch(
             "TraceSwitch", "This switch lets the user choose which kind of messages should be included in log.");
+
+        static Diagnostics()
+        {
+            // Check for an environment variable to set the initial TraceSwitch level.
+            // This allows configuring logging level without code changes.
+            var envLevel = Environment.GetEnvironmentVariable("CASSANDRA_LOG_LEVEL");
+            if (!string.IsNullOrEmpty(envLevel) && Enum.TryParse<TraceLevel>(envLevel, true, out var parsedLevel))
+            {
+                CassandraTraceSwitch.Level = parsedLevel;
+                if (CassandraTraceSwitch.Level != TraceLevel.Off) // Only add a console listener if logging is enabled.
+                {
+                    // This ConsoleTraceListener is leaked on purpose to allow users to see log messages without needing to add a logger provider.
+                    Trace.Listeners.Add(new ConsoleTraceListener());
+                }
+            }
+        }
 
         /// <summary>
         /// Defines if exception StackTrace information should be printed by trace logger.
