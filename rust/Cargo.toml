@@ -18,6 +18,9 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 [lib]
 crate-type = ["cdylib", "lib"] # "lib" needed for doctests
 
+[features]
+integration_testing = []
+
 [profile.dev]
 # Setting `panic = "abort"` guarantees the process will terminate on
 # panic instead of unwinding, avoiding undefined behavior across the FFI

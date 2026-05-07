@@ -71,12 +71,12 @@ TEST_INTEGRATION_SCYLLA_FILTER ?= (FullyQualifiedName!~ClientWarningsTests & Ful
 TEST_INTEGRATION_OPTIONS ?= -l "console;verbosity=detailed"
 TEST_INTEGRATION_CSPROJ ?= src/Cassandra.IntegrationTests/Cassandra.IntegrationTests.csproj
 .PHONY: test-integration-scylla
-test-integration-scylla: .use-development-snk .prepare-scylla-ccm
+test-integration-scylla: .use-development-snk .prepare-scylla-ccm build-rust-testing
 	dotnet build-server shutdown
 	CCM_DISTRIBUTION=scylla dotnet test $(TEST_TARGET_OPTIONS) $(TEST_INTEGRATION_CSPROJ) $(TEST_INTEGRATION_OPTIONS)
 
 .PHONY: test-integration-cassandra
-test-integration-cassandra: .use-development-snk .prepare-cassandra-ccm
+test-integration-cassandra: .use-development-snk .prepare-cassandra-ccm build-rust-testing
 	CCM_DISTRIBUTION=cassandra dotnet test $(TEST_TARGET_OPTIONS) $(TEST_INTEGRATION_CSPROJ) $(TEST_INTEGRATION_OPTIONS)
 
 .prepare-cassandra-ccm:
@@ -217,6 +217,11 @@ build-rust:
 	cargo build; \
 	cd ../examples/RustWrapper/bin/Debug/net9/; \
 	ln -f -s ../../../../../rust/target/debug/libcsharp_wrapper.so . || true
+
+.PHONY: build-rust-testing
+build-rust-testing:
+	cd rust; \
+	cargo build --features integration_testing;
 
 .PHONY: build-rust-asan
 build-rust-asan:
