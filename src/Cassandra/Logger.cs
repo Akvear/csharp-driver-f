@@ -211,7 +211,7 @@ namespace Cassandra
                     return;
                 }
                 Trace.WriteLine(
-                    string.Format("{0} #ERROR: {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), GetExceptionAndAllInnerEx(ex)), _category);
+                    string.Format("{0} ERROR {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), GetExceptionAndAllInnerEx(ex)), _category);
             }
 
             public void Error(string msg, Exception ex = null)
@@ -221,7 +221,7 @@ namespace Cassandra
                     return;
                 }
                 Trace.WriteLine(
-                    string.Format("{0} #ERROR: {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat),
+                    string.Format("{0} ERROR {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat),
                         msg + (ex != null ? "\nEXCEPTION:\n " + GetExceptionAndAllInnerEx(ex) : string.Empty)), _category);
             }
 
@@ -235,7 +235,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} #ERROR: {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0} ERROR {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
             }
 
             public void Warning(string message, params object[] args)
@@ -248,7 +248,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} #WARNING: {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0} WARNING {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
             }
 
             public void Info(string message, params object[] args)
@@ -261,7 +261,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} : {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0} INFO {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
             }
 
             public void Verbose(string message, params object[] args)
@@ -274,7 +274,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0} VERBOSE {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
             }
         }
     }
