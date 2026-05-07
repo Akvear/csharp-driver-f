@@ -95,6 +95,13 @@ In the DataStax C# driver, `Metadata` is accessible at the `Cluster` level witho
 
 **Migration Impact:** Ensure you establish a session before querying any metadata properties or methods.
 
+**GetReplicas API update:**
+Legacy `GetReplicas(..., byte[] partitionKey)` overloads are still available for backward compatibility, but they are now marked obsolete because they cannot support tablet-aware routing and always use Murmur3-compatible token computation.
+
+Prefer `GetReplicas(string keyspace, string table, IReadOnlyList<object> partitionKeyValues)`, which serializes partition-key values with the configured type serializers and uses table metadata for tablet-aware routing.
+
+If you still need the legacy serialized `byte[]` overloads, there is no dedicated public serializer for that format. The practical workaround is to reuse a routing key already computed by the driver, for example via `prepared.Bind(values).RoutingKey.RawRoutingKey`.
+
 ## SocketOptions API
 
 ### Added APIs
