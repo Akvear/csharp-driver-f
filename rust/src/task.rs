@@ -258,6 +258,7 @@ impl BridgedFuture {
     /// This suits blocking APIs of the C# Driver that need to wait for an async operation to complete.
     /// Although it's inherently inefficient, it's not our choice - the C# Driver's blocking API is what it is.
     /// Use with caution and prefer async APIs whenever possible.
+    #[expect(dead_code)] // <- currently unused
     pub(crate) fn block_on<T>(future: impl Future<Output = T>) -> T {
         RUNTIME.block_on(future)
     }

@@ -9,6 +9,20 @@ using static Cassandra.RustBridge;
 namespace Cassandra
 {
     /// <summary>
+    /// Result of a synchronous attempt to read the next row.
+    /// Must match the Rust <c>SyncNextRowResult</c> enum layout.
+    /// </summary>
+    internal enum SyncNextRowResult : byte
+    {
+        /// <summary>A row was successfully read and deserialized.</summary>
+        GotRow = 0,
+        /// <summary>No more rows available (the result set is exhausted).</summary>
+        Exhausted = 1,
+        /// <summary>Could not complete synchronously; fall back to the async path.</summary>
+        NeedAsync = 2,
+    }
+
+    /// <summary>
     /// Bridges a Rust-owned RowSet resource to C# via SafeHandle.
     /// Inherits destructor and handle management from RustResource.
     /// </summary>
@@ -27,8 +41,63 @@ namespace Cassandra
         /// <param name="Columns">The columns metadata for the row.</param>
         /// <param name="serializer">The serializer to use for deserialization.</param>
         /// <returns>True if a row was retrieved; false if there are no more rows.</returns>
-        internal async Task<bool> NextRow(object[] values, CqlColumn[] Columns, IGenericSerializer serializer)
+        internal Task<bool> NextRow(object[] values, CqlColumn[] Columns, IGenericSerializer serializer)
         {
+            // Fast path: synchronous, zero-alloc.
+            // Attempts to read the next row without spawning a tokio task.
+            // This succeeds when the pager lock is uncontended and the next row
+            // is already buffered in the current page (the common case).
+            unsafe
+            {
+                SyncNextRowResult syncResult = default;
+                IntPtr columnsPtr = (IntPtr)Unsafe.AsPointer(ref Columns);
+                IntPtr valuesPtr = (IntPtr)Unsafe.AsPointer(ref values);
+                IntPtr serializerPtr = (IntPtr)Unsafe.AsPointer(ref serializer);
+
+                RunWithIncrement(handle =>
+                    row_set_try_next_row_sync(
+                        handle,
+                        (IntPtr)deserializeValueDirect,
+                        columnsPtr,
+                        valuesPtr,
+                        serializerPtr,
+                        (IntPtr)Globals.ConstructorsPtr,
+                        out syncResult
+                    )
+                );
+
+                // Prevent the GC from collecting the managed objects before
+                // the synchronous native call has finished using their pointers.
+                GC.KeepAlive(Columns);
+                GC.KeepAlive(values);
+                GC.KeepAlive(serializer);
+
+                switch (syncResult)
+                {
+                    case SyncNextRowResult.GotRow:
+                        return Task.FromResult(true);
+                    case SyncNextRowResult.Exhausted:
+                        return Task.FromResult(false);
+                    case SyncNextRowResult.NeedAsync:
+                        // Fall through to the async path below.
+                        break;
+                }
+            }
+
+            return NextRowAsync(values, Columns, serializer);
+        }
+
+        /// <summary>
+        /// Async slow path for NextRow: spawns a tokio task to fetch the next
+        /// row when it is not immediately available (e.g. page boundary).
+        /// Split out so the fast path avoids async state machine allocation.
+        /// </summary>
+        private async Task<bool> NextRowAsync(object[] values, CqlColumn[] Columns, IGenericSerializer serializer)
+        {
+            // Slow path: the row is not immediately available (e.g. waiting for the
+            // next page to be fetched from the server).
+            // Allocate GCHandles (owned by Rust) and a TaskCompletionSource,
+            // and spawn a tokio task to complete the operation asynchronously.
             var columnsHandle = new FFIGCHandle(GCHandle.Alloc(Columns));
             var valuesHandle = new FFIGCHandle(GCHandle.Alloc(values));
             var serializerHandle = new FFIGCHandle(GCHandle.Alloc(serializer));
@@ -137,6 +206,9 @@ namespace Cassandra
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void row_set_next_row_async(Tcb<FFIBool> tcb, IntPtr rowSetPtr, IntPtr deserializeValue, FFIGCHandle columnsHandle, FFIGCHandle valuesHandle, FFIGCHandle serializerHandle, IntPtr constructorsPtr);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern FFIMaybeException row_set_try_next_row_sync(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr, IntPtr constructorsPtr, out SyncNextRowResult result);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException row_set_get_columns_count(IntPtr rowSetPtr, out nuint count);
@@ -298,7 +370,15 @@ namespace Cassandra
         unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, nuint, IntPtr, FFISliceRaw, FFIMaybeException> deserializeValue = &DeserializeValue;
 
         /// <summary>
-        /// This shall be called by Rust code for each column in a row.
+        /// Callback for the sync path. Same native signature as <see cref="DeserializeValue"/>,
+        /// but recovers managed objects from raw stack-slot pointers (via Unsafe.Read)
+        /// instead of GCHandles.
+        /// </summary>
+        unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, IntPtr, nuint, IntPtr, FFISliceRaw, FFIMaybeException> deserializeValueDirect = &DeserializeValueDirect;
+
+        /// <summary>
+        /// This shall be called by Rust code for each column in a row (async path).
+        /// Recovers managed objects from GCHandles.
         /// </summary>
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
         private static FFIMaybeException DeserializeValue(
@@ -328,6 +408,39 @@ namespace Cassandra
             catch (Exception ex)
             {
                 Console.Error.WriteLine($"[FFI] DeserializeValue threw exception: {ex}");
+                return FFIMaybeException.FromException(ex);
+            }
+        }
+
+        /// <summary>
+        /// This shall be called by Rust code for each column in a row (sync path).
+        /// Recovers managed objects from raw stack-slot pointers (via Unsafe.Read)
+        /// instead of GCHandles.
+        /// </summary>
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        private static FFIMaybeException DeserializeValueDirect(
+            IntPtr columnsPtr,
+            IntPtr valuesPtr,
+            nuint valueIndex,
+            IntPtr serializerPtr,
+            FFISliceRaw FFIframeSlice
+        )
+        {
+            try
+            {
+                unsafe
+                {
+                    var columns = Unsafe.Read<CqlColumn[]>((void*)columnsPtr);
+                    var values = Unsafe.Read<object[]>((void*)valuesPtr);
+                    var serializer = Unsafe.Read<IGenericSerializer>((void*)serializerPtr);
+
+                    DeserializeValueInner(columns, values, valueIndex, serializer, FFIframeSlice);
+                }
+                return FFIMaybeException.Ok();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[FFI] DeserializeValueDirect threw exception: {ex}");
                 return FFIMaybeException.FromException(ex);
             }
         }

@@ -1,3 +1,5 @@
+use std::task::Poll;
+
 use scylla::client::pager::QueryPager;
 use scylla::cluster::metadata::CollectionType;
 use scylla::deserialize::FrameSlice;
@@ -120,6 +122,9 @@ pub enum Values {}
 /// Opaque C# representation of (de)serializer.
 pub enum Serializer {}
 
+/// Callback type for deserializing a column value in C#.
+/// Used by the **async** path (`row_set_next_row`), where the pointers
+/// are `GCHandlePtr`s (i.e. pointers to GC-pinned managed objects).
 type DeserializeValue = unsafe extern "C" fn(
     columns_ptr: GCHandlePtr<'_, Columns>,
     values_ptr: GCHandlePtr<'_, Values>,
@@ -127,6 +132,30 @@ type DeserializeValue = unsafe extern "C" fn(
     serializer_ptr: GCHandlePtr<'_, Serializer>,
     frame_slice: FFISlice<'_, u8>,
 ) -> FFIMaybeException;
+
+/// Callback type for deserializing a column value in C#.
+/// Used by the **sync** path (`row_set_try_next_row_sync`), where the pointers
+/// are raw `FFINonNullPtr`s pointing to managed references on the C# caller's stack.
+type DeserializeValueDirect = unsafe extern "C" fn(
+    columns_ptr: FFINonNullPtr<'_, Columns>,
+    values_ptr: FFINonNullPtr<'_, Values>,
+    value_index: usize,
+    serializer_ptr: FFINonNullPtr<'_, Serializer>,
+    frame_slice: FFISlice<'_, u8>,
+) -> FFIMaybeException;
+
+/// Result of a synchronous attempt to read the next row.
+#[repr(u8)]
+pub enum SyncNextRowResult {
+    /// A row was successfully read and deserialized.
+    GotRow = 0,
+    /// No more rows available (the result set is exhausted).
+    Exhausted = 1,
+    /// Could not complete synchronously (e.g. the pager lock is contended,
+    /// or the next page needs to be fetched from the server).
+    /// The caller should fall back to the async path.
+    NeedAsync = 2,
+}
 
 /// Deserializes all columns of the next row from `next_column_iterator()` result,
 /// calling back into C# via `call_deserialize` for each non-null column value.
@@ -195,53 +224,81 @@ fn deserialize_next_row(
     Ok(true)
 }
 
-// Replaced by async version in row_set_next_row_async, but this will be
-// still used in some way in next commits. Stay tuned!
+/// Synchronous fast path: attempts to read and deserialize the next row
+/// without spawning a tokio task.
+///
+/// This succeeds when the pager lock is uncontended and the next row is already
+/// buffered in the current page. On page boundaries (where a network fetch is
+/// needed), `out_result` is set to `NeedAsync` and the caller should use the
+/// async `row_set_next_row` instead.
+///
+/// # Out parameters
+/// - `out_result`: set to the result of the synchronous attempt.
+///
+/// # Safety
+/// - `columns_ptr`, `values_ptr`, `serializer_ptr` must point to valid managed
+///   references on the caller's stack. They are passed through opaquely to the
+///   `deserialize_value` callback.
+/// - `out_result` must be a valid, writable pointer.
 #[unsafe(no_mangle)]
-pub extern "C" fn row_set_next_row<'row_set>(
-    row_set_ptr: BridgedBorrowedSharedPtr<'row_set, RowSet>,
-    deserialize_value: DeserializeValue,
-    columns_handle: FFIGCHandle<Columns>,
-    values_handle: FFIGCHandle<Values>,
-    serializer_handle: FFIGCHandle<Serializer>,
-    out_has_row: *mut bool,
+pub extern "C" fn row_set_try_next_row_sync(
+    row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
+    deserialize_value: DeserializeValueDirect,
+    columns_ptr: FFINonNullPtr<'_, Columns>,
+    values_ptr: FFINonNullPtr<'_, Values>,
+    serializer_ptr: FFINonNullPtr<'_, Serializer>,
     constructors: &'static ExceptionConstructors,
+    out_result: &mut SyncNextRowResult,
 ) -> FFIMaybeException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
-    let deserialize_fut = async {
-        let mut pager = row_set.pager.lock().await;
-        let num_columns = pager.column_specs().len();
-        let next = pager.next_column_iterator().await;
 
-        deserialize_next_row(
-            next,
-            num_columns,
-            |value_index, frame_slice| unsafe {
-                deserialize_value(
-                    columns_handle.borrow(),
-                    values_handle.borrow(),
-                    value_index,
-                    serializer_handle.borrow(),
-                    FFISlice::new(frame_slice.as_slice()),
-                )
-            },
-            constructors,
-        )
+    let Ok(mut pager) = row_set.pager.try_lock() else {
+        *out_result = SyncNextRowResult::NeedAsync;
+        return FFIMaybeException::ok();
     };
 
-    // This is inherently inefficient, but necessary due to blocking C# API upon page boundaries.
-    // TODO: implement async C# API (IAsyncEnumerable) to avoid this.
-    let (has_row, result) = match BridgedFuture::block_on(deserialize_fut) {
-        Ok(has_row) => (has_row, FFIMaybeException::ok()),
-        Err(exception) => (false, FFIMaybeException::from_exception(exception)),
+    let num_columns = pager.column_specs().len();
+    let mut fut = std::pin::pin!(pager.next_column_iterator());
+    let noop_waker = futures::task::noop_waker();
+    let mut cx = std::task::Context::from_waker(&noop_waker);
+
+    let Poll::Ready(next) = fut.as_mut().poll(&mut cx) else {
+        *out_result = SyncNextRowResult::NeedAsync;
+        return FFIMaybeException::ok();
     };
-    unsafe {
-        *out_has_row = has_row;
+
+    let result = deserialize_next_row(
+        next,
+        num_columns,
+        |value_index, slice| unsafe {
+            deserialize_value(
+                columns_ptr,
+                values_ptr,
+                value_index,
+                serializer_ptr,
+                FFISlice::new(slice.as_slice()),
+            )
+        },
+        constructors,
+    );
+
+    match result {
+        Ok(got_row) => {
+            *out_result = if got_row {
+                SyncNextRowResult::GotRow
+            } else {
+                SyncNextRowResult::Exhausted
+            };
+            FFIMaybeException::ok()
+        }
+        Err(exception) => FFIMaybeException::from_exception(exception),
     }
-
-    result
 }
 
+/// Async path: spawns a tokio task to read and deserialize the next row.
+///
+/// This is the fallback used when `row_set_try_next_row_sync` returns `NeedAsync`
+/// (e.g. when the next page needs to be fetched from the server).
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_next_row_async<'row_set>(
     tcb: Tcb<bool>,
