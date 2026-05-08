@@ -317,10 +317,7 @@ namespace Cassandra
 
                 if (valuesHandle.Target is object[] values && columnsHandle.Target is CqlColumn[] columns && serializerHandle.Target is IGenericSerializer serializer)
                 {
-                    CqlColumn column = columns[valueIndex];
-
-                    ReadOnlySpan<byte> frameSlice = FFIframeSlice.As<byte>().ToSpan();
-                    values[valueIndex] = serializer.Deserialize(ProtocolVersion.V4, frameSlice, column.TypeCode, column.TypeInfo);
+                    DeserializeValueInner(columns, values, valueIndex, serializer, FFIframeSlice);
                 }
                 else
                 {
@@ -333,6 +330,16 @@ namespace Cassandra
                 Console.Error.WriteLine($"[FFI] DeserializeValue threw exception: {ex}");
                 return FFIMaybeException.FromException(ex);
             }
+        }
+
+        /// <summary>
+        /// Core deserialization logic shared by deserialization callbacks.
+        /// </summary>
+        private static void DeserializeValueInner(CqlColumn[] columns, object[] values, nuint valueIndex, IGenericSerializer serializer, FFISliceRaw frameSliceRaw)
+        {
+            CqlColumn column = columns[valueIndex];
+            ReadOnlySpan<byte> frameSlice = frameSliceRaw.As<byte>().ToSpan();
+            values[valueIndex] = serializer.Deserialize(ProtocolVersion.V4, frameSlice, column.TypeCode, column.TypeInfo);
         }
 
         internal static Type MapTypeFromCode(ColumnTypeCode code)
