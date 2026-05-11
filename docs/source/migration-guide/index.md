@@ -167,3 +167,19 @@ Removed `SetLwt` method from `PreparedStatement`. It was mistakenly added to the
 ### Removed APIs
 
 Removed `SetLwt` method from `BoundStatement`. It was mistakenly added to the public API in the original C# driver, but it was never intended to be used for any purpose.
+
+## Logger API
+
+Log messages produced by trace-based logging now explicitly state the log severity for all log levels. This may break existing log parsers.
+
+Before:
+- Error: `Rust: MM/dd/yyyy H:mm:ss.fff zzz #ERROR: [csharp_wrapper::logging] This is an error message`
+- Warning: `Rust: MM/dd/yyyy H:mm:ss.fff zzz #WARNING: [csharp_wrapper::logging] This is a warning message`
+- Info: `Rust: MM/dd/yyyy H:mm:ss.fff zzz : [csharp_wrapper::logging] This is an info message`
+- Verbose: `Rust: MM/dd/yyyy H:mm:ss.fff zzz [csharp_wrapper::logging] This is a verbose message`
+
+After:
+- Error: `Rust: MM/dd/yyyy H:mm:ss.fff zzz ERROR [csharp_wrapper::logging] This is an error message`
+- Warning: `Rust: MM/dd/yyyy H:mm:ss.fff zzz WARNING [csharp_wrapper::logging] This is a warning message`
+- Info: `Rust: MM/dd/yyyy H:mm:ss.fff zzz INFO [csharp_wrapper::logging] This is an info message`
+- Verbose: `Rust: MM/dd/yyyy H:mm:ss.fff zzz VERBOSE [csharp_wrapper::logging] This is a verbose message`
