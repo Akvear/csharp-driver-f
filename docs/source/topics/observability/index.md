@@ -6,6 +6,7 @@ Various techniques and tools to monitor and understand the behavior of the drive
 * [Query Warnings](query-warnings.md)
 * [Request Tracker](request-tracker.md)
 * [OpenTelemetry](opentelemetry.md)
+* [Logging](logging.md)
 
 
 ```{eval-rst}
@@ -17,4 +18,5 @@ Various techniques and tools to monitor and understand the behavior of the drive
    query-warnings
    request-tracker
    opentelemetry
+   logging
 ```
