@@ -889,5 +889,40 @@ namespace Cassandra
                 res.maybeException = FFIMaybeGCHandle.Empty();
             }
         }
+
+        /// <summary>
+        /// Convert a .NET <see cref="Guid"/> to the RFC 4122 / network (big-endian) byte
+        /// order used by native code (for example Rust's <c>Uuid::from_slice</c>).
+        ///
+        /// Reason: .NET's default <c>Guid.ToByteArray()</c> (and the parameterless
+        /// <c>Guid.TryWriteBytes</c>) use a mixed-endian layout on little-endian platforms (the
+        /// first three fields are written in little-endian), while RFC 4122 (and the Rust uuid
+        /// crate) expect the canonical network byte order (big-endian). Passing .NET's raw Guid
+        /// bytes directly over FFI will therefore produce the wrong UUID value on the native side
+        /// (observed as a byte-order mismatch). This helper avoids that by writing big-endian bytes.
+        ///
+        /// Use this helper wherever a Guid must be marshaled to native code as a 16-byte UUID
+        /// to ensure the bytes are ordered per RFC 4122.
+        /// </summary>
+        internal static void GuidToFFIFormat(Guid guid, Span<byte> buffer)
+        {
+            Debug.Assert(buffer.Length >= 16, "Buffer must be at least 16 bytes");
+
+            // bigEndian: true writes the canonical RFC 4122 / network byte order directly,
+            // instead of .NET's default mixed-endian layout.
+            guid.TryWriteBytes(buffer, bigEndian: true, out int bytesWritten);
+            Debug.Assert(bytesWritten == 16, $"Guid.TryWriteBytes wrote {bytesWritten} bytes instead of 16");
+        }
+
+        /// <summary>
+        /// Inverse of <see cref="GuidToFFIFormat(Guid, Span{byte})"/>: builds a <see cref="Guid"/> from a 16-byte
+        /// RFC 4122 / network-order UUID produced by native code (e.g. <c>Uuid::as_bytes()</c>).
+        /// </summary>
+        internal static Guid GuidFromFFIFormat(ReadOnlySpan<byte> bytes)
+        {
+            // bigEndian: true interprets the bytes as canonical RFC 4122 / network order,
+            // matching what GuidToFFIFormat produces.
+            return new Guid(bytes, bigEndian: true);
+        }
     }
 }

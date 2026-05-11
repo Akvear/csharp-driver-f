@@ -765,3 +765,19 @@ where
         }
     }
 }
+
+#[derive(Error, Debug, Clone)]
+pub(crate) enum HostIdError {
+    #[error("invalid host id: not a valid uuid: {0}")]
+    InvalidUuidBytes(#[from] uuid::Error),
+}
+
+impl ErrorToException for HostIdError {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
+        match self {
+            HostIdError::InvalidUuidBytes(_) => ctors
+                .invalid_argument_exception_constructor
+                .construct_from_rust(&self.to_string()),
+        }
+    }
+}

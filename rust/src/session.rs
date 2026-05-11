@@ -9,7 +9,10 @@ use scylla::statement::Statement;
 use scylla_cql::serialize::row::SerializedValues;
 use tokio::sync::RwLock;
 
-use crate::error_conversion::{FFIMaybeException, SessionOperationError};
+use crate::error_conversion::FFIMaybeException;
+use crate::error_conversion::HostIdError;
+use crate::error_conversion::SessionOperationError;
+use crate::ffi::FFIPtr;
 use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, CSharpManagedStringPtr, CSharpStr,
     FFI, FFIBool, FFIStr, FromArc, WriteStringCallback,
@@ -19,6 +22,40 @@ use crate::prepared_statement::BridgedPreparedStatement;
 use crate::row_set::RowSet;
 use crate::session_config::{BridgedSessionConfig, BridgedSessionConfigResult};
 use crate::task::{BridgedFuture, ExceptionConstructors, ManuallyDestructible, Tcb};
+use uuid::Uuid;
+
+// Number of bytes in an RFC-4122 UUID.
+// NOTE: Used in the next commit when bridging WaitForSchemaAgreement with a required node.
+const UUID_BYTE_LEN: usize = 16;
+
+// NOTE: Used in the next commit when bridging WaitForSchemaAgreement with a required node.
+enum HostId {}
+
+#[repr(transparent)]
+pub struct HostIdPtr<'a> {
+    inner: FFIPtr<'a, HostId>,
+}
+
+impl HostIdPtr<'_> {
+    /// Parse an optional UUID from this host-id pointer.
+    ///
+    /// - Returns `Ok(None)` when the pointer is null (no required node).
+    /// - When non-null, assumes the caller provided exactly `UUID_BYTE_LEN` bytes at the
+    ///   address in big-endian order.
+    /// - The caller (managed side) is responsible for ensuring the memory is valid and pinned.
+    #[expect(dead_code, reason = "Used in a further commit")]
+    pub fn parse_uuid(&self) -> Result<Option<Uuid>, HostIdError> {
+        let Some(nn) = self.inner.as_non_null() else {
+            return Ok(None);
+        };
+
+        let bytes = unsafe { std::slice::from_raw_parts(nn.as_ptr() as *const u8, UUID_BYTE_LEN) };
+
+        Uuid::from_slice(bytes)
+            .map(Some)
+            .map_err(HostIdError::InvalidUuidBytes)
+    }
+}
 
 /// Internal representation of a session bridged to C#.
 /// It contains optional connected session state to allow for shutdown.

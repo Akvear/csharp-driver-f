@@ -75,7 +75,7 @@ namespace Cassandra
                 // This matches the pattern used in row_set_fill_columns_metadata.
                 var context = Unsafe.AsRef<Metadata.RefreshContext>((void*)contextPtr);
 
-                var hostId = new Guid(hostData.IdBytes.As<byte>().ToSpan());
+                var hostId = GuidFromFFIFormat(hostData.IdBytes.As<byte>().ToSpan());
 
                 // Construct IPAddress directly from bytes (4 for IPv4, 16 for IPv6). ipBytes is an FFISlice<byte>
                 // and it accesses unmanaged memory that is only valid for the duration of this callback invocation.
@@ -145,7 +145,7 @@ namespace Cassandra
 
                 const int HostIdLength = 16;
                 var hostIdBytes = new ReadOnlySpan<byte>((void*)replica.HostIdBytesPtr, HostIdLength);
-                var hostId = new Guid(hostIdBytes);
+                var hostId = GuidFromFFIFormat(hostIdBytes);
 
                 if (context.HostsById.TryGetValue(hostId, out var host))
                 {
