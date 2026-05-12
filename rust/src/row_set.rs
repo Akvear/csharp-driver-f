@@ -4,7 +4,8 @@ use scylla::frame::response::result::{ColumnType, NativeType};
 
 use crate::error_conversion::FFIMaybeException;
 use crate::ffi::{
-    ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIPtr, FFISlice, FFIStr, FromArc, FromRef, RefFFI,
+    ArcFFI, BridgedBorrowedSharedPtr, FFI, FFINonNullPtr, FFISlice, FFIStr, FromArc, FromRef,
+    RefFFI,
 };
 use crate::task::BridgedFuture;
 use crate::task::ExceptionConstructors;
@@ -47,7 +48,7 @@ pub extern "C" fn row_set_get_columns_count(
 
 // Function pointer type for setting column metadata in C#.
 type SetMetadata = unsafe extern "C" fn(
-    columns_ptr: ColumnsPtr,
+    columns_ptr: FFINonNullPtr<'_, Columns>,
     value_index: usize,
     name: FFIStr<'_>,
     keyspace: FFIStr<'_>,
@@ -65,7 +66,7 @@ type SetMetadata = unsafe extern "C" fn(
 #[unsafe(no_mangle)]
 pub extern "C" fn row_set_fill_columns_metadata(
     row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
-    columns_ptr: ColumnsPtr,
+    columns_ptr: FFINonNullPtr<'_, Columns>,
     set_metadata: SetMetadata,
 ) -> FFIMaybeException {
     let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
@@ -112,29 +113,18 @@ pub extern "C" fn row_set_fill_columns_metadata(
     FFIMaybeException::ok()
 }
 
-enum Columns {}
-
-#[repr(transparent)]
-#[derive(Clone, Copy)]
-pub struct ColumnsPtr(FFIPtr<'static, Columns>);
-
-enum Values {}
-
-#[derive(Clone, Copy)]
-#[repr(transparent)]
-pub struct ValuesPtr(FFIPtr<'static, Values>);
-
-enum Serializer {}
-
-#[derive(Clone, Copy)]
-#[repr(transparent)]
-pub struct SerializerPtr(FFIPtr<'static, Serializer>);
+/// Opaque C# representation of column metadata array.
+pub enum Columns {}
+/// Opaque C# representation of deserialized column values array.
+pub enum Values {}
+/// Opaque C# representation of (de)serializer.
+pub enum Serializer {}
 
 type DeserializeValue = unsafe extern "C" fn(
-    columns_ptr: ColumnsPtr,
-    values_ptr: ValuesPtr,
+    columns_ptr: FFINonNullPtr<'_, Columns>,
+    values_ptr: FFINonNullPtr<'_, Values>,
     value_index: usize,
-    serializer_ptr: SerializerPtr,
+    serializer_ptr: FFINonNullPtr<'_, Serializer>,
     frame_slice: FFISlice<'_, u8>,
 ) -> FFIMaybeException;
 
@@ -142,9 +132,9 @@ type DeserializeValue = unsafe extern "C" fn(
 pub extern "C" fn row_set_next_row<'row_set>(
     row_set_ptr: BridgedBorrowedSharedPtr<'row_set, RowSet>,
     deserialize_value: DeserializeValue,
-    columns_ptr: ColumnsPtr,
-    values_ptr: ValuesPtr,
-    serializer_ptr: SerializerPtr,
+    columns_ptr: FFINonNullPtr<'_, Columns>,
+    values_ptr: FFINonNullPtr<'_, Values>,
+    serializer_ptr: FFINonNullPtr<'_, Serializer>,
     out_has_row: *mut bool,
     constructors: &'static ExceptionConstructors,
 ) -> FFIMaybeException {
@@ -160,7 +150,7 @@ pub extern "C" fn row_set_next_row<'row_set>(
         // While unlikely, it's not impossible.
         // For now, we just assume it won't happen and ignore `_new_page_began`.
         // The problem is that C# assumes the same metadata for the whole RowSet,
-        // and they are passed through `ColumnsPtr`. Currently, if the metadata changes,
+        // and they are passed through `FFINonNullPtr<'_, Columns>`. Currently, if the metadata changes,
         // C# code will attempt to deserialize columns with wrong types, likely leading to exceptions.
         let Some(next) = pager.next_column_iterator().await else {
             tracing::trace!("[FFI] No more rows available!");
