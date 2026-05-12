@@ -28,28 +28,13 @@ namespace Cassandra
         /// <returns>True if a row was retrieved; false if there are no more rows.</returns>
         internal bool NextRow(ref object[] values, CqlColumn[] Columns, ref IGenericSerializer serializer)
         {
-            var valuesHandle = GCHandle.Alloc(values);
-            IntPtr valuesPtr = GCHandle.ToIntPtr(valuesHandle);
-
-            var columnsHandle = GCHandle.Alloc(Columns);
-            IntPtr columnsPtr = GCHandle.ToIntPtr(columnsHandle);
-
-            var serializerHandle = GCHandle.Alloc(serializer);
-            IntPtr serializerPtr = GCHandle.ToIntPtr(serializerHandle);
+            var columnsHandle = new FFIGCHandle(GCHandle.Alloc(Columns));
+            var valuesHandle = new FFIGCHandle(GCHandle.Alloc(values));
+            var serializerHandle = new FFIGCHandle(GCHandle.Alloc(serializer));
             FFIBool hasRow = false;
-
-            try
+            unsafe
             {
-                unsafe
-                {
-                    RunWithIncrement(handle => row_set_next_row(handle, (IntPtr)deserializeValue, columnsPtr, valuesPtr, serializerPtr, out hasRow, (IntPtr)Globals.ConstructorsPtr));
-                }
-            }
-            finally
-            {
-                valuesHandle.Free();
-                columnsHandle.Free();
-                serializerHandle.Free();
+                RunWithIncrement(handle => row_set_next_row(handle, (IntPtr)deserializeValue, columnsHandle, valuesHandle, serializerHandle, out hasRow, (IntPtr)Globals.ConstructorsPtr));
             }
             return hasRow;
         }
@@ -149,7 +134,7 @@ namespace Cassandra
         // Private methods and P/Invoke
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern FFIMaybeException row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, IntPtr columnsPtr, IntPtr valuesPtr, IntPtr serializerPtr, out FFIBool hasRow, IntPtr constructorsPtr);
+        unsafe private static extern FFIMaybeException row_set_next_row(IntPtr rowSetPtr, IntPtr deserializeValue, FFIGCHandle columnsPtr, FFIGCHandle valuesPtr, FFIGCHandle serializerPtr, out FFIBool hasRow, IntPtr constructorsPtr);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException row_set_get_columns_count(IntPtr rowSetPtr, out nuint count);

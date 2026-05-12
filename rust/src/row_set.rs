@@ -4,8 +4,8 @@ use scylla::frame::response::result::{ColumnType, NativeType};
 
 use crate::error_conversion::FFIMaybeException;
 use crate::ffi::{
-    ArcFFI, BridgedBorrowedSharedPtr, FFI, FFINonNullPtr, FFISlice, FFIStr, FromArc, FromRef,
-    GCHandlePtr, RefFFI,
+    ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIGCHandle, FFINonNullPtr, FFISlice, FFIStr, FromArc,
+    FromRef, GCHandlePtr, RefFFI,
 };
 use crate::task::BridgedFuture;
 use crate::task::ExceptionConstructors;
@@ -132,9 +132,9 @@ type DeserializeValue = unsafe extern "C" fn(
 pub extern "C" fn row_set_next_row<'row_set>(
     row_set_ptr: BridgedBorrowedSharedPtr<'row_set, RowSet>,
     deserialize_value: DeserializeValue,
-    columns_ptr: GCHandlePtr<'_, Columns>,
-    values_ptr: GCHandlePtr<'_, Values>,
-    serializer_ptr: GCHandlePtr<'_, Serializer>,
+    columns_handle: FFIGCHandle<Columns>,
+    values_handle: FFIGCHandle<Values>,
+    serializer_handle: FFIGCHandle<Serializer>,
     out_has_row: *mut bool,
     constructors: &'static ExceptionConstructors,
 ) -> FFIMaybeException {
@@ -190,10 +190,10 @@ pub extern "C" fn row_set_next_row<'row_set>(
 
             unsafe {
                 let ffi_exception = deserialize_value(
-                    columns_ptr,
-                    values_ptr,
+                    columns_handle.borrow(),
+                    values_handle.borrow(),
                     value_index,
-                    serializer_ptr,
+                    serializer_handle.borrow(),
                     FFISlice::new(frame_slice.as_slice()),
                 );
                 if ffi_exception.has_exception() {
