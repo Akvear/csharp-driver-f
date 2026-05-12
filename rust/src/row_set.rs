@@ -5,7 +5,7 @@ use scylla::frame::response::result::{ColumnType, NativeType};
 use crate::error_conversion::FFIMaybeException;
 use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, FFI, FFINonNullPtr, FFISlice, FFIStr, FromArc, FromRef,
-    RefFFI,
+    GCHandlePtr, RefFFI,
 };
 use crate::task::BridgedFuture;
 use crate::task::ExceptionConstructors;
@@ -121,10 +121,10 @@ pub enum Values {}
 pub enum Serializer {}
 
 type DeserializeValue = unsafe extern "C" fn(
-    columns_ptr: FFINonNullPtr<'_, Columns>,
-    values_ptr: FFINonNullPtr<'_, Values>,
+    columns_ptr: GCHandlePtr<'_, Columns>,
+    values_ptr: GCHandlePtr<'_, Values>,
     value_index: usize,
-    serializer_ptr: FFINonNullPtr<'_, Serializer>,
+    serializer_ptr: GCHandlePtr<'_, Serializer>,
     frame_slice: FFISlice<'_, u8>,
 ) -> FFIMaybeException;
 
@@ -132,9 +132,9 @@ type DeserializeValue = unsafe extern "C" fn(
 pub extern "C" fn row_set_next_row<'row_set>(
     row_set_ptr: BridgedBorrowedSharedPtr<'row_set, RowSet>,
     deserialize_value: DeserializeValue,
-    columns_ptr: FFINonNullPtr<'_, Columns>,
-    values_ptr: FFINonNullPtr<'_, Values>,
-    serializer_ptr: FFINonNullPtr<'_, Serializer>,
+    columns_ptr: GCHandlePtr<'_, Columns>,
+    values_ptr: GCHandlePtr<'_, Values>,
+    serializer_ptr: GCHandlePtr<'_, Serializer>,
     out_has_row: *mut bool,
     constructors: &'static ExceptionConstructors,
 ) -> FFIMaybeException {
