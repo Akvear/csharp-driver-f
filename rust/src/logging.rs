@@ -209,3 +209,18 @@ pub extern "C" fn configure_rust_logging(callback: CSharpLogCallback, min_level:
         .expect("failed to set global default subscriber - it might have already been set");
     });
 }
+
+// --- TESTING HELPERS ---
+
+/// Emits one log entry at every supported level.
+///
+/// Used by tests to verify Rust-to-C# log forwarding.
+#[cfg(feature = "integration_testing")]
+#[unsafe(no_mangle)]
+pub extern "C" fn emit_all_log_levels() {
+    tracing::trace!("This is a trace message");
+    tracing::debug!("This is a debug message");
+    tracing::info!("This is an info message");
+    tracing::warn!("This is a warning message");
+    tracing::error!("This is an error message");
+}
