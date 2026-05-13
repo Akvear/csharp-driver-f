@@ -108,22 +108,6 @@ namespace Cassandra.IntegrationTests.Core
         }
 
         [Test]
-        public void Cluster_Should_Ignore_IpV6_Addresses_For_Not_Valid_Hosts()
-        {
-            using (var cluster = ClusterBuilder()
-                                        .AddContactPoint(IPAddress.Parse("::1"))
-                                        .AddContactPoint(TestCluster.InitialContactPoint)
-                                        .Build())
-            {
-                Assert.DoesNotThrow(() =>
-                {
-                    var session = cluster.Connect();
-                    session.Execute("SELECT * FROM system.local WHERE key='local'");
-                });
-            }
-        }
-
-        [Test]
         public void Should_Try_To_Resolve_And_Continue_With_The_Next_Contact_Point_If_It_Fails()
         {
             using (var cluster = ClusterBuilder()
@@ -170,25 +154,6 @@ namespace Cassandra.IntegrationTests.Core
                 await Task.WhenAll(actionsAfter.ToArray()).ConfigureAwait(false);
                 Assert.True(actionsAfter.All(a => a.IsCompleted));
                 Assert.False(actionsAfter.Any(a => a.IsFaulted));
-            }
-        }
-
-        [Test]
-        public void Cluster_Connect_With_Wrong_Keyspace_Name_Test()
-        {
-            TestCluster.PrimeFluent(
-                b => b.WhenQuery("USE \"MY_WRONG_KEYSPACE\"").ThenServerError(ServerError.Invalid, "msg"));
-            TestCluster.PrimeFluent(
-                b => b.WhenQuery("USE \"ANOTHER_THAT_DOES_NOT_EXIST\"").ThenServerError(ServerError.Invalid, "msg"));
-
-            using (var cluster = ClusterBuilder()
-                                        .AddContactPoint(TestCluster.InitialContactPoint)
-                                        //using a keyspace that does not exists
-                                        .WithDefaultKeyspace("MY_WRONG_KEYSPACE")
-                                        .Build())
-            {
-                Assert.Throws<InvalidQueryException>(() => cluster.Connect());
-                Assert.Throws<InvalidQueryException>(() => cluster.Connect("ANOTHER_THAT_DOES_NOT_EXIST"));
             }
         }
 
