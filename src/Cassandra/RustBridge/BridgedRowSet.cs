@@ -26,7 +26,7 @@ namespace Cassandra
         /// <param name="Columns">The columns metadata for the row.</param>
         /// <param name="serializer">The serializer to use for deserialization.</param>
         /// <returns>True if a row was retrieved; false if there are no more rows.</returns>
-        internal bool NextRow(ref object[] values, CqlColumn[] Columns, ref IGenericSerializer serializer)
+        internal bool NextRow(object[] values, CqlColumn[] Columns, IGenericSerializer serializer)
         {
             var columnsHandle = new FFIGCHandle(GCHandle.Alloc(Columns));
             var valuesHandle = new FFIGCHandle(GCHandle.Alloc(values));

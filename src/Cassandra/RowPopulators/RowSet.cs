@@ -150,7 +150,7 @@ namespace Cassandra
 
             IGenericSerializer serializer = _genericSerializer;
 
-            var hasRow = bridgedRowSet.NextRow(ref values, Columns, ref serializer);
+            var hasRow = bridgedRowSet.NextRow(values, Columns, serializer);
             if (!hasRow)
             {
                 _exhausted = true;
