@@ -264,6 +264,13 @@ namespace Cassandra
                         bool hasConsistencyLevel = s.ConsistencyLevel.HasValue;
                         ushort consistencyLevel = s.ConsistencyLevel.HasValue ? (ushort)s.ConsistencyLevel.Value : (ushort)999;
                         bool isIdempotent = s.IsIdempotent ?? Configuration.QueryOptions.GetDefaultIdempotence();
+                        int pageSize = s.PageSize <= 0 ? Configuration.QueryOptions.GetPageSize() : s.PageSize;
+                        if (pageSize == int.MaxValue)
+                        {
+                            throw new NotImplementedException(
+                                "Disabling paging (PageSize == int.MaxValue) is not yet supported. " +
+                                "This requires using the Rust driver's unpaged query API, which is not yet bridged.");
+                        }
 
                         Task<RustBridge.ManuallyDestructible> task;
                         if (queryValues.Length == 0)
@@ -272,7 +279,8 @@ namespace Cassandra
                                 queryString,
                                 hasConsistencyLevel,
                                 consistencyLevel,
-                                isIdempotent
+                                isIdempotent,
+                                pageSize
                             );
                         }
                         else
@@ -283,7 +291,8 @@ namespace Cassandra
                                 _serializerManager.GetCurrentSerializer(),
                                 hasConsistencyLevel,
                                 consistencyLevel,
-                                isIdempotent
+                                isIdempotent,
+                                pageSize
                             );
                         }
 
@@ -324,7 +333,8 @@ namespace Cassandra
                                 queryPrepared,
                                 hasConsistencyLevel,
                                 consistencyLevel,
-                                isIdempotent);
+                                isIdempotent
+                            );
                         }
                         else
                         {

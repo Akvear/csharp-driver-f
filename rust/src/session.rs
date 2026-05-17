@@ -45,6 +45,7 @@ pub struct SimpleStatementExecutionOptions {
     pub consistency_level: u16,
     pub has_consistency_level: FFIBool,
     pub is_idempotent: FFIBool,
+    pub page_size: i32,
 }
 
 /// BridgedSession is a thread-safe, asynchronously accessible session wrapper.
@@ -166,6 +167,7 @@ pub extern "C" fn session_query(
 
         let mut statement = Statement::new(statement);
         statement.set_is_idempotent(bool::from(execution_options.is_idempotent));
+        statement.set_page_size(execution_options.page_size);
 
         if bool::from(execution_options.has_consistency_level) {
             let consistency = execution_options
@@ -252,6 +254,7 @@ pub extern "C" fn session_query_with_values(
             .map_err(|e| MaybeShutdownError::Inner(PagerExecutionError::PrepareError(e)))?;
 
         prepared.set_is_idempotent(bool::from(execution_options.is_idempotent));
+        prepared.set_page_size(execution_options.page_size);
 
         if bool::from(execution_options.has_consistency_level) {
             let consistency = execution_options

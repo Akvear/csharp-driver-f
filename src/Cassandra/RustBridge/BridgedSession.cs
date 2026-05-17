@@ -117,14 +117,16 @@ namespace Cassandra
         /// <param name="hasConsistencyLevel">Whether a consistency level override was specified.</param>
         /// <param name="consistencyLevel">Consistency level to use for the query.</param>
         /// <param name="isIdempotent">Whether the query is idempotent.</param>
+        /// <param name="pageSize">Page size for the query (must be positive).</param>
         internal Task<ManuallyDestructible> Query(
             string statement,
             bool hasConsistencyLevel,
             ushort consistencyLevel,
-            bool isIdempotent)
+            bool isIdempotent,
+            int pageSize)
         {
             var executionOptions = new SimpleStatementExecutionOptions(
-                hasConsistencyLevel, consistencyLevel, isIdempotent);
+                hasConsistencyLevel, consistencyLevel, isIdempotent, pageSize);
             return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query(tcb, ptr, statement, executionOptions));
         }
 
@@ -137,18 +139,20 @@ namespace Cassandra
         /// <param name="hasConsistencyLevel">Whether a consistency level override was specified.</param>
         /// <param name="consistencyLevel">Consistency level to use for the query.</param>
         /// <param name="isIdempotent">Whether the query is idempotent.</param>
+        /// <param name="pageSize">Page size for the query (must be positive).</param>
         internal unsafe Task<ManuallyDestructible> QueryWithValues(
             string statement,
             object[] queryValues,
             ISerializer serializer,
             bool hasConsistencyLevel,
             ushort consistencyLevel,
-            bool isIdempotent)
+            bool isIdempotent,
+            int pageSize)
         {
             var populateCtx = SerializationHandler.CreateContext(queryValues, serializer);
             var ctxIntPtr = (IntPtr)Unsafe.AsPointer(ref populateCtx);
             var executionOptions = new SimpleStatementExecutionOptions(
-                hasConsistencyLevel, consistencyLevel, isIdempotent);
+                hasConsistencyLevel, consistencyLevel, isIdempotent, pageSize);
             var task = RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) =>
                 session_query_with_values(
                     tcb, ptr, statement,
@@ -354,15 +358,18 @@ namespace Cassandra
             internal readonly ushort ConsistencyLevel;
             internal readonly FFIBool HasConsistencyLevel;
             internal readonly FFIBool IsIdempotent;
+            internal readonly int PageSize;
 
             internal SimpleStatementExecutionOptions(
                 bool hasConsistencyLevel,
                 ushort consistencyLevel,
-                bool isIdempotent)
+                bool isIdempotent,
+                int pageSize)
             {
                 HasConsistencyLevel = hasConsistencyLevel;
                 ConsistencyLevel = consistencyLevel;
                 IsIdempotent = isIdempotent;
+                PageSize = pageSize;
             }
         }
     }
