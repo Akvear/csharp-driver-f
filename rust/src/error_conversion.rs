@@ -2,8 +2,8 @@ use crate::ffi::{FFIGCHandle, FFIMaybeGCHandle, FFISlice, FFIStr};
 use scylla::errors::{
     BadKeyspaceName, ClusterStateTokenError, ConnectionError, ConnectionPoolError, DbError,
     DeserializationError, MetadataError, NewSessionError, NextPageError, NextRowError,
-    PagerExecutionError, PrepareError, RequestAttemptError, RequestError, SerializationError,
-    TypeCheckError, UseKeyspaceError,
+    PagerExecutionError, PrepareError, RequestAttemptError, RequestError, SchemaAgreementError,
+    SerializationError, TypeCheckError, UseKeyspaceError,
 };
 use std::fmt::{Debug, Display};
 use std::mem::size_of;
@@ -425,9 +425,7 @@ impl ErrorToException for PagerExecutionError {
 
             PagerExecutionError::UseKeyspaceError(e) => e.to_exception(ctors),
 
-            PagerExecutionError::SchemaAgreementError(_) => {
-                ctors.rust_exception_constructor.construct_from_rust(&self)
-            }
+            PagerExecutionError::SchemaAgreementError(e) => e.to_exception(ctors),
 
             PagerExecutionError::MetadataError(e) => e.to_exception(ctors),
 
@@ -779,5 +777,21 @@ impl ErrorToException for HostIdError {
                 .invalid_argument_exception_constructor
                 .construct_from_rust(&self.to_string()),
         }
+    }
+}
+
+impl ErrorToException for SchemaAgreementError {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
+        ctors.rust_exception_constructor.construct_from_rust(&self)
+    }
+}
+
+pub(crate) struct InvalidArgumentError<'a>(pub &'a str);
+
+impl ErrorToException for InvalidArgumentError<'_> {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
+        ctors
+            .invalid_argument_exception_constructor
+            .construct_from_rust(self.0)
     }
 }

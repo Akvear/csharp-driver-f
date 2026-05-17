@@ -16,7 +16,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -460,6 +459,22 @@ namespace Cassandra
             // Deprecated and implemented as no-op.
             return false;
         }
+
+        public Task WaitForSchemaAgreementAsync(RowSet rs)
+        {
+            throw new NotImplementedException("WaitForSchemaAgreementAsync(RowSet) is not yet supported. " +
+                                              "Use WaitForSchemaAgreementAsync().");
+        }
+
+        public Task WaitForSchemaAgreementAsync(IPEndPoint hostAddress)
+        {
+            throw new NotImplementedException("WaitForSchemaAgreementAsync(IPEndPoint) is not yet supported. " +
+                                              "Use WaitForSchemaAgreementAsync().");
+        }
+
+        public void WaitForSchemaAgreement() => TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync());
+
+        public Task WaitForSchemaAgreementAsync() => bridgedSession.WaitForSchemaAgreement();
 
         private IStatement GetDefaultStatement(string cqlQuery)
         {

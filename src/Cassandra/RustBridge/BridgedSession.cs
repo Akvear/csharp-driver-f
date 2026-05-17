@@ -77,6 +77,9 @@ namespace Cassandra
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
 
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void session_await_schema_agreement(Tcb<EmptyAsyncResult> tcb, IntPtr session);
+
         /// <summary>
         /// Creates a new session connected to the specified Cassandra URI. 
         /// Checks the existence of the configured local datacenter.
@@ -265,6 +268,15 @@ namespace Cassandra
                     executionOptions));
             GC.KeepAlive(populateCtx);
             return task;
+        }
+
+        /// <summary>
+        /// Waits for cluster-wide schema agreement on the session.
+        /// </summary>
+        internal Task WaitForSchemaAgreement()
+        {
+            return RunAsyncWithIncrement<EmptyAsyncResult>(
+                (tcb, ptr) => session_await_schema_agreement(tcb, ptr));
         }
 
         /// <summary>

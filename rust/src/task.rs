@@ -128,7 +128,6 @@ struct Tcs<T> {
 /// struct parameter.
 #[repr(C)]
 #[derive(Default)]
-#[expect(dead_code, reason = "Used in the next commit")]
 pub struct EmptyAsyncResult {
     // Dummy field to ensure non-zero size for C# FFI compatibility (1 byte).
     _dummy: u8,
@@ -156,7 +155,7 @@ pub struct Tcb<R> {
     /// Pointer to the collection of exception constructors.
     // SAFETY: The memory is a leaked unmanaged allocation on the C# side.
     // This guarantees that the pointer remains valid and is not moved or deallocated.
-    constructors: &'static ExceptionConstructors,
+    pub(crate) constructors: &'static ExceptionConstructors,
 }
 
 /// Collection of exception constructors passed from C#.
@@ -198,6 +197,11 @@ impl<R> Tcb<R> {
         unsafe {
             (self.fail_task)(self.tcs, exception);
         }
+    }
+
+    pub(crate) fn fail_sync(self, e: impl ErrorToException) {
+        let exception = e.to_exception(self.constructors);
+        self.fail_task(exception);
     }
 }
 

@@ -268,9 +268,70 @@ namespace Cassandra
         /// </summary>
         Task ShutdownAsync();
 
-        [Obsolete("Method deprecated. The driver internally waits for schema agreement when there is an schema change. See ProtocolOptions.MaxSchemaAgreementWaitSeconds for more info.")]
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host specified by the provided RowSet
+        /// successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="rs">RowSet's queried host is required to successfully return its schema version.</param>
+        /// <remarks> This is a blocking method. If you want to wait for schema agreement asynchronously, use
+        /// <see cref="WaitForSchemaAgreementAsync(RowSet)"/> instead.
+        /// When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// FIXME: Mention result / exception when the host does not return its schema version or is not reachable
+        /// when it's implemented.
         void WaitForSchemaAgreement(RowSet rs);
-        [Obsolete("Method deprecated. The driver internally waits for schema agreement when there is an schema change. See ProtocolOptions.MaxSchemaAgreementWaitSeconds for more info.")]
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host specified in the parameter
+        /// successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="forHost">Host required to successfully return its schema version.</param>
+        /// <remarks> This is a blocking method. If you want to wait for schema agreement asynchronously, use
+        /// <see cref="WaitForSchemaAgreementAsync(IPEndPoint)"/> instead.
+        /// When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// FIXME: Mention result / exception when the host does not return its schema version or is not reachable
+        /// when it's implemented.
         bool WaitForSchemaAgreement(IPEndPoint forHost);
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host specified by the provided RowSet
+        /// successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="rs">RowSet's queried host is required to successfully return its schema version.</param>
+        /// <remarks> When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// FIXME: Mention result / exception when the host does not return its schema version or is not reachable
+        /// when it's implemented.
+        Task WaitForSchemaAgreementAsync(RowSet rs);
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host specified in the parameter
+        /// successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="hostAddress">Host required to successfully return its schema version.</param>
+        /// <remarks> When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// FIXME: Mention result / exception when the host does not return its schema version or is not reachable
+        /// when it's implemented.
+        Task WaitForSchemaAgreementAsync(IPEndPoint hostAddress);
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes.
+        /// </summary>
+        /// <remarks> This is a blocking method. If you want to wait for schema agreement asynchronously, use
+        /// <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// FIXME: Mention exception
+        void WaitForSchemaAgreement();
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes.
+        /// </summary>
+        /// FIXME: Mention exception
+        Task WaitForSchemaAgreementAsync();
     }
 }
