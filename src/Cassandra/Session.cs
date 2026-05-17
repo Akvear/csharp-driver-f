@@ -261,18 +261,20 @@ namespace Cassandra
                     {
                         string queryString = s.QueryString;
                         object[] queryValues = s.QueryValues ?? [];
+                        bool isIdempotent = s.IsIdempotent ?? Configuration.QueryOptions.GetDefaultIdempotence();
 
                         Task<RustBridge.ManuallyDestructible> task;
                         if (queryValues.Length == 0)
                         {
-                            task = bridgedSession.Query(queryString);
+                            task = bridgedSession.Query(queryString, isIdempotent);
                         }
                         else
                         {
                             task = bridgedSession.QueryWithValues(
                                 queryString,
                                 queryValues,
-                                _serializerManager.GetCurrentSerializer()
+                                _serializerManager.GetCurrentSerializer(),
+                                isIdempotent
                             );
                         }
 
@@ -286,6 +288,7 @@ namespace Cassandra
                             return rowSet;
                         }, TaskContinuationOptions.ExecuteSynchronously);
                     }
+
                 case BoundStatement bs:
                     {
                         // Extract consistency level and idempotence overrides from the BoundStatement, if provided.
@@ -334,6 +337,7 @@ namespace Cassandra
                             return new RowSet(mdRowSet, _serializerManager);
                         }, TaskContinuationOptions.ExecuteSynchronously);
                     }
+
                 case BatchStatement s:
                     throw new NotImplementedException("Batches are not yet supported");
 

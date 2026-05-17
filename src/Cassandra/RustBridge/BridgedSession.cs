@@ -114,9 +114,10 @@ namespace Cassandra
         /// Executes a query on the session.
         /// </summary>
         /// <param name="statement">CQL statement to be executed on the session.</param>
-        internal Task<ManuallyDestructible> Query(string statement)
+        /// <param name="isIdempotent">Whether the query is idempotent.</param>
+        internal Task<ManuallyDestructible> Query(string statement, bool isIdempotent)
         {
-            var executionOptions = new SimpleStatementExecutionOptions();
+            var executionOptions = new SimpleStatementExecutionOptions(isIdempotent);
             return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query(tcb, ptr, statement, executionOptions));
         }
 
@@ -126,11 +127,12 @@ namespace Cassandra
         /// <param name="statement">CQL statement to be executed on the session.</param>
         /// <param name="queryValues">Values to be serialized on demand and bound to the query.</param>
         /// <param name="serializer">Serializer to use for converting CLR values to CQL bytes.</param>
-        internal unsafe Task<ManuallyDestructible> QueryWithValues(string statement, object[] queryValues, ISerializer serializer)
+        /// <param name="isIdempotent">Whether the query is idempotent.</param>
+        internal unsafe Task<ManuallyDestructible> QueryWithValues(string statement, object[] queryValues, ISerializer serializer, bool isIdempotent)
         {
             var populateCtx = SerializationHandler.CreateContext(queryValues, serializer);
             var ctxIntPtr = (IntPtr)Unsafe.AsPointer(ref populateCtx);
-            var executionOptions = new SimpleStatementExecutionOptions();
+            var executionOptions = new SimpleStatementExecutionOptions(isIdempotent);
             var task = RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) =>
                 session_query_with_values(
                     tcb, ptr, statement,
@@ -333,9 +335,12 @@ namespace Cassandra
         [StructLayout(LayoutKind.Sequential)]
         private readonly struct SimpleStatementExecutionOptions
         {
-            // Placeholder field so the struct is non-empty (required for FFI safety).
-            // Will be replaced by actual fields in subsequent commits.
-            private readonly byte _padding;
+            internal readonly FFIBool IsIdempotent;
+
+            internal SimpleStatementExecutionOptions(bool isIdempotent)
+            {
+                IsIdempotent = isIdempotent;
+            }
         }
     }
 }

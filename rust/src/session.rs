@@ -42,9 +42,7 @@ pub struct BoundStatementExecutionOptions {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct SimpleStatementExecutionOptions {
-    // Placeholder field so the struct is non-empty (required for FFI safety).
-    // Will be replaced by actual fields in subsequent commits.
-    pub _padding: u8,
+    pub is_idempotent: FFIBool,
 }
 
 /// BridgedSession is a thread-safe, asynchronously accessible session wrapper.
@@ -135,7 +133,7 @@ pub extern "C" fn session_query(
     tcb: Tcb<ManuallyDestructible>,
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
     statement: CSharpStr<'_>,
-    _execution_options: SimpleStatementExecutionOptions,
+    execution_options: SimpleStatementExecutionOptions,
 ) {
     // Convert the raw C string to a Rust string.
     let statement = statement.as_cstr().unwrap().to_str().unwrap().to_owned();
@@ -164,7 +162,8 @@ pub extern "C" fn session_query(
             return Err(MaybeShutdownError::AlreadyShutdown);
         };
 
-        let statement = Statement::new(statement);
+        let mut statement = Statement::new(statement);
+        statement.set_is_idempotent(bool::from(execution_options.is_idempotent));
 
         // Lock is held for the entire duration of the query operation,
         // preventing shutdown until this future completes
@@ -190,7 +189,7 @@ pub extern "C" fn session_query_with_values(
     statement: CSharpStr<'_>,
     populate_values_context: PopulateValuesContext<'_>,
     populate_values: PopulateValues,
-    _execution_options: SimpleStatementExecutionOptions,
+    execution_options: SimpleStatementExecutionOptions,
 ) {
     let psv =
         match PreSerializedValues::from_populate_callback(populate_values_context, populate_values)
@@ -230,10 +229,12 @@ pub extern "C" fn session_query_with_values(
 
         // First, prepare the statement. Map PrepareError into PagerExecutionError::PrepareError
         // and then into MaybeShutdownError::Inner so the error type matches.
-        let prepared = session
+        let mut prepared = session
             .prepare(statement)
             .await
             .map_err(|e| MaybeShutdownError::Inner(PagerExecutionError::PrepareError(e)))?;
+
+        prepared.set_is_idempotent(bool::from(execution_options.is_idempotent));
 
         // Convert our FFI wrapper into SerializedValues by consuming it.
         let serialized_values: SerializedValues = psv.into_serialized_values();
