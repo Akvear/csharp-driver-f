@@ -261,12 +261,19 @@ namespace Cassandra
                     {
                         string queryString = s.QueryString;
                         object[] queryValues = s.QueryValues ?? [];
+                        bool hasConsistencyLevel = s.ConsistencyLevel.HasValue;
+                        ushort consistencyLevel = s.ConsistencyLevel.HasValue ? (ushort)s.ConsistencyLevel.Value : (ushort)999;
                         bool isIdempotent = s.IsIdempotent ?? Configuration.QueryOptions.GetDefaultIdempotence();
 
                         Task<RustBridge.ManuallyDestructible> task;
                         if (queryValues.Length == 0)
                         {
-                            task = bridgedSession.Query(queryString, isIdempotent);
+                            task = bridgedSession.Query(
+                                queryString,
+                                hasConsistencyLevel,
+                                consistencyLevel,
+                                isIdempotent
+                            );
                         }
                         else
                         {
@@ -274,6 +281,8 @@ namespace Cassandra
                                 queryString,
                                 queryValues,
                                 _serializerManager.GetCurrentSerializer(),
+                                hasConsistencyLevel,
+                                consistencyLevel,
                                 isIdempotent
                             );
                         }

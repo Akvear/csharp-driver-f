@@ -114,10 +114,17 @@ namespace Cassandra
         /// Executes a query on the session.
         /// </summary>
         /// <param name="statement">CQL statement to be executed on the session.</param>
+        /// <param name="hasConsistencyLevel">Whether a consistency level override was specified.</param>
+        /// <param name="consistencyLevel">Consistency level to use for the query.</param>
         /// <param name="isIdempotent">Whether the query is idempotent.</param>
-        internal Task<ManuallyDestructible> Query(string statement, bool isIdempotent)
+        internal Task<ManuallyDestructible> Query(
+            string statement,
+            bool hasConsistencyLevel,
+            ushort consistencyLevel,
+            bool isIdempotent)
         {
-            var executionOptions = new SimpleStatementExecutionOptions(isIdempotent);
+            var executionOptions = new SimpleStatementExecutionOptions(
+                hasConsistencyLevel, consistencyLevel, isIdempotent);
             return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query(tcb, ptr, statement, executionOptions));
         }
 
@@ -127,12 +134,21 @@ namespace Cassandra
         /// <param name="statement">CQL statement to be executed on the session.</param>
         /// <param name="queryValues">Values to be serialized on demand and bound to the query.</param>
         /// <param name="serializer">Serializer to use for converting CLR values to CQL bytes.</param>
+        /// <param name="hasConsistencyLevel">Whether a consistency level override was specified.</param>
+        /// <param name="consistencyLevel">Consistency level to use for the query.</param>
         /// <param name="isIdempotent">Whether the query is idempotent.</param>
-        internal unsafe Task<ManuallyDestructible> QueryWithValues(string statement, object[] queryValues, ISerializer serializer, bool isIdempotent)
+        internal unsafe Task<ManuallyDestructible> QueryWithValues(
+            string statement,
+            object[] queryValues,
+            ISerializer serializer,
+            bool hasConsistencyLevel,
+            ushort consistencyLevel,
+            bool isIdempotent)
         {
             var populateCtx = SerializationHandler.CreateContext(queryValues, serializer);
             var ctxIntPtr = (IntPtr)Unsafe.AsPointer(ref populateCtx);
-            var executionOptions = new SimpleStatementExecutionOptions(isIdempotent);
+            var executionOptions = new SimpleStatementExecutionOptions(
+                hasConsistencyLevel, consistencyLevel, isIdempotent);
             var task = RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) =>
                 session_query_with_values(
                     tcb, ptr, statement,
@@ -335,10 +351,17 @@ namespace Cassandra
         [StructLayout(LayoutKind.Sequential)]
         private readonly struct SimpleStatementExecutionOptions
         {
+            internal readonly ushort ConsistencyLevel;
+            internal readonly FFIBool HasConsistencyLevel;
             internal readonly FFIBool IsIdempotent;
 
-            internal SimpleStatementExecutionOptions(bool isIdempotent)
+            internal SimpleStatementExecutionOptions(
+                bool hasConsistencyLevel,
+                ushort consistencyLevel,
+                bool isIdempotent)
             {
+                HasConsistencyLevel = hasConsistencyLevel;
+                ConsistencyLevel = consistencyLevel;
                 IsIdempotent = isIdempotent;
             }
         }

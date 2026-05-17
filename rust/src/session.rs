@@ -42,6 +42,8 @@ pub struct BoundStatementExecutionOptions {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct SimpleStatementExecutionOptions {
+    pub consistency_level: u16,
+    pub has_consistency_level: FFIBool,
     pub is_idempotent: FFIBool,
 }
 
@@ -165,6 +167,21 @@ pub extern "C" fn session_query(
         let mut statement = Statement::new(statement);
         statement.set_is_idempotent(bool::from(execution_options.is_idempotent));
 
+        if bool::from(execution_options.has_consistency_level) {
+            let consistency = execution_options
+                .consistency_level
+                .try_into()
+                .map_err(|err| {
+                    MaybeShutdownError::InvalidArgument(format!(
+                        "Invalid consistency level value {0} passed from C# for simple query: {1}",
+                        execution_options.consistency_level, err
+                    ))
+                })?;
+            statement.set_consistency(consistency);
+        } else {
+            statement.unset_consistency();
+        }
+
         // Lock is held for the entire duration of the query operation,
         // preventing shutdown until this future completes
         // Map underlying `PagerExecutionError` into `MaybeShutdownError::Inner` so
@@ -235,6 +252,21 @@ pub extern "C" fn session_query_with_values(
             .map_err(|e| MaybeShutdownError::Inner(PagerExecutionError::PrepareError(e)))?;
 
         prepared.set_is_idempotent(bool::from(execution_options.is_idempotent));
+
+        if bool::from(execution_options.has_consistency_level) {
+            let consistency = execution_options
+                .consistency_level
+                .try_into()
+                .map_err(|err| {
+                    MaybeShutdownError::InvalidArgument(format!(
+                        "Invalid consistency level value {0} passed from C# for simple query with values: {1}",
+                        execution_options.consistency_level, err
+                    ))
+                })?;
+            prepared.set_consistency(consistency);
+        } else {
+            prepared.unset_consistency();
+        }
 
         // Convert our FFI wrapper into SerializedValues by consuming it.
         let serialized_values: SerializedValues = psv.into_serialized_values();
