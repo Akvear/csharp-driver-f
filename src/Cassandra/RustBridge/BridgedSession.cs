@@ -35,7 +35,7 @@ namespace Cassandra
         unsafe private static extern void session_shutdown(Tcb<ManuallyDestructible> tcb, IntPtr session);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void session_query(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
+        unsafe private static extern void session_query(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, SimpleStatementExecutionOptions executionOptions);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         private static extern FFIMaybeException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
@@ -49,7 +49,7 @@ namespace Cassandra
         /// of the call; it is not used after this function returns.
         /// </summary>
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-        unsafe private static extern void session_query_with_values(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr populateValuesContext, IntPtr populateValuesCallback);
+        unsafe private static extern void session_query_with_values(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr populateValuesContext, IntPtr populateValuesCallback, SimpleStatementExecutionOptions executionOptions);
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_prepare(Tcb<ManuallyDestructible> tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
@@ -116,7 +116,8 @@ namespace Cassandra
         /// <param name="statement">CQL statement to be executed on the session.</param>
         internal Task<ManuallyDestructible> Query(string statement)
         {
-            return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query(tcb, ptr, statement));
+            var executionOptions = new SimpleStatementExecutionOptions();
+            return RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) => session_query(tcb, ptr, statement, executionOptions));
         }
 
         /// <summary>
@@ -129,11 +130,13 @@ namespace Cassandra
         {
             var populateCtx = SerializationHandler.CreateContext(queryValues, serializer);
             var ctxIntPtr = (IntPtr)Unsafe.AsPointer(ref populateCtx);
+            var executionOptions = new SimpleStatementExecutionOptions();
             var task = RunAsyncWithIncrement<ManuallyDestructible>((tcb, ptr) =>
                 session_query_with_values(
                     tcb, ptr, statement,
                     ctxIntPtr,
-                    (IntPtr)SerializationHandler.PopulateValuesPtr));
+                    (IntPtr)SerializationHandler.PopulateValuesPtr,
+                    executionOptions));
             GC.KeepAlive(populateCtx);
             return task;
         }
@@ -321,6 +324,18 @@ namespace Cassandra
                 ConsistencyLevel = consistencyLevel;
                 IsIdempotent = isIdempotent;
             }
+        }
+
+        /// <summary>
+        /// Execution options passed alongside a simple (unprepared) statement.
+        /// Any changes to this struct must be mirrored in the Rust FFI definition.
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        private readonly struct SimpleStatementExecutionOptions
+        {
+            // Placeholder field so the struct is non-empty (required for FFI safety).
+            // Will be replaced by actual fields in subsequent commits.
+            private readonly byte _padding;
         }
     }
 }
