@@ -119,6 +119,27 @@ struct Tcs<T> {
     _phantom: PhantomData<T>,
 }
 
+/// Represents an empty async result for operations that don't return a value.
+///
+/// This struct matches the C# `EmptyAsyncResult` layout: a single `byte` field
+/// to ensure a consistent non-zero size across the FFI boundary. Use this type
+/// as the `R` parameter for `Tcb<R>` when an async API returns no value (i.e. `()`),
+/// so the runtime can safely call the managed completion callback with a concrete
+/// struct parameter.
+#[repr(C)]
+#[derive(Default)]
+#[expect(dead_code, reason = "Used in the next commit")]
+pub struct EmptyAsyncResult {
+    // Dummy field to ensure non-zero size for C# FFI compatibility (1 byte).
+    _dummy: u8,
+}
+
+impl From<()> for EmptyAsyncResult {
+    fn from(_: ()) -> Self {
+        EmptyAsyncResult::default()
+    }
+}
+
 /// **Task Control Block** (TCB)
 ///
 /// Contains the necessary information to manually control a Task execution from Rust.

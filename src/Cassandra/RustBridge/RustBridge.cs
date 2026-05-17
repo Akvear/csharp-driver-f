@@ -310,6 +310,59 @@ namespace Cassandra
         }
 
         /// <summary>
+        /// Represents a Void counterpart of an async result.
+        /// </summary>
+        /// <remarks>
+        /// This struct contains a dummy byte field to ensure consistent size (1 byte) across FFI boundary.
+        /// Empty structs have different sizes in C# (1 byte) and Rust with #[repr(C)] (0 bytes),
+        /// which would cause memory layout mismatches. The dummy field ensures both sides agree.
+        /// The Rust side must also define this struct with a u8 field.
+        /// </remarks>
+        [StructLayout(LayoutKind.Sequential)]
+        internal readonly struct EmptyAsyncResult : IBridgedTaskResult
+        {
+            // Dummy field to ensure consistent size across FFI boundary.
+            private readonly byte _dummy;
+
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            internal static void CompleteTask(FFIGCHandle tcsHandle, EmptyAsyncResult result)
+            {
+                Tcb<EmptyAsyncResult>.CompleteTask(tcsHandle, result);
+            }
+
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException ffiException)
+            {
+                Tcb<EmptyAsyncResult>.FailTask(tcsHandle, ffiException);
+            }
+
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, EmptyAsyncResult, void> completeTaskDel = &CompleteTask;
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIMaybeException, void> failTaskDel = &FailTask;
+
+            static IntPtr IBridgedTaskResult.CompleteTaskDelegate
+            {
+                get
+                {
+                    unsafe
+                    {
+                        return (IntPtr)completeTaskDel;
+                    }
+                }
+            }
+
+            static IntPtr IBridgedTaskResult.FailTaskDelegate
+            {
+                get
+                {
+                    unsafe
+                    {
+                        return (IntPtr)failTaskDel;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Struct used to pass a native pointer along with its destructor function pointer.
         /// This is used to transfer ownership of Rust resources to C# code.
         /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
