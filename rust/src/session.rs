@@ -35,6 +35,7 @@ pub struct BoundStatementExecutionOptions {
     pub consistency_level: u16,
     pub has_consistency_level: FFIBool,
     pub is_idempotent: FFIBool,
+    pub page_size: i32,
 }
 
 /// Execution options for simple (unprepared) statements mirrored with
@@ -397,6 +398,7 @@ pub extern "C" fn session_query_bound(
         }
 
         prepared_statement.set_is_idempotent(bool::from(execution_options.is_idempotent));
+        prepared_statement.set_page_size(execution_options.page_size);
 
         // Lock is held for the entire duration of the query operation,
         // preventing shutdown until this future completes
@@ -486,6 +488,7 @@ pub extern "C" fn session_query_bound_with_values(
         }
 
         prepared_statement.set_is_idempotent(bool::from(execution_options.is_idempotent));
+        prepared_statement.set_page_size(execution_options.page_size);
 
         // Convert our FFI wrapper into SerializedValues by consuming it.
         let serialized_values: SerializedValues = psv.into_serialized_values();

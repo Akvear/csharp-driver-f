@@ -317,6 +317,13 @@ namespace Cassandra
 
                         // When the idempotence property is null, the driver will use the default value from QueryOptions.GetDefaultIdempotence().
                         bool isIdempotent = bs.IsIdempotent ?? Configuration.QueryOptions.GetDefaultIdempotence();
+                        int pageSize = bs.PageSize <= 0 ? Configuration.QueryOptions.GetPageSize() : bs.PageSize;
+                        if (pageSize == int.MaxValue)
+                        {
+                            throw new NotImplementedException(
+                                "Disabling paging (PageSize == int.MaxValue) is not yet supported. " +
+                                "This requires using the Rust driver's unpaged query API, which is not yet bridged.");
+                        }
 
                         // The managed PreparedStatement object (and the BoundStatement that
                         // references it) is rooted here by the local variable `bs`. Because there's an
@@ -333,7 +340,8 @@ namespace Cassandra
                                 queryPrepared,
                                 hasConsistencyLevel,
                                 consistencyLevel,
-                                isIdempotent
+                                isIdempotent,
+                                pageSize
                             );
                         }
                         else
@@ -344,7 +352,8 @@ namespace Cassandra
                                 _serializerManager.GetCurrentSerializer(),
                                 hasConsistencyLevel,
                                 consistencyLevel,
-                                isIdempotent
+                                isIdempotent,
+                                pageSize
                             );
                         }
 
