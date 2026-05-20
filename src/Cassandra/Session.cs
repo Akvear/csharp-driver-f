@@ -258,79 +258,113 @@ namespace Cassandra
             switch (statement)
             {
                 case RegularStatement s:
-                    string queryString = s.QueryString;
-                    object[] queryValues = s.QueryValues ?? [];
-
-                    Task<RustBridge.ManuallyDestructible> task;
-                    if (queryValues.Length == 0)
                     {
-                        task = bridgedSession.Query(queryString);
+                        string queryString = s.QueryString;
+                        object[] queryValues = s.QueryValues ?? [];
+                        bool hasConsistencyLevel = s.ConsistencyLevel.HasValue;
+                        ushort consistencyLevel = s.ConsistencyLevel.HasValue ? (ushort)s.ConsistencyLevel.Value : (ushort)999;
+                        bool isIdempotent = s.IsIdempotent ?? Configuration.QueryOptions.GetDefaultIdempotence();
+                        int pageSize = s.PageSize <= 0 ? Configuration.QueryOptions.GetPageSize() : s.PageSize;
+                        if (pageSize == int.MaxValue)
+                        {
+                            throw new NotImplementedException(
+                                "Disabling paging (PageSize == int.MaxValue) is not yet supported. " +
+                                "This requires using the Rust driver's unpaged query API, which is not yet bridged.");
+                        }
+
+                        Task<RustBridge.ManuallyDestructible> task;
+                        if (queryValues.Length == 0)
+                        {
+                            task = bridgedSession.Query(
+                                queryString,
+                                hasConsistencyLevel,
+                                consistencyLevel,
+                                isIdempotent,
+                                pageSize
+                            );
+                        }
+                        else
+                        {
+                            task = bridgedSession.QueryWithValues(
+                                queryString,
+                                queryValues,
+                                _serializerManager.GetCurrentSerializer(),
+                                hasConsistencyLevel,
+                                consistencyLevel,
+                                isIdempotent,
+                                pageSize
+                            );
+                        }
+
+                        return task.ContinueWith(t =>
+                        {
+                            // Use GetAwaiter().GetResult() to unwrap AggregateException
+                            // and throw the inner exception directly, avoiding double-wrapping.
+                            RustBridge.ManuallyDestructible mdRowSet = t.GetAwaiter().GetResult();
+                            var rowSet = new RowSet(mdRowSet, _serializerManager);
+
+                            return rowSet;
+                        }, TaskContinuationOptions.ExecuteSynchronously);
                     }
-                    else
-                    {
-                        task = bridgedSession.QueryWithValues(
-                            queryString,
-                            queryValues,
-                            _serializerManager.GetCurrentSerializer()
-                        );
-                    }
-
-                    return task.ContinueWith(t =>
-                    {
-                        // Use GetAwaiter().GetResult() to unwrap AggregateException
-                        // and throw the inner exception directly, avoiding double-wrapping.
-                        RustBridge.ManuallyDestructible mdRowSet = t.GetAwaiter().GetResult();
-                        var rowSet = new RowSet(mdRowSet, _serializerManager);
-
-                        return rowSet;
-                    }, TaskContinuationOptions.ExecuteSynchronously);
 
                 case BoundStatement bs:
-                    // Extract consistency level and idempotence overrides from the BoundStatement, if provided.
-                    // If no consistency level override is provided, we pass false and an arbitrary consistency level (999).
-                    // When the Rust driver sees hasConsistencyLevel=false, it ignores the consistency level value.
-                    bool hasConsistencyLevel = bs.ConsistencyLevel.HasValue;
-                    ushort consistencyLevel = bs.ConsistencyLevel.HasValue ? (ushort)bs.ConsistencyLevel.Value : (ushort)999;
-
-                    // When the idempotence property is null, the driver will use the default value from QueryOptions.GetDefaultIdempotence().
-                    bool isIdempotent = bs.IsIdempotent ?? Configuration.QueryOptions.GetDefaultIdempotence();
-
-                    // The managed PreparedStatement object (and the BoundStatement that
-                    // references it) is rooted here by the local variable `bs`. Because there's an
-                    // active reference in this scope, the GC will not collect the managed object
-                    // while this method is executing — so the native resource under the pointer
-                    // is guaranteed to still exist for the duration of this call.
-                    IntPtr queryPrepared = bs.PreparedStatement.bridgedPreparedStatement.DangerousGetHandle();
-                    object[] queryValuesBound = bs.QueryValues ?? [];
-
-                    Task<RustBridge.ManuallyDestructible> boundTask;
-                    if (queryValuesBound.Length == 0)
                     {
-                        boundTask = bridgedSession.QueryBound(
-                            queryPrepared,
-                            hasConsistencyLevel,
-                            consistencyLevel,
-                            isIdempotent);
+                        // Extract consistency level and idempotence overrides from the BoundStatement, if provided.
+                        // If no consistency level override is provided, we pass false and an arbitrary consistency level (999).
+                        // When the Rust driver sees hasConsistencyLevel=false, it ignores the consistency level value.
+                        bool hasConsistencyLevel = bs.ConsistencyLevel.HasValue;
+                        ushort consistencyLevel = bs.ConsistencyLevel.HasValue ? (ushort)bs.ConsistencyLevel.Value : (ushort)999;
+
+                        // When the idempotence property is null, the driver will use the default value from QueryOptions.GetDefaultIdempotence().
+                        bool isIdempotent = bs.IsIdempotent ?? Configuration.QueryOptions.GetDefaultIdempotence();
+                        int pageSize = bs.PageSize <= 0 ? Configuration.QueryOptions.GetPageSize() : bs.PageSize;
+                        if (pageSize == int.MaxValue)
+                        {
+                            throw new NotImplementedException(
+                                "Disabling paging (PageSize == int.MaxValue) is not yet supported. " +
+                                "This requires using the Rust driver's unpaged query API, which is not yet bridged.");
+                        }
+
+                        // The managed PreparedStatement object (and the BoundStatement that
+                        // references it) is rooted here by the local variable `bs`. Because there's an
+                        // active reference in this scope, the GC will not collect the managed object
+                        // while this method is executing — so the native resource under the pointer
+                        // is guaranteed to still exist for the duration of this call.
+                        IntPtr queryPrepared = bs.PreparedStatement.bridgedPreparedStatement.DangerousGetHandle();
+                        object[] queryValuesBound = bs.QueryValues ?? [];
+
+                        Task<RustBridge.ManuallyDestructible> boundTask;
+                        if (queryValuesBound.Length == 0)
+                        {
+                            boundTask = bridgedSession.QueryBound(
+                                queryPrepared,
+                                hasConsistencyLevel,
+                                consistencyLevel,
+                                isIdempotent,
+                                pageSize
+                            );
+                        }
+                        else
+                        {
+                            boundTask = bridgedSession.QueryBoundWithValues(
+                                queryPrepared,
+                                queryValuesBound,
+                                _serializerManager.GetCurrentSerializer(),
+                                hasConsistencyLevel,
+                                consistencyLevel,
+                                isIdempotent,
+                                pageSize
+                            );
+                        }
+
+                        return boundTask.ContinueWith(t =>
+                        {
+                            // Use GetAwaiter().GetResult() to unwrap AggregateException
+                            // and throw the inner exception directly, avoiding double-wrapping.
+                            RustBridge.ManuallyDestructible mdRowSet = t.GetAwaiter().GetResult();
+                            return new RowSet(mdRowSet, _serializerManager);
+                        }, TaskContinuationOptions.ExecuteSynchronously);
                     }
-                    else
-                    {
-                        boundTask = bridgedSession.QueryBoundWithValues(
-                            queryPrepared,
-                            queryValuesBound,
-                            _serializerManager.GetCurrentSerializer(),
-                            hasConsistencyLevel,
-                            consistencyLevel,
-                            isIdempotent
-                        );
-                    }
-
-                    return boundTask.ContinueWith(t =>
-                    {
-                        // Use GetAwaiter().GetResult() to unwrap AggregateException
-                        // and throw the inner exception directly, avoiding double-wrapping.
-                        RustBridge.ManuallyDestructible mdRowSet = t.GetAwaiter().GetResult();
-                        return new RowSet(mdRowSet, _serializerManager);
-                    }, TaskContinuationOptions.ExecuteSynchronously);
 
                 case BatchStatement s:
                     throw new NotImplementedException("Batches are not yet supported");

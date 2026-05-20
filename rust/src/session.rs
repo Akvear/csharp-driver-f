@@ -5,6 +5,7 @@ use std::sync::RwLock as StdRwLock;
 use scylla::client::session::Session;
 use scylla::cluster::ClusterState;
 use scylla::errors::{NewSessionError, PagerExecutionError, PrepareError};
+use scylla::statement::Statement;
 use scylla_cql::serialize::row::SerializedValues;
 use tokio::sync::RwLock;
 
@@ -34,6 +35,18 @@ pub struct BoundStatementExecutionOptions {
     pub consistency_level: u16,
     pub has_consistency_level: FFIBool,
     pub is_idempotent: FFIBool,
+    pub page_size: i32,
+}
+
+/// Execution options for simple (unprepared) statements mirrored with
+/// the managed FFI struct.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct SimpleStatementExecutionOptions {
+    pub consistency_level: u16,
+    pub has_consistency_level: FFIBool,
+    pub is_idempotent: FFIBool,
+    pub page_size: i32,
 }
 
 /// BridgedSession is a thread-safe, asynchronously accessible session wrapper.
@@ -124,6 +137,7 @@ pub extern "C" fn session_query(
     tcb: Tcb<ManuallyDestructible>,
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
     statement: CSharpStr<'_>,
+    execution_options: SimpleStatementExecutionOptions,
 ) {
     // Convert the raw C string to a Rust string.
     let statement = statement.as_cstr().unwrap().to_str().unwrap().to_owned();
@@ -152,6 +166,25 @@ pub extern "C" fn session_query(
             return Err(MaybeShutdownError::AlreadyShutdown);
         };
 
+        let mut statement = Statement::new(statement);
+        statement.set_is_idempotent(bool::from(execution_options.is_idempotent));
+        statement.set_page_size(execution_options.page_size);
+
+        if bool::from(execution_options.has_consistency_level) {
+            let consistency = execution_options
+                .consistency_level
+                .try_into()
+                .map_err(|err| {
+                    MaybeShutdownError::InvalidArgument(format!(
+                        "Invalid consistency level value {0} passed from C# for simple query: {1}",
+                        execution_options.consistency_level, err
+                    ))
+                })?;
+            statement.set_consistency(consistency);
+        } else {
+            statement.unset_consistency();
+        }
+
         // Lock is held for the entire duration of the query operation,
         // preventing shutdown until this future completes
         // Map underlying `PagerExecutionError` into `MaybeShutdownError::Inner` so
@@ -176,6 +209,7 @@ pub extern "C" fn session_query_with_values(
     statement: CSharpStr<'_>,
     populate_values_context: PopulateValuesContext<'_>,
     populate_values: PopulateValues,
+    execution_options: SimpleStatementExecutionOptions,
 ) {
     let psv =
         match PreSerializedValues::from_populate_callback(populate_values_context, populate_values)
@@ -215,10 +249,28 @@ pub extern "C" fn session_query_with_values(
 
         // First, prepare the statement. Map PrepareError into PagerExecutionError::PrepareError
         // and then into MaybeShutdownError::Inner so the error type matches.
-        let prepared = session
+        let mut prepared = session
             .prepare(statement)
             .await
             .map_err(|e| MaybeShutdownError::Inner(PagerExecutionError::PrepareError(e)))?;
+
+        prepared.set_is_idempotent(bool::from(execution_options.is_idempotent));
+        prepared.set_page_size(execution_options.page_size);
+
+        if bool::from(execution_options.has_consistency_level) {
+            let consistency = execution_options
+                .consistency_level
+                .try_into()
+                .map_err(|err| {
+                    MaybeShutdownError::InvalidArgument(format!(
+                        "Invalid consistency level value {0} passed from C# for simple query with values: {1}",
+                        execution_options.consistency_level, err
+                    ))
+                })?;
+            prepared.set_consistency(consistency);
+        } else {
+            prepared.unset_consistency();
+        }
 
         // Convert our FFI wrapper into SerializedValues by consuming it.
         let serialized_values: SerializedValues = psv.into_serialized_values();
@@ -346,6 +398,7 @@ pub extern "C" fn session_query_bound(
         }
 
         prepared_statement.set_is_idempotent(bool::from(execution_options.is_idempotent));
+        prepared_statement.set_page_size(execution_options.page_size);
 
         // Lock is held for the entire duration of the query operation,
         // preventing shutdown until this future completes
@@ -435,6 +488,7 @@ pub extern "C" fn session_query_bound_with_values(
         }
 
         prepared_statement.set_is_idempotent(bool::from(execution_options.is_idempotent));
+        prepared_statement.set_page_size(execution_options.page_size);
 
         // Convert our FFI wrapper into SerializedValues by consuming it.
         let serialized_values: SerializedValues = psv.into_serialized_values();
