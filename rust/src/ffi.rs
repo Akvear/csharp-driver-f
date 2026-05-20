@@ -876,6 +876,13 @@ pub(crate) unsafe fn ffi_callback_for_each<Ctx: Copy, T>(
 #[repr(transparent)]
 pub(crate) struct GCHandlePtr<'a, T>(FFINonNullPtr<'a, T>);
 
+impl<'a, T> Clone for GCHandlePtr<'a, T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<'a, T> Copy for GCHandlePtr<'a, T> {}
+
 impl<'a, T> Debug for GCHandlePtr<'a, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
@@ -901,7 +908,6 @@ impl<T> FFIGCHandle<T> {
     /// Borrows the GCHandle, for use by C#.
     /// Borrow checker prevents use-after-free, ensuring that FFIGCHandle
     /// is kept alive.
-    #[expect(dead_code)] // Will be used soon.
     pub(crate) fn borrow<'gc>(&'gc self) -> GCHandlePtr<'gc, T> {
         GCHandlePtr(self.gchandle.0)
     }

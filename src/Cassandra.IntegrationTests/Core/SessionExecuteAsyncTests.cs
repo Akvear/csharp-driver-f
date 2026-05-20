@@ -94,5 +94,19 @@ namespace Cassandra.IntegrationTests.Core
             Assert.NotNull(task2.Result.First().GetValue<string>("key"));
             Assert.NotNull(task3.Result.First().GetValue<string[]>("tokens"));
         }
+
+        [Test]
+        public async Task SessionExecuteAsyncMultiPageQuery()
+        {
+            // This test is a SimulacronTest, so it can only query system tables.
+            // It tests that IAsyncEnumerable works for a simple single-page query.
+            // Multi-page async iteration is tested by MultiPageAsyncIterationTests.
+            var rowSet = await Session.ExecuteAsync(new SimpleStatement("SELECT tokens FROM system.local WHERE key='local'"));
+
+            await foreach (var row in rowSet)
+            {
+                Assert.NotNull(row.GetValue<string[]>("tokens"));
+            }
+        }
     }
 }

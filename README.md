@@ -95,7 +95,7 @@ You can execute multiple statements (prepared or unprepared) in a batch to updat
 var profileStmt = session.Prepare("UPDATE user_profiles SET email=? WHERE key=?");
 var userTrackStmt = session.Prepare("INSERT INTO user_track (key, text, date) VALUES (?, ?, ?)");
 // ...you should reuse the prepared statement
-// Bind the parameters and add the statement to the batch batch
+// Bind the parameters and add the statement to the batch
 var batch = new BatchStatement()
   .Add(profileStmt.Bind(emailAddress, "hendrix"))
   .Add(userTrackStmt.Bind("hendrix", "You changed your email", DateTime.Now));
@@ -134,7 +134,7 @@ var rs = session.Execute(statement);
 foreach (var row in rs)
 {
   // The enumerator will yield all the rows from Cassandra
-  // Retrieving them in the back in blocks of 1000.
+  // Retrieving them in blocks of 1000.
 }
 ```
 

@@ -197,7 +197,7 @@ pub extern "C" fn session_query(
         tracing::trace!("[FFI] Statement executed");
 
         Ok(Arc::new(RowSet {
-            pager: std::sync::Mutex::new(query_pager),
+            pager: tokio::sync::Mutex::new(query_pager),
         }))
     });
 }
@@ -285,7 +285,7 @@ pub extern "C" fn session_query_with_values(
         tracing::trace!("[FFI] Prepared statement executed with pre-serialized values");
 
         Ok(Arc::new(RowSet {
-            pager: std::sync::Mutex::new(query_pager),
+            pager: tokio::sync::Mutex::new(query_pager),
         }))
     });
 }
@@ -412,7 +412,7 @@ pub extern "C" fn session_query_bound(
         tracing::trace!("[FFI] Prepared statement executed");
 
         Ok(Arc::new(RowSet {
-            pager: std::sync::Mutex::new(query_pager),
+            pager: tokio::sync::Mutex::new(query_pager),
         }))
     })
 }
@@ -501,7 +501,7 @@ pub extern "C" fn session_query_bound_with_values(
         tracing::trace!("[FFI] Prepared statement executed");
 
         Ok(Arc::new(RowSet {
-            pager: std::sync::Mutex::new(query_pager),
+            pager: tokio::sync::Mutex::new(query_pager),
         }))
     });
 }

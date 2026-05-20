@@ -17,6 +17,21 @@ foreach (var row in rs)
 }
 ```
 
+### Async API for automatic paging
+
+To avoid incurring the overhead of blocking threads while waiting for another page to be fetched, use the asynchronous API.
+```csharp
+var ps = await session.PrepareAsync("SELECT * from tbl1 WHERE key = ?");
+// Set the page size at statement level.
+var statement = ps.Bind(key).SetPageSize(1000);
+var rs = await session.ExecuteAsync(statement);
+await foreach (var row in rs)
+{
+   // The async enumerator will yield all the rows from Cassandra.
+   // Retrieving them in the back in blocks of 1000.
+}
+```
+
 ## Manual paging 
 
 If you want to retrieve the next page of results only when you ask for it (for example, in a webpager), use the

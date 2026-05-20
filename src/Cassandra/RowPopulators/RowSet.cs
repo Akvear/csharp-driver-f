@@ -18,6 +18,7 @@ using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Cassandra.Serialization;
 
@@ -43,7 +44,7 @@ namespace Cassandra
     /// </para>
     /// </summary>
     /// <remarks>Parallel enumerations are supported and thread-safe.</remarks>
-    public class RowSet : IEnumerable<Row>, IDisposable
+    public class RowSet : IEnumerable<Row>, IDisposable, IAsyncEnumerable<Row>
     {
         private bool _exhausted = false;
 
@@ -139,7 +140,7 @@ namespace Cassandra
         }
 
 #nullable enable
-        private Row? DeserializeRow()
+        private async Task<Row?> DeserializeRow()
 #nullable disable
         {
             if (bridgedRowSet == null)
@@ -150,7 +151,7 @@ namespace Cassandra
 
             IGenericSerializer serializer = _genericSerializer;
 
-            var hasRow = bridgedRowSet.NextRow(ref values, Columns, ref serializer);
+            var hasRow = await bridgedRowSet.NextRow(values, Columns, serializer).ConfigureAwait(false);
             if (!hasRow)
             {
                 _exhausted = true;
@@ -213,19 +214,42 @@ namespace Cassandra
         {
             while (!IsExhausted())
             {
-                Row row = DeserializeRow();
+                Row row = DeserializeRow().GetAwaiter().GetResult();
                 if (row == null)
                     yield break;
 
                 yield return row;
             }
-
-            yield break;
         }
 
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
+        }
+
+        /// <inheritdoc />
+        public virtual async IAsyncEnumerator<Row> GetAsyncEnumerator(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            while (!IsExhausted())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                Row row = await DeserializeRow().ConfigureAwait(false);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (row == null)
+                    yield break;
+
+                yield return row;
+            }
+        }
+
+        IAsyncEnumerator<Row> IAsyncEnumerable<Row>.GetAsyncEnumerator(CancellationToken cancellationToken)
+        {
+            return GetAsyncEnumerator(cancellationToken);
         }
 
         /// <summary>
