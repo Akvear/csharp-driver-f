@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks Condition="'$(BuildTarget)' == 'all'">net9;net8</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildTarget)' == ''">net9</TargetFrameworks>
+    <TargetFrameworks Condition="'$(BuildTarget)' != 'all' And '$(BuildTarget)' != ''">$(BuildTarget)</TargetFrameworks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
+    <PackageReference Include="NUnit" Version="4.5.0" />
+    <PackageReference Include="NUnit3TestAdapter" Version="5.2.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.13" />
+    <ProjectReference Include="..\Cassandra\Cassandra.csproj" />
+    <ProjectReference Include="..\Cassandra.IntegrationTests\Cassandra.IntegrationTests.csproj" />
+  </ItemGroup>
+</Project>

@@ -44,6 +44,7 @@ check-csharp:
 	dotnet format --verify-no-changes --severity warn --verbosity diagnostic src/Cassandra/Cassandra.csproj
 	dotnet format --verify-no-changes --severity warn --verbosity diagnostic src/Cassandra.Tests/Cassandra.Tests.csproj
 	dotnet format --verify-no-changes --severity warn --verbosity diagnostic src/Cassandra.IntegrationTests/Cassandra.IntegrationTests.csproj
+	dotnet format --verify-no-changes --severity warn --verbosity diagnostic src/LoggingTests/LoggingTests.csproj
 
 .PHONY: check-rust
 check-rust:
@@ -57,6 +58,7 @@ fix-csharp:
 	dotnet format --severity warn --verbosity diagnostic src/Cassandra/Cassandra.csproj
 	dotnet format --severity warn --verbosity diagnostic src/Cassandra.Tests/Cassandra.Tests.csproj
 	dotnet format --severity warn --verbosity diagnostic src/Cassandra.IntegrationTests/Cassandra.IntegrationTests.csproj
+	dotnet format --severity warn --verbosity diagnostic src/LoggingTests/LoggingTests.csproj
 
 .PHONY: fix-rust
 fix-rust:
@@ -71,12 +73,22 @@ TEST_INTEGRATION_SCYLLA_FILTER ?= (FullyQualifiedName!~ClientWarningsTests & Ful
 TEST_INTEGRATION_OPTIONS ?= -l "console;verbosity=detailed"
 TEST_INTEGRATION_CSPROJ ?= src/Cassandra.IntegrationTests/Cassandra.IntegrationTests.csproj
 .PHONY: test-integration-scylla
-test-integration-scylla: .use-development-snk .prepare-scylla-ccm
+test-integration-scylla: .use-development-snk .prepare-scylla-ccm build-rust-testing
 	dotnet build-server shutdown
 	CCM_DISTRIBUTION=scylla dotnet test $(TEST_TARGET_OPTIONS) $(TEST_INTEGRATION_CSPROJ) $(TEST_INTEGRATION_OPTIONS)
 
+TEST_LOGGING_CSPROJ ?= src/LoggingTests/LoggingTests.csproj
+TEST_LOGGING_CASES ?= Should_Forward_Rust_Log_Entries_Using_LoggerFactory Should_Forward_Rust_Log_On_Connect Should_Filter_Rust_Log_Entries_At_Off Should_Filter_Rust_Log_Entries_At_Error Should_Filter_Rust_Log_Entries_At_Warning Should_Filter_Rust_Log_Entries_At_Info Should_Filter_Rust_Log_Entries_At_Verbose
+
+.PHONY: test-logging
+test-logging: .use-development-snk build-rust-testing
+	dotnet build $(TEST_LOGGING_CSPROJ)
+	for test in $(TEST_LOGGING_CASES); do \
+		dotnet test --no-build $(TEST_TARGET_OPTIONS) $(TEST_LOGGING_CSPROJ) $(TEST_INTEGRATION_OPTIONS) --filter "FullyQualifiedName~RustLoggingTests.$$test"; \
+	done
+
 .PHONY: test-integration-cassandra
-test-integration-cassandra: .use-development-snk .prepare-cassandra-ccm
+test-integration-cassandra: .use-development-snk .prepare-cassandra-ccm build-rust-testing
 	CCM_DISTRIBUTION=cassandra dotnet test $(TEST_TARGET_OPTIONS) $(TEST_INTEGRATION_CSPROJ) $(TEST_INTEGRATION_OPTIONS)
 
 .prepare-cassandra-ccm:
@@ -188,7 +200,7 @@ clean-rust:
 # This is inherently hacky and brittle, but it's the easiest way I've found to get the Rust
 # library loaded by the C# projects during testing and execution.
 
-LINK_PROJECTS 	 := Cassandra Cassandra.IntegrationTests Cassandra.Tests
+LINK_PROJECTS 	 := Cassandra Cassandra.IntegrationTests LoggingTests Cassandra.Tests
 FRAMEWORKS    	 := net9 net8
 
 define symlink-to-rust
@@ -217,6 +229,11 @@ build-rust:
 	cargo build; \
 	cd ../examples/RustWrapper/bin/Debug/net9/; \
 	ln -f -s ../../../../../rust/target/debug/libcsharp_wrapper.so . || true
+
+.PHONY: build-rust-testing
+build-rust-testing:
+	cd rust; \
+	cargo build --features integration_testing;
 
 .PHONY: build-rust-asan
 build-rust-asan:

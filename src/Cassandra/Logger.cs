@@ -108,26 +108,53 @@ namespace Cassandra
 
             public void Error(string message, Exception ex = null)
             {
-                _logger.LogError(0, ex, message);
+                _logger.LogError(ex, "{Message}", message);
             }
 
             public void Error(string message, params object[] args)
             {
+                // We split into two cases:
+                // - No args: Use "{Message}" to prevent Microsoft.Extensions.Logging from parsing curly braces from Rust as templates.
+                // - With args: Pass directly so MEL can format the existing driver log templates.
+                if (args == null || args.Length == 0)
+                {
+                    _logger.LogError("{Message}", message);
+                    return;
+                }
+
                 _logger.LogError(message, args);
             }
 
             public void Verbose(string message, params object[] args)
             {
+                if (args == null || args.Length == 0)
+                {
+                    _logger.LogDebug("{Message}", message);
+                    return;
+                }
+
                 _logger.LogDebug(message, args);
             }
 
             public void Info(string message, params object[] args)
             {
+                if (args == null || args.Length == 0)
+                {
+                    _logger.LogInformation("{Message}", message);
+                    return;
+                }
+
                 _logger.LogInformation(message, args);
             }
 
             public void Warning(string message, params object[] args)
             {
+                if (args == null || args.Length == 0)
+                {
+                    _logger.LogWarning("{Message}", message);
+                    return;
+                }
+
                 _logger.LogWarning(message, args);
             }
         }
@@ -184,7 +211,7 @@ namespace Cassandra
                     return;
                 }
                 Trace.WriteLine(
-                    string.Format("{0} #ERROR: {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), GetExceptionAndAllInnerEx(ex)), _category);
+                    string.Format("{0} ERROR {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), GetExceptionAndAllInnerEx(ex)), _category);
             }
 
             public void Error(string msg, Exception ex = null)
@@ -194,7 +221,7 @@ namespace Cassandra
                     return;
                 }
                 Trace.WriteLine(
-                    string.Format("{0} #ERROR: {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat),
+                    string.Format("{0} ERROR {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat),
                         msg + (ex != null ? "\nEXCEPTION:\n " + GetExceptionAndAllInnerEx(ex) : string.Empty)), _category);
             }
 
@@ -208,7 +235,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} #ERROR: {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0} ERROR {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
             }
 
             public void Warning(string message, params object[] args)
@@ -221,7 +248,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} #WARNING: {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0} WARNING {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
             }
 
             public void Info(string message, params object[] args)
@@ -234,7 +261,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} : {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0} INFO {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
             }
 
             public void Verbose(string message, params object[] args)
@@ -247,7 +274,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0} VERBOSE {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
             }
         }
     }

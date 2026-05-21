@@ -149,6 +149,9 @@ jobs:
       - name: Run unit tests
         run: make test-unit
 
+      - name: Run logging tests
+        run: make test-logging
+
       - name: Run integration tests on Scylla
         if: env.SKIP_TEST != 'true'
         run: make test-integration-scylla

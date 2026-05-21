@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
@@ -488,8 +489,6 @@ namespace Cassandra
                             // The Rust code is responsible for interpreting the pointer's contents
                             // memory is freed when the C# RustResource releases it.
                             tcs.SetResult(result);
-
-                            Console.Error.WriteLine($"[FFI] CompleteTask done.");
                         }
                         else
                         {
@@ -565,8 +564,6 @@ namespace Cassandra
                                 exception = new RustException("Unknown error from Rust");
                             }
                             tcsMd.SetException(exception);
-                            Console.Error.WriteLine($"[FFI] FailTask done.");
-
                         }
                         else
                         {
@@ -688,12 +685,64 @@ namespace Cassandra
 
             internal static readonly Constructors* ConstructorsPtr;
 
+            // Enum to use as the logger type for messages forwarded from Rust code. 
+            private enum Rust { }
+
+            // Logger used for messages forwarded from Rust code. The logger is static so all callbacks reuse
+            // a single logger instead of creating a new Logger instance for each callback.
+            private static readonly Logger RustLogger = new Logger(typeof(Rust));
+
+            // Callback function pointer for Rust to call to log messages in C#.
+            unsafe readonly static delegate* unmanaged[Cdecl]<byte, FFIString, void> RustLogCallbackPtr = &ForwardRustLog;
+
             /// <summary>
-            /// Initializes the Rust driver components.
+            /// Initializes the Rust driver components with a specified minimum log level.
             /// This must be called early to ensure logging is properly initialized.
             /// </summary>
+
             [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
-            private static extern void init_rust_logging();
+            private static unsafe extern void configure_rust_logging(IntPtr callback, byte min_level);
+
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            private static void ForwardRustLog(byte level, FFIString message)
+            {
+                var rustMessage = message.ToManagedString() ?? string.Empty;
+
+                // This byte is produced by rust/src/logging.rs:CsharpLogLevel.
+                // The numeric values currently line up with System.Diagnostics.TraceLevel, but that is an implementation detail.
+                // If either enum changes, update this mapping explicitly instead of relying on the shared numeric values.
+                switch ((TraceLevel)level)
+                {
+                    case TraceLevel.Info:
+                        RustLogger.Info(rustMessage);
+                        break;
+                    case TraceLevel.Verbose:
+                        RustLogger.Verbose(rustMessage);
+                        break;
+                    case TraceLevel.Warning:
+                        RustLogger.Warning(rustMessage);
+                        break;
+                    case TraceLevel.Error:
+                        RustLogger.Error(rustMessage);
+                        break;
+                    default:
+                        RustLogger.Verbose(rustMessage);
+                        break;
+                }
+            }
+
+            private static byte GetRustMinLogLevel()
+            {
+                if (Diagnostics.UseLoggerFactory)
+                {
+                    // Defer filtering to ILogger providers.
+                    return (byte)TraceLevel.Verbose;
+                }
+
+                // CassandraTraceSwitch.Level uses System.Diagnostics.TraceLevel, which currently matches the Rust enum values.
+                // Keep the Rust-side CsharpLogLevel and this bridge in sync if either side changes.
+                return (byte)Diagnostics.CassandraTraceSwitch.Level;
+            }
 
             static Globals()
             {
@@ -720,7 +769,7 @@ namespace Cassandra
                     (IntPtr)UnauthorizedExceptionConstructorPtr
                 );
 
-                init_rust_logging();
+                configure_rust_logging((IntPtr)RustLogCallbackPtr, GetRustMinLogLevel());
             }
         }
 
