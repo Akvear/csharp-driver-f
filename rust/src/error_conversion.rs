@@ -308,10 +308,11 @@ impl DeserializationExceptionConstructor {
 
 // Special errors for C# wrapper.
 
-/// Wrapper enum to represent errors that may occur normally or indicate that the session has been
-/// shut down. It allows to return a clear error condition while satisfying the return type requirements.
+/// Wrapper enum to represent errors that may occur during session operations:
+/// session shutdown errors, invalid argument errors, or normal operation errors.
+/// It allows to return a clear error condition while satisfying the return type requirements.
 #[derive(Error, Debug, Clone)]
-pub(crate) enum MaybeShutdownError<E> {
+pub(crate) enum SessionOperationError<E> {
     #[error("Error: {0}")]
     Inner(E),
 
@@ -683,19 +684,19 @@ impl ErrorToException for TypeCheckError {
     }
 }
 
-impl<E> ErrorToException for MaybeShutdownError<E>
+impl<E> ErrorToException for SessionOperationError<E>
 where
     E: ErrorToException,
 {
     fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
         match self {
-            MaybeShutdownError::Inner(e) => e.to_exception(ctors),
-            MaybeShutdownError::AlreadyShutdown => ctors
+            SessionOperationError::Inner(e) => e.to_exception(ctors),
+            SessionOperationError::AlreadyShutdown => ctors
                 .already_shutdown_exception_constructor
                 .construct_from_rust(
                     "Session has been shut down and can no longer execute operations",
                 ),
-            MaybeShutdownError::InvalidArgument(msg) => ctors
+            SessionOperationError::InvalidArgument(msg) => ctors
                 .invalid_argument_exception_constructor
                 .construct_from_rust(&msg),
         }
