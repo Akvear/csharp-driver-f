@@ -28,17 +28,23 @@ pub struct RefreshContextPtr(FFIPtr<'static, RefreshContext>);
 ///
 /// # Safety
 /// - All pointer parameters must be immediately copied/consumed during the callback invocation
-/// - String pointers (datacenter_ptr, rack_ptr) are only valid for the duration of the callback
+/// - String pointers are only valid for the duration of the callback
 /// - The callback must not store these pointers or access them after returning
-/// - The callback must not throw exceptions across the FFI boundary
 type ConstructCSharpHost = unsafe extern "C" fn(
     refresh_context_ptr: RefreshContextPtr,
-    id_bytes: FFISlice<'_, u8>,
-    ip_bytes: FFISlice<'_, u8>,
+    csharp_host_data: CSharpHostData<'_>,
+) -> FFIMaybeException;
+
+/// Struct for passing node metadata from Rust to C# in a single callback parameter.
+/// Any change to this struct must be reflected in the C# definition and the AddHostToList method.
+#[repr(C)]
+pub struct CSharpHostData<'a> {
+    id_bytes: FFISlice<'a, u8>,
+    ip_bytes: FFISlice<'a, u8>,
     port: u16,
-    datacenter: FFIStr<'_>,
-    rack: FFIStr<'_>,
-);
+    datacenter: FFIStr<'a>,
+    rack: FFIStr<'a>,
+}
 
 /// Populates a C# RefreshContext with node information from the cluster state.
 /// For each node in the cluster state, this function:
@@ -50,7 +56,7 @@ type ConstructCSharpHost = unsafe extern "C" fn(
 /// - `refresh_context_ptr` must point to a valid C# RefreshContext that remains allocated during this call
 /// - All string pointers passed to the callback are temporary and only valid during that invocation
 /// - The callback must copy string data (e.g., via Marshal.PtrToStringUTF8) and byte arrays (IP, host ID) immediately.
-/// - The callback must not throw exceptions; use Environment.FailFast on errors
+/// - The callback must return a valid FFIMaybeException.
 #[unsafe(no_mangle)]
 pub extern "C" fn cluster_state_fill_nodes(
     cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
@@ -104,14 +110,19 @@ pub extern "C" fn cluster_state_fill_nodes(
         // All pointers passed to the callback are only valid during this invocation.
         // The callback must copy all data immediately.
         unsafe {
-            callback(
+            let ffi_exception = callback(
                 refresh_context_ptr,
-                uuid_bytes,
-                ip_bytes,
-                port,
-                dc_str,
-                rack_str,
+                CSharpHostData {
+                    id_bytes: uuid_bytes,
+                    ip_bytes,
+                    port,
+                    datacenter: dc_str,
+                    rack: rack_str,
+                },
             );
+            if ffi_exception.has_exception() {
+                return ffi_exception;
+            }
         }
     }
 

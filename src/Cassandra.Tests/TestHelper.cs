@@ -153,6 +153,7 @@ namespace Cassandra.Tests
         public static Host CreateHost(string address, string dc = "dc1", string rack = "rack1",
                                       IEnumerable<string> tokens = null, string cassandraVersion = null)
         {
+#pragma warning disable CS0618
             var h = new Host(new IPEndPoint(IPAddress.Parse(address), ProtocolOptions.DefaultPort),
                              new ConstantReconnectionPolicy(1));
             // FIXME: internal API usage
@@ -164,6 +165,7 @@ namespace Cassandra.Tests
             //     { "release_version", cassandraVersion },
             // }));
             return h;
+#pragma warning restore CS0618
         }
 
         internal class DictionaryBasedRow : IRow

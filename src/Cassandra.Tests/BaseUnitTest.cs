@@ -81,11 +81,13 @@ namespace Cassandra.Tests
 
             public IEnumerable<HostShard> NewQueryPlan(string keyspace, IStatement query)
             {
+#pragma warning disable CS0618
                 return new[]
                 {
                     new HostShard(new Host(new IPEndPoint(101L, 9042), ReconnectionPolicy), -1),
                     new HostShard(new Host(new IPEndPoint(102L, 9042), ReconnectionPolicy), -1)
                 };
+#pragma warning restore CS0618
             }
         }
     }

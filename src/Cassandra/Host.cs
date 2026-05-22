@@ -80,10 +80,13 @@ namespace Cassandra
         /// <summary>
         /// Creates a new instance of <see cref="Host"/>.
         /// </summary>
-        // ReSharper disable once UnusedParameter.Local : Part of the public API
+        /// <note>
+        /// This constructor is obsolete and should not be used directly, reconnection policies set here are ignored.
+        /// </note>
+        [Obsolete("Custom Host instances are obsolete, since the driver manages them internally.")]
         public Host(IPEndPoint address, IReconnectionPolicy reconnectionPolicy)
         {
-            // FIXME
+            Address = address;
         }
 
         /// <summary>

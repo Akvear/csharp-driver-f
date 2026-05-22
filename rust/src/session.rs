@@ -9,7 +9,7 @@ use scylla::statement::Statement;
 use scylla_cql::serialize::row::SerializedValues;
 use tokio::sync::RwLock;
 
-use crate::error_conversion::{FFIMaybeException, MaybeShutdownError};
+use crate::error_conversion::{FFIMaybeException, SessionOperationError};
 use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, CSharpManagedStringPtr, CSharpStr,
     FFI, FFIBool, FFIStr, FromArc, WriteStringCallback,
@@ -152,18 +152,18 @@ pub extern "C" fn session_query(
     // If the operation fails, treat it as session shutting down.
     let session_guard_res = session_arc.try_read_owned();
 
-    BridgedFuture::spawn::<_, _, MaybeShutdownError<PagerExecutionError>, _>(tcb, async move {
+    BridgedFuture::spawn::<_, _, SessionOperationError<PagerExecutionError>, _>(tcb, async move {
         tracing::debug!("[FFI] Executing statement \"{}\"", statement);
 
         let Ok(session_guard) = session_guard_res else {
             // Session is currently shutting down - exit with appropriate error.
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         // Check if session is connected or if it has been shut down.
         // If it has been shut down, return appropriate error.
         let Some(session) = session_guard.session.as_ref() else {
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         let mut statement = Statement::new(statement);
@@ -175,7 +175,7 @@ pub extern "C" fn session_query(
                 .consistency_level
                 .try_into()
                 .map_err(|err| {
-                    MaybeShutdownError::InvalidArgument(format!(
+                    SessionOperationError::InvalidArgument(format!(
                         "Invalid consistency level value {0} passed from C# for simple query: {1}",
                         execution_options.consistency_level, err
                     ))
@@ -187,12 +187,12 @@ pub extern "C" fn session_query(
 
         // Lock is held for the entire duration of the query operation,
         // preventing shutdown until this future completes
-        // Map underlying `PagerExecutionError` into `MaybeShutdownError::Inner` so
+        // Map underlying `PagerExecutionError` into `SessionOperationError::Inner` so
         // the BridgedFuture's error type matches.
         let query_pager = session
             .query_iter(statement, ())
             .await
-            .map_err(MaybeShutdownError::Inner)?;
+            .map_err(SessionOperationError::Inner)?;
 
         tracing::trace!("[FFI] Statement executed");
 
@@ -230,7 +230,7 @@ pub extern "C" fn session_query_with_values(
     // If the operation fails, treat it as session shutting down.
     let session_guard_res = session_arc.try_read_owned();
 
-    BridgedFuture::spawn::<_, _, MaybeShutdownError<PagerExecutionError>, _>(tcb, async move {
+    BridgedFuture::spawn::<_, _, SessionOperationError<PagerExecutionError>, _>(tcb, async move {
         tracing::debug!(
             "[FFI] Preparing and executing statement with pre-serialized values \"{}\"",
             statement
@@ -238,21 +238,21 @@ pub extern "C" fn session_query_with_values(
 
         let Ok(session_guard) = session_guard_res else {
             // Session is currently shutting down - exit with appropriate error.
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         // Check if session is connected or if it has been shut down.
         // If it has been shut down, return appropriate error.
         let Some(session) = session_guard.session.as_ref() else {
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         // First, prepare the statement. Map PrepareError into PagerExecutionError::PrepareError
-        // and then into MaybeShutdownError::Inner so the error type matches.
+        // and then into SessionOperationError::Inner so the error type matches.
         let mut prepared = session
             .prepare(statement)
             .await
-            .map_err(|e| MaybeShutdownError::Inner(PagerExecutionError::PrepareError(e)))?;
+            .map_err(|e| SessionOperationError::Inner(PagerExecutionError::PrepareError(e)))?;
 
         prepared.set_is_idempotent(bool::from(execution_options.is_idempotent));
         prepared.set_page_size(execution_options.page_size);
@@ -262,7 +262,7 @@ pub extern "C" fn session_query_with_values(
                 .consistency_level
                 .try_into()
                 .map_err(|err| {
-                    MaybeShutdownError::InvalidArgument(format!(
+                    SessionOperationError::InvalidArgument(format!(
                         "Invalid consistency level value {0} passed from C# for simple query with values: {1}",
                         execution_options.consistency_level, err
                     ))
@@ -280,7 +280,7 @@ pub extern "C" fn session_query_with_values(
         let query_pager = session
             .execute_iter_preserialized(prepared, serialized_values)
             .await
-            .map_err(MaybeShutdownError::Inner)?;
+            .map_err(SessionOperationError::Inner)?;
 
         tracing::trace!("[FFI] Prepared statement executed with pre-serialized values");
 
@@ -309,28 +309,28 @@ pub extern "C" fn session_prepare(
     // If the operation fails, treat it as session shutting down.
     let session_guard_res = session_arc.try_read_owned();
 
-    BridgedFuture::spawn::<_, _, MaybeShutdownError<PrepareError>, _>(tcb, async move {
+    BridgedFuture::spawn::<_, _, SessionOperationError<PrepareError>, _>(tcb, async move {
         tracing::debug!("[FFI] Preparing statement \"{}\"", statement);
 
         let Ok(session_guard) = session_guard_res else {
             // Session is currently shutting down - exit with appropriate error.
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         // Check if session is connected or if it has been shut down.
         // If it has been shut down, return appropriate error.
         let Some(session) = session_guard.session.as_ref() else {
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         // Lock is held for the entire duration of the prepare operation,
         // preventing shutdown until this future completes
-        // Map underlying `PrepareError` into `MaybeShutdownError::Inner` so
+        // Map underlying `PrepareError` into `SessionOperationError::Inner` so
         // the BridgedFuture's error type matches.
         let ps = session
             .prepare(statement)
             .await
-            .map_err(MaybeShutdownError::Inner)?;
+            .map_err(SessionOperationError::Inner)?;
 
         tracing::trace!("[FFI] Statement prepared");
 
@@ -364,18 +364,18 @@ pub extern "C" fn session_query_bound(
         .expect("poisoning impossible due to process-aborting panics")
         .clone();
 
-    BridgedFuture::spawn::<_, _, MaybeShutdownError<PagerExecutionError>, _>(tcb, async move {
+    BridgedFuture::spawn::<_, _, SessionOperationError<PagerExecutionError>, _>(tcb, async move {
         tracing::debug!("[FFI] Executing prepared statement");
 
         let Ok(session_guard) = session_guard_res else {
             // Session is currently shutting down - exit with appropriate error.
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         // Check if session is connected or if it has been shut down.
         // If it has been shut down, return appropriate error.
         let Some(session) = session_guard.session.as_ref() else {
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         // If consistency level was provided, apply it to the prepared statement. Otherwise, if consistency level
@@ -387,7 +387,7 @@ pub extern "C" fn session_query_bound(
                 .consistency_level
                 .try_into()
                 .map_err(|err| {
-                    MaybeShutdownError::InvalidArgument(format!(
+                    SessionOperationError::InvalidArgument(format!(
                         "Invalid consistency level value {0} passed from C# for bound query: {1}",
                         execution_options.consistency_level, err
                     ))
@@ -402,12 +402,12 @@ pub extern "C" fn session_query_bound(
 
         // Lock is held for the entire duration of the query operation,
         // preventing shutdown until this future completes
-        // Map underlying `PagerExecutionError` into `MaybeShutdownError::Inner` so
+        // Map underlying `PagerExecutionError` into `SessionOperationError::Inner` so
         // the BridgedFuture's error type matches.
         let query_pager = session
             .execute_iter(prepared_statement, ())
             .await
-            .map_err(MaybeShutdownError::Inner)?;
+            .map_err(SessionOperationError::Inner)?;
 
         tracing::trace!("[FFI] Prepared statement executed");
 
@@ -453,18 +453,18 @@ pub extern "C" fn session_query_bound_with_values(
         .expect("poisoning impossible due to process-aborting panics")
         .clone();
 
-    BridgedFuture::spawn::<_, _, MaybeShutdownError<PagerExecutionError>, _>(tcb, async move {
+    BridgedFuture::spawn::<_, _, SessionOperationError<PagerExecutionError>, _>(tcb, async move {
         tracing::debug!("[FFI] Executing prepared statement");
 
         let Ok(session_guard) = session_guard_res else {
             // Session is currently shutting down - exit with appropriate error.
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         // Check if session is connected or if it has been shut down.
         // If it has been shut down, return appropriate error.
         let Some(session) = session_guard.session.as_ref() else {
-            return Err(MaybeShutdownError::AlreadyShutdown);
+            return Err(SessionOperationError::AlreadyShutdown);
         };
 
         // If consistency level was provided, apply it to the prepared statement. Otherwise, if consistency level
@@ -476,7 +476,7 @@ pub extern "C" fn session_query_bound_with_values(
                 .consistency_level
                 .try_into()
                 .map_err(|err| {
-                    MaybeShutdownError::InvalidArgument(format!(
+                    SessionOperationError::InvalidArgument(format!(
                         "Invalid consistency level value {0} passed from C# for bound query with values: {1}",
                         execution_options.consistency_level,
                         err
@@ -496,7 +496,7 @@ pub extern "C" fn session_query_bound_with_values(
         let query_pager = session
             .execute_iter_preserialized(prepared_statement, serialized_values)
             .await
-            .map_err(MaybeShutdownError::Inner)?;
+            .map_err(SessionOperationError::Inner)?;
 
         tracing::trace!("[FFI] Prepared statement executed");
 
