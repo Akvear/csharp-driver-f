@@ -19,21 +19,27 @@ namespace Cassandra
             return handle == other.handle;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        struct CSharpHostData
+        {
+            public FFISliceRaw IdBytes;
+            public FFISliceRaw IpBytes;
+            public ushort Port;
+            public FFIString Datacenter;
+            public FFIString Rack;
+        }
+
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         private static extern RustBridge.FFIMaybeException cluster_state_fill_nodes(
             IntPtr clusterState,
             IntPtr contextPtr,
             IntPtr callback);
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFISliceRaw, FFISliceRaw, ushort, FFIString, FFIString, FFIMaybeException> AddHostPtr = &AddHostToList;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, CSharpHostData, FFIMaybeException> AddHostPtr = &AddHostToList;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
         private static unsafe FFIMaybeException AddHostToList(
             IntPtr contextPtr,
-            FFISliceRaw idBytes,
-            FFISliceRaw ipBytes,
-            ushort port,
-            FFIString datacenter,
-            FFIString rack)
+            CSharpHostData hostData)
         {
             try
             {
@@ -48,13 +54,13 @@ namespace Cassandra
                 // This matches the pattern used in row_set_fill_columns_metadata.
                 var context = Unsafe.AsRef<Metadata.RefreshContext>((void*)contextPtr);
 
-                var hostId = new Guid(idBytes.As<byte>().ToSpan());
+                var hostId = new Guid(hostData.IdBytes.As<byte>().ToSpan());
 
                 // Construct IPAddress directly from bytes (4 for IPv4, 16 for IPv6). ipBytes is an FFISlice<byte>
                 // and it accesses unmanaged memory that is only valid for the duration of this callback invocation.
                 // The IPAddress constructor must be called synchronously here so it can copy the data immediately.
-                var ipAddress = new IPAddress(ipBytes.As<byte>().ToSpan());
-                var address = new IPEndPoint(ipAddress, port);
+                var ipAddress = new IPAddress(hostData.IpBytes.As<byte>().ToSpan());
+                var address = new IPEndPoint(ipAddress, hostData.Port);
 
                 // Try to reuse existing host object if id matches and address is the same
                 if (context.OldHosts != null && context.OldHosts.TryGetValue(hostId, out var host))
@@ -68,8 +74,8 @@ namespace Cassandra
                 }
 
                 // If either datacenter or rack is null, the method ToManagedString returns null.
-                var dcString = datacenter.ToManagedString();
-                var rackString = rack.ToManagedString();
+                var dcString = hostData.Datacenter.ToManagedString();
+                var rackString = hostData.Rack.ToManagedString();
 
                 // Create Host instance and add it to the dictionaries.
                 host = new Host(address, hostId, dcString, rackString);

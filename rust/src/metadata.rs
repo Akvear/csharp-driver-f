@@ -28,16 +28,23 @@ pub struct RefreshContextPtr(FFIPtr<'static, RefreshContext>);
 ///
 /// # Safety
 /// - All pointer parameters must be immediately copied/consumed during the callback invocation
-/// - String pointers (datacenter_ptr, rack_ptr) are only valid for the duration of the callback
+/// - String pointers are only valid for the duration of the callback
 /// - The callback must not store these pointers or access them after returning
 type ConstructCSharpHost = unsafe extern "C" fn(
     refresh_context_ptr: RefreshContextPtr,
-    id_bytes: FFISlice<'_, u8>,
-    ip_bytes: FFISlice<'_, u8>,
-    port: u16,
-    datacenter: FFIStr<'_>,
-    rack: FFIStr<'_>,
+    csharp_host_data: CSharpHostData<'_>,
 ) -> FFIMaybeException;
+
+/// Struct for passing node metadata from Rust to C# in a single callback parameter.
+/// Any change to this struct must be reflected in the C# definition and the AddHostToList method.
+#[repr(C)]
+pub struct CSharpHostData<'a> {
+    id_bytes: FFISlice<'a, u8>,
+    ip_bytes: FFISlice<'a, u8>,
+    port: u16,
+    datacenter: FFIStr<'a>,
+    rack: FFIStr<'a>,
+}
 
 /// Populates a C# RefreshContext with node information from the cluster state.
 /// For each node in the cluster state, this function:
@@ -105,11 +112,13 @@ pub extern "C" fn cluster_state_fill_nodes(
         unsafe {
             let ffi_exception = callback(
                 refresh_context_ptr,
-                uuid_bytes,
-                ip_bytes,
-                port,
-                dc_str,
-                rack_str,
+                CSharpHostData {
+                    id_bytes: uuid_bytes,
+                    ip_bytes,
+                    port,
+                    datacenter: dc_str,
+                    rack: rack_str,
+                },
             );
             if ffi_exception.has_exception() {
                 return ffi_exception;
