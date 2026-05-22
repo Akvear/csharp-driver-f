@@ -25,9 +25,9 @@ namespace Cassandra
             IntPtr contextPtr,
             IntPtr callback);
 
-        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFISliceRaw, FFISliceRaw, ushort, FFIString, FFIString, void> AddHostPtr = &AddHostToList;
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, FFISliceRaw, FFISliceRaw, ushort, FFIString, FFIString, FFIMaybeException> AddHostPtr = &AddHostToList;
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
-        private static unsafe void AddHostToList(
+        private static unsafe FFIMaybeException AddHostToList(
             IntPtr contextPtr,
             FFISliceRaw idBytes,
             FFISliceRaw ipBytes,
@@ -63,7 +63,7 @@ namespace Cassandra
                     if (host.Address.Equals(address))
                     {
                         context.AddHost(host);
-                        return;
+                        return FFIMaybeException.Ok();
                     }
                 }
 
@@ -77,10 +77,10 @@ namespace Cassandra
             }
             catch (Exception ex)
             {
-                // Do not throw across FFI boundary - causes undefined behavior.
-                // Fail fast to match Rust's panic=abort behavior and make the error obvious.
-                Environment.FailFast("Fatal error in AddHostCallback", ex);
+                return FFIMaybeException.FromException(ex);
             }
+
+            return FFIMaybeException.Ok();
         }
 
         internal void FillHostCache(Metadata.RefreshContext context)

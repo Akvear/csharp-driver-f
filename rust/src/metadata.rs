@@ -30,7 +30,6 @@ pub struct RefreshContextPtr(FFIPtr<'static, RefreshContext>);
 /// - All pointer parameters must be immediately copied/consumed during the callback invocation
 /// - String pointers (datacenter_ptr, rack_ptr) are only valid for the duration of the callback
 /// - The callback must not store these pointers or access them after returning
-/// - The callback must not throw exceptions across the FFI boundary
 type ConstructCSharpHost = unsafe extern "C" fn(
     refresh_context_ptr: RefreshContextPtr,
     id_bytes: FFISlice<'_, u8>,
@@ -38,7 +37,7 @@ type ConstructCSharpHost = unsafe extern "C" fn(
     port: u16,
     datacenter: FFIStr<'_>,
     rack: FFIStr<'_>,
-);
+) -> FFIMaybeException;
 
 /// Populates a C# RefreshContext with node information from the cluster state.
 /// For each node in the cluster state, this function:
@@ -50,7 +49,7 @@ type ConstructCSharpHost = unsafe extern "C" fn(
 /// - `refresh_context_ptr` must point to a valid C# RefreshContext that remains allocated during this call
 /// - All string pointers passed to the callback are temporary and only valid during that invocation
 /// - The callback must copy string data (e.g., via Marshal.PtrToStringUTF8) and byte arrays (IP, host ID) immediately.
-/// - The callback must not throw exceptions; use Environment.FailFast on errors
+/// - The callback must return a valid FFIMaybeException.
 #[unsafe(no_mangle)]
 pub extern "C" fn cluster_state_fill_nodes(
     cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
@@ -104,7 +103,7 @@ pub extern "C" fn cluster_state_fill_nodes(
         // All pointers passed to the callback are only valid during this invocation.
         // The callback must copy all data immediately.
         unsafe {
-            callback(
+            let ffi_exception = callback(
                 refresh_context_ptr,
                 uuid_bytes,
                 ip_bytes,
@@ -112,6 +111,9 @@ pub extern "C" fn cluster_state_fill_nodes(
                 dc_str,
                 rack_str,
             );
+            if ffi_exception.has_exception() {
+                return ffi_exception;
+            }
         }
     }
 
