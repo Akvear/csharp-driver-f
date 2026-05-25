@@ -802,6 +802,16 @@ pub struct FFINonNullPtr<'a, T: Sized> {
     _phantom: PhantomData<&'a ()>,
 }
 
+impl<'a, T> FFINonNullPtr<'a, T> {
+    #[expect(dead_code)]
+    pub(crate) fn from_ref(value: &'a T) -> Self {
+        Self {
+            ptr: NonNull::from(value),
+            _phantom: PhantomData,
+        }
+    }
+}
+
 // Manual implementation to avoid `T: Clone` bound.
 impl<T> Clone for FFINonNullPtr<'_, T> {
     fn clone(&self) -> Self {
