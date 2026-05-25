@@ -29,7 +29,7 @@ namespace Cassandra
             public FFIString Rack;
         }
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         private static extern RustBridge.FFIMaybeException cluster_state_fill_nodes(
             IntPtr clusterState,
             IntPtr contextPtr,
@@ -105,7 +105,7 @@ namespace Cassandra
             GC.KeepAlive(context);
         }
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException cluster_state_get_keyspace_metadata(
             IntPtr clusterState,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspaceName,
@@ -264,7 +264,7 @@ namespace Cassandra
             return ksmd;
         }
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException cluster_state_get_keyspace_names(
             IntPtr clusterState,
             IntPtr keyspaceNameListPtr,
@@ -307,7 +307,7 @@ namespace Cassandra
             return keyspaceNames;
         }
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException cluster_state_get_table_names(
             IntPtr clusterState,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspaceName,
@@ -385,7 +385,7 @@ namespace Cassandra
             }
         }
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException cluster_state_get_udt_metadata(
             IntPtr clusterState,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspaceName,
@@ -549,7 +549,7 @@ namespace Cassandra
             return FFIMaybeException.Ok();
         }
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException cluster_state_get_table_metadata(
             IntPtr clusterState,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspaceName,
