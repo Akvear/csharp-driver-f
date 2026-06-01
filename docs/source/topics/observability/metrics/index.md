@@ -1,5 +1,7 @@
 # Metrics
 
+> **Note**: This feature is not implemented in this release of the driver.
+
 The driver exposes measurements of its internal behavior through an API composed by abstractions. The client application must provide an implementation of these abstractions (`IDriverMetricsProvider`) in order to enable metrics.
 
 An [Extension package] is offered that is based on the [App.Metrics] library. Application developers can use [App.Metrics] to export metrics to a monitoring tool.

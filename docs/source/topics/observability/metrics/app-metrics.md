@@ -1,5 +1,7 @@
 # App.Metrics Provider
 
+> **Note**: This feature is not implemented in this release of the driver.
+
 This documentation refers to our provider based on App.Metrics. The code examples shown here only apply if this provider is used.
 
 ## Installation
