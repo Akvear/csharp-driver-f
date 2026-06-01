@@ -76,7 +76,7 @@ namespace Cassandra
         }
 
         // HostRegistry groups both maps so they can be swapped atomically.
-        internal sealed class HostRegistry(
+        internal readonly struct HostRegistry(
             IReadOnlyDictionary<Guid, Host> hostsById,
             IReadOnlyDictionary<IPEndPoint, Guid> hostIdsByIp)
         {
