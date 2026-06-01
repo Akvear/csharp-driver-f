@@ -202,43 +202,6 @@ clean-csharp:
 clean-rust:
 	cd rust; cargo clean
 
-### SYMLINK RUST LIBRARY INTO C# PROJECTS ###
-# This is inherently hacky and brittle, but it's the easiest way I've found to get the Rust
-# library loaded by the C# projects during testing and execution.
-
-LINK_PROJECTS 	 := Cassandra Cassandra.IntegrationTests LoggingTests Cassandra.Tests
-FRAMEWORKS    	 := net9 net8
-
-UNAME_S := $(shell uname -s)
-ifeq ($(OS),Windows_NT)
-	RUST_LIB_FILENAME := csharp_wrapper.dll
-else ifeq ($(UNAME_S),Darwin)
-	RUST_LIB_FILENAME := libcsharp_wrapper.dylib
-else
-	RUST_LIB_FILENAME := libcsharp_wrapper.so
-endif
-
-RUST_LIB_RELATIVE_PATH := ../../../../../rust/target/debug/$(RUST_LIB_FILENAME)
-
-define symlink-to-rust
-	mkdir -p $(1); \
-	cd $(1); \
-	ln -f -s $(RUST_LIB_RELATIVE_PATH) || true; \
-	cd - >/dev/null
-endef
-
-TARGET_DIRS := $(foreach p,$(LINK_PROJECTS), \
-                 $(foreach f,$(FRAMEWORKS), \
-                   src/$(p)/bin/Debug/$(f)))
-
-.PHONY: create-rust-lib-symlinks
-create-rust-lib-symlinks:
-	@$(foreach d,$(TARGET_DIRS), \
-		echo "Linking in $(d)"; \
-		$(call symlink-to-rust,$(d));)
-
-### END SYMLINK ###
-
 # TODO: Put --release for production builds
 .PHONY: build-rust
 build-rust:

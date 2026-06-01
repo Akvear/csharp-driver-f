@@ -92,14 +92,4 @@
 
     <Exec WorkingDirectory="$(RustProjectDir)" Command="cargo build --release" />
   </Target>
-
-  <Target Name="LinkRustNativeWrapperDebug"
-          AfterTargets="Build"
-      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Debug' and '$(IsCrossTargetingBuild)' == 'true'">
-    <PropertyGroup>
-      <RepoRootDir>$(MSBuildThisFileDirectory)../..</RepoRootDir>
-    </PropertyGroup>
-
-    <Exec WorkingDirectory="$(RepoRootDir)" Command="make create-rust-lib-symlinks" />
-  </Target>
 </Project>
