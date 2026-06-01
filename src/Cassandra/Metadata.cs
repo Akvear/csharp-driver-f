@@ -221,16 +221,44 @@ namespace Cassandra
             }
         }
 
-        /// <summary>
-        /// Updates the cached topology if the cluster state has changed.
-        /// </summary>
-        private void RefreshTopologyCache(BridgedClusterState clusterState)
+        private ClusterStateLease AcquireClusterState()
         {
-            var context = new RefreshContext(_hostRegistry.HostsById);
-            clusterState.FillHostCache(context);
+            var session = _getActiveSessionOrThrow();
+            try
+            {
+                return new ClusterStateLease(session, session.GetClusterState());
+            }
+            catch
+            {
+                session.DecreaseReferenceCount();
+                throw;
+            }
+        }
 
-            // Atomically replace the host registry reference with the new one.
-            Interlocked.Exchange(ref _hostRegistry, context.ToNewRegistry());
+        // Pairs a borrowed ClusterState handle with the session reference taken to obtain it, so a
+        // single `using` releases both. A struct, so `using var` adds no heap allocation.
+        private readonly struct ClusterStateLease : IDisposable
+        {
+            private readonly Session _session;
+            internal BridgedClusterState State { get; }
+
+            internal ClusterStateLease(Session session, BridgedClusterState state)
+            {
+                _session = session;
+                State = state;
+            }
+
+            public void Dispose()
+            {
+                try
+                {
+                    State.Dispose();
+                }
+                finally
+                {
+                    _session.DecreaseReferenceCount();
+                }
+            }
         }
 
         /// <summary>
@@ -261,19 +289,8 @@ namespace Cassandra
         /// <returns>a collection of all defined keyspaces names.</returns>
         public ICollection<string> GetKeyspaces()
         {
-            var session = _getActiveSessionOrThrow();
-            try
-            {
-                using (var clusterState = session.GetClusterState())
-                {
-                    return clusterState.GetKeyspaceNames();
-                }
-            }
-            finally
-            {
-                // Release the lock on the session created by calling _getActiveSessionOrThrow.
-                session.DecreaseReferenceCount();
-            }
+            using var lease = AcquireClusterState();
+            return lease.State.GetKeyspaceNames();
         }
 
         /// <summary>
@@ -285,19 +302,8 @@ namespace Cassandra
         ///  keyspace.</returns>
         public ICollection<string> GetTables(string keyspace)
         {
-            var session = _getActiveSessionOrThrow();
-            try
-            {
-                using (var clusterState = session.GetClusterState())
-                {
-                    return clusterState.GetTableNames(keyspace);
-                }
-            }
-            finally
-            {
-                // Release the lock on the session created by calling _getActiveSessionOrThrow.
-                session.DecreaseReferenceCount();
-            }
+            using var lease = AcquireClusterState();
+            return lease.State.GetTableNames(keyspace);
         }
 
         /// <summary>
@@ -308,19 +314,8 @@ namespace Cassandra
         /// <returns>a TableMetadata for the specified table in the specified keyspace.</returns>
         public TableMetadata GetTable(string keyspace, string tableName)
         {
-            var session = _getActiveSessionOrThrow();
-            try
-            {
-                using (var clusterState = session.GetClusterState())
-                {
-                    return clusterState.GetTableMetadata(keyspace, tableName);
-                }
-            }
-            finally
-            {
-                // Release the lock on the session created by calling _getActiveSessionOrThrow.
-                session.DecreaseReferenceCount();
-            }
+            using var lease = AcquireClusterState();
+            return lease.State.GetTableMetadata(keyspace, tableName);
         }
 
         /// <summary>
@@ -339,18 +334,8 @@ namespace Cassandra
         /// </summary>
         public UdtColumnInfo GetUdtDefinition(string keyspace, string typeName)
         {
-            var session = _getActiveSessionOrThrow();
-            try
-            {
-                using (var clusterState = session.GetClusterState())
-                {
-                    return clusterState.GetUdtMetadata(keyspace, typeName);
-                }
-            }
-            finally
-            {
-                session.DecreaseReferenceCount();
-            }
+            using var lease = AcquireClusterState();
+            return lease.State.GetUdtMetadata(keyspace, typeName);
         }
 
         /// <summary>
