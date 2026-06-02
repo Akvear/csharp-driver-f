@@ -1,5 +1,7 @@
 # OpenTelemetry
 
+> **Note**: This feature is not implemented in this release of the driver.
+
 The driver provides support for session and node level [traces](https://opentelemetry.io/docs/concepts/signals/traces/) using [OpenTelemetry instrumentation](https://opentelemetry.io/docs/instrumentation/net/).
 
 ## Including OpenTelemetry instrumentation in your code

@@ -1,5 +1,7 @@
 # List of metrics
 
+> **Note**: This feature is not implemented in this release of the driver.
+
 In this section you can find a description of each metric type used by the driver and a list of all metrics provided by the driver.
 
 ## Metric types
