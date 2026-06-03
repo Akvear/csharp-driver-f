@@ -13,6 +13,7 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 //
+// NOTE: This example is not working in the current release.
 
 using System;
 using System.Diagnostics;
