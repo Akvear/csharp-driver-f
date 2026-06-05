@@ -9,6 +9,22 @@ You should also visit the [Documentation][doc-index] and [FAQ][faq].
    - [Inserts multiple rows in a table limiting the amount of parallel requests](ConcurrentExecutions/ExecuteInLoop/Program.cs)
  - Mapper
    - [Use the mapper with multiple keyspaces and only one session](Mapper/MultipleKeyspacesSingleSession/Program.cs)
+ - Simple
+   - [Insert and select with a simple statement](Simple/Program.cs)
+ - Prepared
+   - [Insert and select with a prepared statement](Prepared/Program.cs)
+ - Collections
+   - [Insert and select list, set, and map values](Collections/Program.cs)
+ - UUIDs
+   - [Insert and select uuid and timeuuid values](Uuids/Program.cs)
+ - Duration
+   - [Insert and select a duration value](Duration/Program.cs)
+ - Schema metadata
+   - [Inspect keyspace and table metadata](SchemaMetadata/Program.cs)
+ - User Defined Types
+   - [Map, insert and retrieve User-Defined Types](UserDefinedTypes/Program.cs)
+ - Get By Name
+   - [Retrieve column values using column names from the result set](GetByName/Program.cs)
  - TLS/SSL (Not working in current release)
    - Server Auth
      - [Loading a root certificate in code](Ssl/SslServerAuthOnly/LoadingCertificateManuallyExample.cs)
