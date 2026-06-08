@@ -71,6 +71,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Uuids", "Uuids\Uuids.csproj
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "UserDefinedTypes", "UserDefinedTypes\UserDefinedTypes.csproj", "{0F7F928E-8980-4ECC-A079-A8B235AAEF72}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demo", "Demo\Demo.csproj", "{9A44BA08-4CDF-47B3-BEAE-48FEC39A1ADC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -165,6 +167,10 @@ Global
 		{0F7F928E-8980-4ECC-A079-A8B235AAEF72}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0F7F928E-8980-4ECC-A079-A8B235AAEF72}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0F7F928E-8980-4ECC-A079-A8B235AAEF72}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9A44BA08-4CDF-47B3-BEAE-48FEC39A1ADC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9A44BA08-4CDF-47B3-BEAE-48FEC39A1ADC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9A44BA08-4CDF-47B3-BEAE-48FEC39A1ADC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9A44BA08-4CDF-47B3-BEAE-48FEC39A1ADC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
