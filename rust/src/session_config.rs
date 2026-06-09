@@ -2,7 +2,11 @@ use std::time::Duration;
 
 use crate::ffi::CSharpStr;
 
+use scylla::client::SelfIdentity;
 use scylla::client::session_builder::SessionBuilder;
+
+const DEFAULT_DRIVER_NAME: &str = "ScyllaDB C# RS Driver";
+const DEFAULT_DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// TCP socket options passed from C#.
 ///
@@ -109,6 +113,11 @@ impl<'a> BridgedSessionConfig<'a> {
         }
 
         builder = self.tcp.apply_to_builder(builder);
+
+        let identity = SelfIdentity::new()
+            .with_custom_driver_name(DEFAULT_DRIVER_NAME)
+            .with_custom_driver_version(DEFAULT_DRIVER_VERSION);
+        builder = builder.custom_identity(identity);
 
         (uri, keyspace, builder)
     }
