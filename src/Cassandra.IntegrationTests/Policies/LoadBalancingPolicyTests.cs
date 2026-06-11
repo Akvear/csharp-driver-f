@@ -15,7 +15,6 @@
 //
 
 using System;
-using System.Diagnostics;
 using Cassandra.IntegrationTests.TestBase;
 using Cassandra.IntegrationTests.TestClusterManagement;
 using Cassandra.Tests;
@@ -29,7 +28,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
     {
 
         /// <summary>
-        /// Validated that the driver fails as expected with a non-existing datacenter is specified via DCAwareRoundRobinPolicy 
+        /// Validates that the driver fails as expected with a non-existing datacenter is specified via DCAwareRoundRobinPolicy 
         /// 
         /// @test_category load_balancing:dc_aware
         /// </summary>
