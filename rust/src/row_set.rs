@@ -8,7 +8,7 @@ use scylla::frame::response::result::{ColumnType, NativeType};
 use crate::error_conversion::{ErrorToException as _, FFIException, FFIMaybeException};
 use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, FFI, FFIGCHandle, FFINonNullPtr, FFISlice, FFIStr, FromArc,
-    FromRef, GCHandlePtr, RefFFI,
+    FromRef, GCHandlePtr, IpOctets, RefFFI,
 };
 use crate::task::{BridgedFuture, ExceptionConstructors, Tcb};
 
@@ -567,6 +567,45 @@ pub extern "C" fn row_set_type_info_get_vector_dimensions(
     match type_info {
         ColumnType::Vector { dimensions, .. } => *dimensions,
         _ => panic!("row_set_type_info_get_vector_dimensions called on non-Vector ColumnType"),
+    }
+}
+
+// --- Coordinator / ExecutionInfo bridge ---
+
+/// Opaque C# representation of an `IPEndPoint` to be filled with coordinator data.
+pub enum IpEndPoint {}
+
+/// Callback that writes a single coordinator's address into the C# endpoint.
+/// `ip_bytes` is 4 bytes for IPv4 or 16 bytes for IPv6; `port` is the connection port.
+type SetCoordinator = unsafe extern "C" fn(
+    ip_endpoint_ptr: FFINonNullPtr<'_, IpEndPoint>,
+    ip_bytes: FFISlice<'_, u8>,
+    port: u16,
+) -> FFIMaybeException;
+
+/// Fills the provided endpoint with the coordinator that served the initial request.
+#[unsafe(no_mangle)]
+pub extern "C" fn row_set_fill_coordinator(
+    row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
+    ip_endpoint_ptr: FFINonNullPtr<'_, IpEndPoint>,
+    set_coordinator: SetCoordinator,
+) -> FFIMaybeException {
+    let row_set = ArcFFI::as_ref(row_set_ptr).unwrap();
+    let pager = row_set.pager.blocking_lock();
+
+    let Some(coordinator) = pager.request_coordinators().next() else {
+        return FFIMaybeException::ok();
+    };
+
+    let addr = coordinator.connection_address();
+    let octets = IpOctets::new(addr.ip());
+
+    unsafe {
+        set_coordinator(
+            ip_endpoint_ptr,
+            FFISlice::new(octets.as_slice()),
+            addr.port(),
+        )
     }
 }
 
