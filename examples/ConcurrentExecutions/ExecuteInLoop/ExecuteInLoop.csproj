@@ -11,6 +11,7 @@ You can should replace the project reference with the package reference of the d
     <TargetFramework>net8</TargetFramework>
     <RootNamespace>ExecuteInLoop</RootNamespace>
     <AssemblyName>ExecuteInLoop</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <!--This example uses a project reference. In your project use PackageReference (nuget)-->
