@@ -17,7 +17,7 @@ use crate::ffi::{
 use crate::pre_serialized_values::{PopulateValues, PopulateValuesContext, PreSerializedValues};
 use crate::prepared_statement::BridgedPreparedStatement;
 use crate::row_set::RowSet;
-use crate::session_config::BridgedSessionConfig;
+use crate::session_config::{BridgedSessionConfig, BridgedSessionConfigResult};
 use crate::task::{BridgedFuture, ExceptionConstructors, ManuallyDestructible, Tcb};
 
 /// Internal representation of a session bridged to C#.
@@ -74,14 +74,19 @@ pub extern "C" fn empty_bridged_result_free(ptr: BridgedOwnedSharedPtr<EmptyBrid
 
 #[unsafe(no_mangle)]
 pub extern "C" fn session_create(tcb: Tcb<ManuallyDestructible>, config: BridgedSessionConfig<'_>) {
-    let (uri, keyspace, session_builder) = config.into_session_builder();
+    let BridgedSessionConfigResult {
+        uri,
+        keyspace,
+        builder,
+    } = config.into_session_builder();
+    // Own the strings so they can be captured into the 'static creation future.
     let uri = uri.to_owned();
     let keyspace = keyspace.to_owned();
 
     BridgedFuture::spawn::<_, _, NewSessionError, _>(tcb, async move {
         tracing::debug!("[FFI] Create Session... {}", uri);
 
-        let session = session_builder.build().await?;
+        let session = builder.build().await?;
 
         tracing::info!(
             "[FFI] Session created! URI: {}, Keyspace: {}",

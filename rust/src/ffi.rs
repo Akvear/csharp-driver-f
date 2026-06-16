@@ -715,6 +715,27 @@ const _: [(); std::mem::size_of::<FFISlice<'static, u8>>()] =
 const _: [(); std::mem::align_of::<FFISlice<'static, u8>>()] =
     [(); std::mem::align_of::<(*const u8, usize)>()];
 
+pub(crate) enum IpOctets {
+    V4([u8; 4]),
+    V6([u8; 16]),
+}
+
+impl IpOctets {
+    pub(crate) fn new(ip: std::net::IpAddr) -> Self {
+        match ip {
+            std::net::IpAddr::V4(v4) => IpOctets::V4(v4.octets()),
+            std::net::IpAddr::V6(v6) => IpOctets::V6(v6.octets()),
+        }
+    }
+
+    pub(crate) fn as_slice(&self) -> &[u8] {
+        match self {
+            IpOctets::V4(bytes) => bytes,
+            IpOctets::V6(bytes) => bytes,
+        }
+    }
+}
+
 /// Represents a string passed over FFI from Rust to C#.
 /// SAFETY: `slice` must be a valid pointer a UTF-8 encoded string with correctly set length.
 #[repr(transparent)]

@@ -65,6 +65,17 @@ impl BridgedTcpConfig {
     }
 }
 
+/// Output of [`BridgedSessionConfig::into_session_builder`]: a fully-configured
+/// [`SessionBuilder`] together with the URI and keyspace it was built from,
+/// borrowed directly from the C#-managed config memory.
+///
+/// The `&'a str` fields borrow from the source config; a caller that needs them to
+/// outlive that borrow (e.g. to capture into a `'static` future) must `.to_owned()`.
+pub(crate) struct BridgedSessionConfigResult<'a> {
+    pub(crate) uri: &'a str,
+    pub(crate) keyspace: &'a str,
+    pub(crate) builder: SessionBuilder,
+}
 /// Configuration for creating a new session passed from C#.
 ///
 /// Any changes to this struct must be mirrored in the corresponding C# struct.
@@ -85,16 +96,12 @@ pub(crate) struct BridgedSessionConfig<'a> {
 }
 
 impl<'a> BridgedSessionConfig<'a> {
-    /// Consume this config and produce a fully-configured [`SessionBuilder`],
-    /// returning borrowed URI and keyspace string slices alongside it.
-    ///
-    /// The returned `&'a str` slices borrow directly from the C#-managed memory;
-    /// callers that need the strings to outlive the config's source lifetime must
-    /// call `.to_owned()` themselves.
+    /// Consume this config and produce a [`BridgedSessionConfigResult`] holding a
+    /// fully-configured [`SessionBuilder`] alongside the borrowed URI and keyspace.
     ///
     /// This is the single place where all session configuration is applied, so
     /// adding new options only requires changes here and in the struct definition.
-    pub(crate) fn into_session_builder(self) -> (&'a str, &'a str, SessionBuilder) {
+    pub(crate) fn into_session_builder(self) -> BridgedSessionConfigResult<'a> {
         let uri = self.uri.as_cstr().unwrap().to_str().unwrap();
         let keyspace = self.keyspace.as_cstr().unwrap().to_str().unwrap();
 
@@ -119,6 +126,10 @@ impl<'a> BridgedSessionConfig<'a> {
             .with_custom_driver_version(DEFAULT_DRIVER_VERSION);
         builder = builder.custom_identity(identity);
 
-        (uri, keyspace, builder)
+        BridgedSessionConfigResult {
+            uri,
+            keyspace,
+            builder,
+        }
     }
 }

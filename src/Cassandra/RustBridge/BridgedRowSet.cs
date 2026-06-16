@@ -1,5 +1,6 @@
 using System;
-
+using System.Collections.Generic;
+using System.Net;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -453,6 +454,50 @@ namespace Cassandra
             CqlColumn column = columns[valueIndex];
             ReadOnlySpan<byte> frameSlice = frameSliceRaw.As<byte>().ToSpan();
             values[valueIndex] = serializer.Deserialize(ProtocolVersion.V4, frameSlice, column.TypeCode, column.TypeInfo);
+        }
+
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        private static extern FFIMaybeException row_set_fill_coordinator(
+            IntPtr rowSetPtr,
+            IntPtr endpointPtr,
+            IntPtr setCoordinatorCallback);
+
+        unsafe static readonly delegate* unmanaged[Cdecl]<IntPtr, FFISliceRaw, ushort, FFIMaybeException> setCoordinatorPtr = &SetCoordinator;
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        private static unsafe FFIMaybeException SetCoordinator(
+            IntPtr endpointPtr,
+            FFISliceRaw ipBytes,
+            ushort port)
+        {
+            try
+            {
+                var ipAddress = new IPAddress(ipBytes.As<byte>().ToSpan());
+                Unsafe.AsRef<IPEndPoint>((void*)endpointPtr) = new IPEndPoint(ipAddress, port);
+            }
+            catch (Exception ex)
+            {
+                return FFIMaybeException.FromException(ex);
+            }
+            return FFIMaybeException.Ok();
+        }
+
+        internal List<IPEndPoint> ExtractCoordinatorFromRust()
+        {
+            IPEndPoint endpoint = null;
+            unsafe
+            {
+                IntPtr endpointPtr = (IntPtr)Unsafe.AsPointer(ref endpoint);
+                RunWithIncrement(handle =>
+                    row_set_fill_coordinator(
+                        handle,
+                        endpointPtr,
+                        (IntPtr)setCoordinatorPtr
+                    )
+                );
+            }
+            return endpoint != null ? new List<IPEndPoint> { endpoint } : new List<IPEndPoint>(0);
         }
 
         internal static Type MapTypeFromCode(ColumnTypeCode code)

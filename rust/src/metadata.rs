@@ -1,7 +1,7 @@
 use crate::error_conversion::FFIMaybeException;
 use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, CSharpStr, FFI, FFIBool, FFIPtr, FFISlice, FFIStr, FromArc,
-    RefFFI, ffi_callback_for_each,
+    IpOctets, RefFFI, ffi_callback_for_each,
 };
 use crate::row_set::column_type_to_code;
 use crate::task::ExceptionConstructors;
@@ -70,29 +70,9 @@ pub extern "C" fn cluster_state_fill_nodes(
         // UUID as bytes
         let uuid_bytes = FFISlice::new(node.host_id.as_bytes());
 
-        // The octets() returns an owned stack array. We store it in outer-scope
-        // variables so we can take a slice that outlives the match expression.
-        let ip_bytes_storage_v4: [u8; 4];
-        let ip_bytes_storage_v6: [u8; 16];
-
-        // Serialize IP address to bytes
         let port = node.address.port();
-        let ip_bytes_slice: &[u8] = match node.address.ip() {
-            std::net::IpAddr::V4(ipv4) => {
-                ip_bytes_storage_v4 = ipv4.octets();
-                let bytes = &ip_bytes_storage_v4[..];
-                tracing::trace!("[FFI] Node IPv4: {:?}, port: {}", bytes, port);
-                bytes
-            }
-            std::net::IpAddr::V6(ipv6) => {
-                ip_bytes_storage_v6 = ipv6.octets();
-                let bytes = &ip_bytes_storage_v6[..];
-                tracing::trace!("[FFI] Node IPv6: {:?}, port: {}", bytes, port);
-                bytes
-            }
-        };
-
-        let ip_bytes = FFISlice::new(ip_bytes_slice);
+        let ip_octets = IpOctets::new(node.address.ip());
+        let ip_bytes = FFISlice::new(ip_octets.as_slice());
 
         // Get datacenter (Option<String>) - pass null when missing
         let dc_str = match node.datacenter.as_deref() {
