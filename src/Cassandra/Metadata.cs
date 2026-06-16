@@ -15,13 +15,12 @@
 //
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Cassandra.Data.Linq;
+using Cassandra.Serialization;
 using Cassandra.Tasks;
 
 namespace Cassandra
@@ -37,7 +36,6 @@ namespace Cassandra
 
         public event SchemaChangedEventHandler SchemaChangedEvent;
 #pragma warning restore CS0067
-
         /// <summary>
         ///  Returns the name of currently connected cluster.
         /// </summary>
@@ -58,6 +56,11 @@ namespace Cassandra
         // Provided by Cluster during construction. It never returns null.
         // It either returns a valid Session or throws InvalidOperationException.
         private readonly Func<Session> _getActiveSessionOrThrow;
+
+        // Cluster's serializer manager — carries protocol version, custom type serializers,
+        // UDT mappings, and column encryption policy. Used wherever the partition key (or
+        // other CLR values) must be encoded to the same bytes the server would see on the wire.
+        private readonly ISerializerManager _serializerManager;
 
         internal class RefreshContext(IReadOnlyDictionary<Guid, Host> oldHosts)
         {
@@ -197,10 +200,14 @@ namespace Cassandra
 
         private readonly object _hostLock = new object();
 
-        internal Metadata(Configuration configuration, Func<Session> getActiveSessionOrThrow)
+        internal Metadata(
+            Configuration configuration,
+            Func<Session> getActiveSessionOrThrow,
+            ISerializerManager serializerManager)
         {
             Configuration = configuration;
             _getActiveSessionOrThrow = getActiveSessionOrThrow ?? throw new ArgumentNullException(nameof(getActiveSessionOrThrow));
+            _serializerManager = serializerManager ?? throw new ArgumentNullException(nameof(serializerManager));
         }
 
         public void Dispose()
@@ -239,19 +246,6 @@ namespace Cassandra
         }
 
         public IEnumerable<IPEndPoint> AllReplicas()
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// Get the replicas for a given partition key and keyspace
-        /// </summary>
-        public ICollection<HostShard> GetReplicas(string keyspaceName, byte[] partitionKey)
-        {
-            throw new NotImplementedException();
-        }
-
-        public ICollection<HostShard> GetReplicas(byte[] partitionKey)
         {
             throw new NotImplementedException();
         }
@@ -317,7 +311,6 @@ namespace Cassandra
             }
         }
 
-
         private ClusterStateLease AcquireClusterState()
         {
             var session = _getActiveSessionOrThrow();
@@ -356,6 +349,76 @@ namespace Cassandra
                     _session.DecreaseReferenceCount();
                 }
             }
+        }
+
+        /// <summary>
+        /// When the caller doesn't specify a keyspace (either by passing `null` or using
+        /// the overload that omits the keyspace), we send this empty sentinel value to
+        /// the Rust bridge. No keyspace matches the empty name in cluster metadata, so the
+        /// bridge applies its fallback replication strategy (LocalStrategy), which resolves
+        /// to the single primary token owner.
+        /// </summary>
+        private const string NoSpecifiedKeyspace = "";
+
+        /// <summary>
+        /// Get the replicas for a given partition key and keyspace
+        /// </summary>
+        /// <remarks>
+        /// This overload is not table-aware and always uses the Murmur3 partitioner.
+        /// It does not support tablet-aware routing. Prefer
+        /// <see cref="GetReplicas(string, string, IReadOnlyList{object})"/> instead.
+        /// The <paramref name="partitionKey"/> must already be serialized in routing-key format.
+        /// There is no dedicated public serializer for this legacy API; existing code can often reuse
+        /// a routing key already computed by the driver, for example from
+        /// <c>prepared.Bind(values).RoutingKey.RawRoutingKey</c>.
+        /// </remarks>
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
+        public ICollection<HostShard> GetReplicas(string keyspaceName, byte[] partitionKey)
+        {
+            ArgumentNullException.ThrowIfNull(partitionKey);
+
+            using var snapshot = GetSnapshot();
+
+            // This legacy overload takes no table name, so token computation is forced to
+            // Murmur3. The original driver resolved the partitioner from system.local instead;
+            // FIXME: bridge that lookup from the Rust driver so non-Murmur3 clusters are handled.
+
+            // Coalesce null keyspace to the empty sentinel; with no matching keyspace the Rust
+            // side falls back to LocalStrategy, returning only the primary token owner.
+            return snapshot.State.GetReplicasLegacyMurmur3(
+                keyspaceName ?? NoSpecifiedKeyspace, snapshot.Registry.HostsById, partitionKey);
+        }
+
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
+        public ICollection<HostShard> GetReplicas(byte[] partitionKey)
+        {
+#pragma warning disable CS0618
+            return GetReplicas(NoSpecifiedKeyspace, partitionKey);
+#pragma warning restore CS0618
+        }
+
+        /// <summary>
+        /// Gets replicas for a partition key using table-aware routing.
+        /// Each partition key column value is serialized individually and passed to the Rust bridge,
+        /// enabling tablet-aware replica lookup and proper partitioner selection.
+        /// </summary>
+        public ICollection<HostShard> GetReplicas(string keyspace, string table, IReadOnlyList<object> partitionKeyValues)
+        {
+            ArgumentNullException.ThrowIfNull(keyspace);
+            ArgumentNullException.ThrowIfNull(table);
+            ArgumentNullException.ThrowIfNull(partitionKeyValues);
+
+            if (partitionKeyValues.Count == 0)
+                throw new ArgumentException("Partition key values cannot be empty", nameof(partitionKeyValues));
+
+            // The borrowed clone keeps the native state's refcount elevated for the duration
+            // of the FFI call, so a concurrent cache swap on another thread can only bring it
+            // down to 1, never to 0 — the native pointer stays valid until `using` disposes
+            // the clone here.
+            using var snapshot = GetSnapshot();
+            return snapshot.State.GetReplicas(
+                keyspace, table, snapshot.Registry.HostsById, partitionKeyValues,
+                _serializerManager.GetCurrentSerializer());
         }
 
         /// <summary>

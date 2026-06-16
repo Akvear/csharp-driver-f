@@ -138,7 +138,6 @@ namespace Cassandra
         private Cluster(IEnumerable<object> contactPoints, Configuration configuration)
         {
             Configuration = configuration;
-            _metadata = new Metadata(configuration, GetActiveSessionOrThrow);
             var protocolVersion = _maxProtocolVersion;
             if (Configuration.ProtocolOptions.MaxProtocolVersionValue != null &&
                 Configuration.ProtocolOptions.MaxProtocolVersionValue.Value.IsSupported(configuration))
@@ -149,6 +148,7 @@ namespace Cassandra
                 protocolVersion,
                 Configuration.Policies.ColumnEncryptionPolicy,
                 Configuration.TypeSerializers);
+            _metadata = new Metadata(configuration, GetActiveSessionOrThrow, _serializerManager);
             _contactPoints = configuration.ParseContactPoints(contactPoints);
         }
 
@@ -244,15 +244,27 @@ namespace Cassandra
         }
 
         /// <inheritdoc />
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         public ICollection<HostShard> GetReplicas(byte[] partitionKey)
         {
+#pragma warning disable CS0618
             return Metadata.GetReplicas(partitionKey);
+#pragma warning restore CS0618
         }
 
         /// <inheritdoc />
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         public ICollection<HostShard> GetReplicas(string keyspace, byte[] partitionKey)
         {
+#pragma warning disable CS0618
             return Metadata.GetReplicas(keyspace, partitionKey);
+#pragma warning restore CS0618
+        }
+
+        /// <inheritdoc />
+        public ICollection<HostShard> GetReplicas(string keyspace, string table, IReadOnlyList<object> partitionKeyValues)
+        {
+            return Metadata.GetReplicas(keyspace, table, partitionKeyValues);
         }
 
         /// <inheritdoc />

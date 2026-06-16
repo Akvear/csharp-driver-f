@@ -1,12 +1,17 @@
-use crate::error_conversion::FFIMaybeException;
+use crate::error_conversion::{FFIMaybeException, MetadataBridgeError};
 use crate::ffi::{
-    ArcFFI, BridgedBorrowedSharedPtr, CSharpStr, FFI, FFIBool, FFIPtr, FFISlice, FFIStr, FromArc,
-    IpOctets, RefFFI, ffi_callback_for_each,
+    ArcFFI, BridgedBorrowedSharedPtr, CSharpStr, FFI, FFIBool, FFINonNullPtr, FFIPtr, FFISlice,
+    FFIStr, FromArc, IpOctets, RefFFI, ffi_callback_for_each,
 };
+use crate::pre_serialized_values::{PopulateValues, PopulateValuesContext, PreSerializedValues};
 use crate::row_set::column_type_to_code;
 use crate::task::ExceptionConstructors;
 use scylla::cluster::ClusterState;
-use scylla::cluster::metadata::ColumnType;
+use scylla::cluster::metadata::{ColumnType, Strategy};
+use scylla::frame::response::result::TableSpec;
+use scylla::routing::partitioner::PartitionerName;
+use scylla::routing::{Shard, Token};
+use uuid::Uuid;
 
 impl FFI for ClusterState {
     type Origin = FromArc;
@@ -45,6 +50,29 @@ pub struct CSharpHostData<'a> {
     datacenter: FFIStr<'a>,
     rack: FFIStr<'a>,
 }
+
+enum ReplicaList {}
+
+#[repr(transparent)]
+#[derive(Clone, Copy)]
+pub struct ReplicasCallbackContext<'a>(FFINonNullPtr<'a, ReplicaList>);
+
+/// A replica handed to C#: a pointer to the node's host ID (`Uuid`, which C# copies
+/// into a `Guid`) plus its shard.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ReplicaPair<'a> {
+    host_id_ptr: FFINonNullPtr<'a, Uuid>,
+    shard: Shard,
+}
+
+// Ensure the memory layout matches C#'s expectation for a Guid/UUID
+const _: () = assert!(size_of::<Uuid>() == 16);
+
+type OnReplicaPair<'a> = unsafe extern "C" fn(
+    callback_context: ReplicasCallbackContext<'a>,
+    replica: ReplicaPair<'_>,
+) -> FFIMaybeException;
 
 /// Populates a C# RefreshContext with node information from the cluster state.
 /// For each node in the cluster state, this function:
@@ -107,6 +135,180 @@ pub extern "C" fn cluster_state_fill_nodes(
     }
 
     FFIMaybeException::ok()
+}
+
+/// Ephemeral per-call helper: separates validation, serialization, and token computation
+/// from the actual replica lookup and callback invocation logic.
+struct RustReplicaBridge<'a> {
+    cluster_state: &'a ClusterState,
+    keyspace_name: &'a str,
+    token: Token,
+    routing_mode: ReplicaRoutingMode<'a>,
+}
+
+enum ReplicaRoutingMode<'a> {
+    TabletAware { table_name: &'a str },
+    TokenRingCompat,
+}
+
+impl<'a> RustReplicaBridge<'a> {
+    const NO_TABLE_NAME_PROVIDED: &'static str = "";
+
+    /// Replication strategy used when the keyspace is absent from cluster metadata
+    /// (unknown keyspace, or the empty-keyspace sentinel of the legacy overloads).
+    ///
+    /// This mirrors the Rust driver's own replica lookup, which falls back to
+    /// `LocalStrategy` for an unknown keyspace (see `ClusterState::get_token_endpoints_iter`).
+    const FALLBACK_STRATEGY: Strategy = Strategy::LocalStrategy;
+
+    fn pre_serialized_values_from(
+        partition_key: FFISlice<'a, u8>,
+    ) -> Result<PreSerializedValues, MetadataBridgeError> {
+        let mut pre_serialized_partition_key = PreSerializedValues::new();
+        pre_serialized_partition_key.add_value(partition_key)?;
+        Ok(pre_serialized_partition_key)
+    }
+
+    /// Constructs a bridge for table-aware replica routing.
+    fn new_tablet_based(
+        cluster_state: &'a ClusterState,
+        keyspace: CSharpStr<'a>,
+        table: CSharpStr<'a>,
+        pre_serialized_partition_key: PreSerializedValues,
+    ) -> Result<Self, MetadataBridgeError> {
+        let keyspace_name = keyspace
+            .as_cstr()
+            .ok_or(MetadataBridgeError::NullKeyspaceName)?
+            .to_str()
+            .map_err(MetadataBridgeError::InvalidKeyspaceNameUtf8)?;
+        if keyspace_name.is_empty() {
+            return Err(MetadataBridgeError::EmptyKeyspaceName);
+        }
+        let table_name = table
+            .as_cstr()
+            .ok_or(MetadataBridgeError::NullTableName)?
+            .to_str()
+            .map_err(MetadataBridgeError::InvalidTableNameUtf8)?;
+        if table_name.is_empty() {
+            return Err(MetadataBridgeError::EmptyTableName);
+        }
+
+        let serialized_values = pre_serialized_partition_key.into_serialized_values();
+
+        let token = cluster_state
+            .compute_token_preserialized(keyspace_name, table_name, &serialized_values)
+            .map_err(MetadataBridgeError::TokenComputationFailed)?;
+
+        Ok(Self {
+            cluster_state,
+            keyspace_name,
+            token,
+            routing_mode: ReplicaRoutingMode::TabletAware { table_name },
+        })
+    }
+
+    /// Constructs a bridge for token-ring-based replica routing.
+    ///
+    /// This path intentionally supports Cassandra backward-compatible behavior where
+    /// callers may not provide table context. It computes token ownership against the
+    /// explicit partitioner (currently Murmur3) and then resolves replicas from the ring.
+    fn new_token_ring_based(
+        cluster_state: &'a ClusterState,
+        keyspace: CSharpStr<'a>,
+        partitioner: PartitionerName,
+        pre_serialized_partition_key: PreSerializedValues,
+    ) -> Result<Self, MetadataBridgeError> {
+        let keyspace_name = keyspace
+            .as_cstr()
+            .ok_or(MetadataBridgeError::NullKeyspaceName)?
+            .to_str()
+            .map_err(MetadataBridgeError::InvalidKeyspaceNameUtf8)?;
+
+        let serialized_values = pre_serialized_partition_key.into_serialized_values();
+
+        let token = cluster_state
+            .compute_token_preserialized_with_partitioner(&partitioner, &serialized_values)
+            .map_err(MetadataBridgeError::TokenComputationFailed)?;
+
+        Ok(Self {
+            cluster_state,
+            keyspace_name,
+            token,
+            routing_mode: ReplicaRoutingMode::TokenRingCompat,
+        })
+    }
+
+    fn token_ring_table_spec(&self) -> TableSpec<'a> {
+        TableSpec::borrowed(self.keyspace_name, Self::NO_TABLE_NAME_PROVIDED)
+    }
+
+    /// Returns the replication strategy to use for replica lookup.
+    ///
+    /// If the keyspace metadata is available, we reuse its configured strategy.
+    /// Otherwise we fall back to [`Self::FALLBACK_STRATEGY`], matching the driver.
+    /// Used by both routing modes; on the tablet-aware path the strategy is only
+    /// consulted when the table is not tablet-based (tablet tables ignore it).
+    fn replication_strategy(&self) -> &Strategy {
+        self.cluster_state
+            .get_keyspace(self.keyspace_name)
+            .map(|ks| &ks.strategy)
+            .unwrap_or(&Self::FALLBACK_STRATEGY)
+    }
+
+    fn lookup_replicas<'ctx>(
+        &self,
+        token: Token,
+        table_spec: &TableSpec<'_>,
+        strategy: &Strategy,
+        callback_context: ReplicasCallbackContext<'ctx>,
+        callback: OnReplicaPair<'ctx>,
+    ) -> FFIMaybeException {
+        let replicas = self
+            .cluster_state
+            .replica_locator()
+            .replicas_for_token(token, strategy, None, table_spec);
+        unsafe {
+            ffi_callback_for_each(
+                callback_context,
+                callback,
+                replicas.into_iter().map(|(node, shard)| ReplicaPair {
+                    host_id_ptr: FFINonNullPtr::from_ref(&node.host_id),
+                    shard,
+                }),
+            )
+        }
+    }
+
+    fn get_replicas<'ctx>(
+        &self,
+        callback_context: ReplicasCallbackContext<'ctx>,
+        callback: OnReplicaPair<'ctx>,
+    ) -> FFIMaybeException {
+        match self.routing_mode {
+            ReplicaRoutingMode::TabletAware { table_name } => {
+                let table_spec = TableSpec::borrowed(self.keyspace_name, table_name);
+                let strategy = self.replication_strategy();
+                self.lookup_replicas(
+                    self.token,
+                    &table_spec,
+                    strategy,
+                    callback_context,
+                    callback,
+                )
+            }
+            ReplicaRoutingMode::TokenRingCompat => {
+                let table_spec = self.token_ring_table_spec();
+                let strategy = self.replication_strategy();
+                self.lookup_replicas(
+                    self.token,
+                    &table_spec,
+                    strategy,
+                    callback_context,
+                    callback,
+                )
+            }
+        }
+    }
 }
 
 /// Opaque type representing the C# KeyspaceNameList.
@@ -707,4 +909,72 @@ pub extern "C" fn cluster_state_get_table_metadata(
     }
 
     FFIMaybeException::ok()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cluster_state_get_replicas_legacy_murmur3<'ctx>(
+    cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
+    keyspace: CSharpStr<'_>,
+    partition_key: FFISlice<'_, u8>,
+    callback_context: ReplicasCallbackContext<'ctx>,
+    callback: OnReplicaPair<'ctx>,
+    exception_constructors: &'static ExceptionConstructors,
+) -> FFIMaybeException {
+    let cluster_state =
+        ArcFFI::as_ref(cluster_state_ptr).expect("valid and non-null ClusterState pointer");
+
+    // The partition key supplied by the C# caller, already serialized to wire bytes.
+    let pre_serialized_partition_key =
+        match RustReplicaBridge::pre_serialized_values_from(partition_key) {
+            Ok(value) => value,
+            Err(e) => return FFIMaybeException::from_error(e, exception_constructors),
+        };
+
+    let bridge = match RustReplicaBridge::new_token_ring_based(
+        cluster_state,
+        keyspace,
+        PartitionerName::Murmur3,
+        pre_serialized_partition_key,
+    ) {
+        Ok(b) => b,
+        Err(e) => return FFIMaybeException::from_error(e, exception_constructors),
+    };
+
+    bridge.get_replicas(callback_context, callback)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn cluster_state_get_replicas<'ctx>(
+    cluster_state_ptr: BridgedBorrowedSharedPtr<'_, ClusterState>,
+    keyspace: CSharpStr<'_>,
+    table: CSharpStr<'_>,
+    populate_values_context: PopulateValuesContext<'_>,
+    populate_values: PopulateValues,
+    callback_context: ReplicasCallbackContext<'ctx>,
+    callback: OnReplicaPair<'ctx>,
+    exception_constructors: &'static ExceptionConstructors,
+) -> FFIMaybeException {
+    let cluster_state =
+        ArcFFI::as_ref(cluster_state_ptr).expect("valid and non-null ClusterState pointer");
+
+    // The partition key supplied by the C# caller: one serialized value per key column
+    // (composite keys have several), assembled here via the populate callback.
+    let pre_serialized_partition_key =
+        match PreSerializedValues::from_populate_callback(populate_values_context, populate_values)
+        {
+            Ok(v) => v,
+            Err(exception) => return FFIMaybeException::from_exception(exception),
+        };
+
+    let bridge = match RustReplicaBridge::new_tablet_based(
+        cluster_state,
+        keyspace,
+        table,
+        pre_serialized_partition_key,
+    ) {
+        Ok(b) => b,
+        Err(e) => return FFIMaybeException::from_error(e, exception_constructors),
+    };
+
+    bridge.get_replicas(callback_context, callback)
 }

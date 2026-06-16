@@ -112,6 +112,7 @@ namespace Cassandra
         /// </summary>
         /// <param name="partitionKey">Byte array representing the partition key</param>
         /// <returns></returns>
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         ICollection<HostShard> GetReplicas(byte[] partitionKey);
 
         /// <summary>
@@ -120,7 +121,21 @@ namespace Cassandra
         /// <param name="keyspace">Byte array representing the partition key</param>
         /// <param name="partitionKey">Byte array representing the partition key</param>
         /// <returns></returns>
+        [Obsolete("This overload does not support tablet routing. Use GetReplicas(keyspace, table, partitionKeyValues) instead.")]
         ICollection<HostShard> GetReplicas(string keyspace, byte[] partitionKey);
+
+        /// <summary>
+        /// Gets a collection of replicas for a given partition key on a given keyspace and table.
+        /// The partition key values are serialized using the configured type serializers.
+        /// This method enables tablet-aware routing and uses the table's configured partitioner.
+        /// </summary>
+        /// <param name="keyspace">The keyspace name (case-sensitive)</param>
+        /// <param name="table">The table name (case-sensitive)</param>
+        /// <param name="partitionKeyValues">The partition key column values in order</param>
+        /// <returns>A collection of replicas for the partition</returns>
+        /// <exception cref="ArgumentNullException">If keyspace, table, or partitionKeyValues is null</exception>
+        /// <exception cref="InvalidOperationException">If the cluster is not connected or metadata is not ready</exception>
+        ICollection<HostShard> GetReplicas(string keyspace, string table, IReadOnlyList<object> partitionKeyValues);
 
         /// <summary>
         ///  Shutdown this cluster instance. This closes all connections from all the

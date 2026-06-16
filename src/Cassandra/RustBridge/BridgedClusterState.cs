@@ -1,9 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Net;
 using System.Runtime.CompilerServices;
+using Cassandra.Serialization;
 using static Cassandra.RustBridge;
-using System.Collections.Generic;
 
 namespace Cassandra
 {
@@ -36,6 +37,26 @@ namespace Cassandra
             IntPtr callback);
 
         private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, CSharpHostData, FFIMaybeException> AddHostPtr = &AddHostToList;
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        private static extern RustBridge.FFIMaybeException cluster_state_get_replicas_legacy_murmur3(
+            IntPtr clusterStatePtr,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspace,
+            RustBridge.FFISlice<byte> partitionKey,
+            IntPtr callbackContext,
+            IntPtr callback,
+            IntPtr constructors);
+
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        private static extern RustBridge.FFIMaybeException cluster_state_get_replicas(
+            IntPtr clusterStatePtr,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string keyspace,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string table,
+            IntPtr populateValuesContext,
+            IntPtr populateValuesCallback,
+            IntPtr callbackState,
+            IntPtr callback,
+            IntPtr constructors);
+
         [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
         private static unsafe FFIMaybeException AddHostToList(
             IntPtr contextPtr,
@@ -103,6 +124,112 @@ namespace Cassandra
             }
 
             GC.KeepAlive(context);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private readonly struct ReplicaPair
+        {
+            // Points to a 16-byte UUID (Rust side: *const [u8; 16]).
+            public readonly IntPtr HostIdBytesPtr;
+            public readonly uint Shard;
+        }
+
+        private static readonly unsafe delegate* unmanaged[Cdecl]<IntPtr, ReplicaPair, RustBridge.FFIMaybeException> OnReplicaPairPtr = &OnReplicaPairCallback;
+
+        [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+        private static unsafe RustBridge.FFIMaybeException OnReplicaPairCallback(IntPtr contextPtr, ReplicaPair replica)
+        {
+            try
+            {
+                var context = Unsafe.AsRef<GetReplicasContext>((void*)contextPtr);
+
+                const int HostIdLength = 16;
+                var hostIdBytes = new ReadOnlySpan<byte>((void*)replica.HostIdBytesPtr, HostIdLength);
+                var hostId = new Guid(hostIdBytes);
+
+                if (context.HostsById.TryGetValue(hostId, out var host))
+                {
+                    context.AddReplica(new HostShard(host, (int)replica.Shard));
+                }
+                else
+                {
+                    throw new InvalidOperationException(
+                        $"Retrieved an unrecognized Replica: hostId={hostId}, shard={replica.Shard}");
+                }
+
+                return RustBridge.FFIMaybeException.Ok();
+            }
+            catch (Exception ex)
+            {
+                return RustBridge.FFIMaybeException.FromException(ex);
+            }
+        }
+
+        private class GetReplicasContext(IReadOnlyDictionary<Guid, Host> hostsById)
+        {
+            private readonly List<HostShard> _replicas = [];
+            internal IReadOnlyDictionary<Guid, Host> HostsById { get; } = hostsById;
+
+            internal void AddReplica(HostShard hostShard) => _replicas.Add(hostShard);
+            internal ICollection<HostShard> Replicas => _replicas;
+        }
+
+        internal ICollection<HostShard> GetReplicasLegacyMurmur3(
+            string keyspace, IReadOnlyDictionary<Guid, Host> hostsById, byte[] partitionKey)
+        {
+            var context = new GetReplicasContext(hostsById);
+
+            unsafe
+            {
+                fixed (byte* partitionKeyPtr = partitionKey)
+                {
+                    var partitionKeySlice = new FFISlice<byte>(
+                        (IntPtr)partitionKeyPtr,
+                        (nuint)partitionKey.Length
+                    );
+                    RunWithIncrement(ptr => cluster_state_get_replicas_legacy_murmur3(
+                        ptr,
+                        keyspace,
+                        partitionKeySlice,
+                        (IntPtr)Unsafe.AsPointer(ref context),
+                        (IntPtr)OnReplicaPairPtr,
+                        (IntPtr)Globals.ConstructorsPtr
+                    ));
+                }
+            }
+
+            GC.KeepAlive(context);
+            return context.Replicas;
+        }
+
+        /// <summary>
+        /// Gets replicas using table-aware routing.
+        /// Each partition key value is serialized individually via the populate-callback pattern.
+        /// </summary>
+        internal unsafe ICollection<HostShard> GetReplicas(
+            string keyspace,
+            string table,
+            IReadOnlyDictionary<Guid, Host> hostsById,
+            IReadOnlyList<object> partitionKeyValues,
+            ISerializer serializer)
+        {
+            var context = new GetReplicasContext(hostsById);
+            var populateCtx = SerializationHandler.CreateContext(partitionKeyValues, serializer);
+
+            RunWithIncrement(ptr => cluster_state_get_replicas(
+                ptr,
+                keyspace,
+                table,
+                (IntPtr)Unsafe.AsPointer(ref populateCtx),
+                (IntPtr)SerializationHandler.PopulateValuesPtr,
+                (IntPtr)Unsafe.AsPointer(ref context),
+                (IntPtr)OnReplicaPairPtr,
+                (IntPtr)Globals.ConstructorsPtr
+            ));
+
+            GC.KeepAlive(populateCtx);
+            GC.KeepAlive(context);
+            return context.Replicas;
         }
 
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]

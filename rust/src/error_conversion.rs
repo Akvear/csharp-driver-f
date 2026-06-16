@@ -1,8 +1,9 @@
 use crate::ffi::{FFIGCHandle, FFIMaybeGCHandle, FFISlice, FFIStr};
 use scylla::errors::{
-    BadKeyspaceName, ConnectionError, ConnectionPoolError, DbError, DeserializationError,
-    MetadataError, NewSessionError, NextPageError, NextRowError, PagerExecutionError, PrepareError,
-    RequestAttemptError, RequestError, SerializationError, TypeCheckError, UseKeyspaceError,
+    BadKeyspaceName, ClusterStateTokenError, ConnectionError, ConnectionPoolError, DbError,
+    DeserializationError, MetadataError, NewSessionError, NextPageError, NextRowError,
+    PagerExecutionError, PrepareError, RequestAttemptError, RequestError, SerializationError,
+    TypeCheckError, UseKeyspaceError,
 };
 use std::fmt::{Debug, Display};
 use std::mem::size_of;
@@ -321,6 +322,33 @@ pub(crate) enum SessionOperationError<E> {
 
     #[error("Invalid argument: {0}")]
     InvalidArgument(String),
+}
+
+#[derive(Debug, Error)]
+pub(crate) enum MetadataBridgeError {
+    #[error("Keyspace name is null")]
+    NullKeyspaceName,
+
+    #[error("Keyspace name is empty")]
+    EmptyKeyspaceName,
+
+    #[error("Keyspace name is not valid UTF-8")]
+    InvalidKeyspaceNameUtf8(#[source] std::str::Utf8Error),
+
+    #[error("Table name is null")]
+    NullTableName,
+
+    #[error("Table name is empty")]
+    EmptyTableName,
+
+    #[error("Table name is not valid UTF-8")]
+    InvalidTableNameUtf8(#[source] std::str::Utf8Error),
+
+    #[error("Invalid partition key encoding: {0}")]
+    InvalidPartitionKeyEncoding(#[from] SerializationError),
+
+    #[error("Token computation failed: {0}")]
+    TokenComputationFailed(#[from] ClusterStateTokenError),
 }
 
 /// Trait for converting Rust error types into pointers to C# exceptions using constructors from the TCB.
@@ -681,6 +709,30 @@ impl ErrorToException for TypeCheckError {
         ctors
             .invalid_type_exception_constructor
             .construct_from_rust(&self.to_string())
+    }
+}
+
+#[deny(clippy::wildcard_enum_match_arm)]
+impl ErrorToException for MetadataBridgeError {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
+        match self {
+            MetadataBridgeError::NullKeyspaceName
+            | MetadataBridgeError::EmptyKeyspaceName
+            | MetadataBridgeError::InvalidKeyspaceNameUtf8(_)
+            | MetadataBridgeError::NullTableName
+            | MetadataBridgeError::EmptyTableName
+            | MetadataBridgeError::InvalidTableNameUtf8(_) => ctors
+                .invalid_argument_exception_constructor
+                .construct_from_rust(&self.to_string()),
+
+            MetadataBridgeError::InvalidPartitionKeyEncoding(_) => ctors
+                .serialization_exception_constructor
+                .construct_from_rust(&self.to_string()),
+
+            MetadataBridgeError::TokenComputationFailed(_) => ctors
+                .invalid_query_constructor
+                .construct_from_rust(&self.to_string()),
+        }
     }
 }
 

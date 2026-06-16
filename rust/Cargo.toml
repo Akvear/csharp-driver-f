@@ -12,6 +12,7 @@ tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 thiserror = "2"
 tracing = "0.1.41"
+uuid = "1"
 # This is just for development. In production, we will probably get rid of this dependency.
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 
@@ -34,7 +35,6 @@ panic = "abort"
 
 [dev-dependencies]
 ntest = "0.9"
-uuid = "1"
 
 [lints.rust]
 unsafe-op-in-unsafe-fn = "warn"
