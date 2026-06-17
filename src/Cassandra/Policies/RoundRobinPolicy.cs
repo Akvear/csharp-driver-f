@@ -14,33 +14,29 @@
 //   limitations under the License.
 //
 
+using System;
 using System.Collections.Generic;
-using System.Threading;
-using System.Linq;
 
 
 namespace Cassandra
 {
     /// <summary>
-    ///  A Round-robin load balancing policy.
-    /// <para> This policy queries nodes in a
-    ///  round-robin fashion. For a given query, if an host fail, the next one
-    ///  (following the round-robin order) is tried, until all hosts have been tried.
+    ///  A load balancing policy that queries nodes in a random order.
+    /// <para> <b> The name is misleading and legacy, it does not implement a round-robin algorithm. </b>
     ///  </para>
     /// <para> This policy is not datacenter aware and will include every known
-    ///  Cassandra host in its round robin algorithm. If you use multiple datacenter
+    ///  Cassandra host. If you use multiple datacenters,
     ///  this will be inefficient and you will want to use the
     ///  <see cref="DCAwareRoundRobinPolicy"/> load balancing policy instead.
     /// </para>
     /// </summary>
     public class RoundRobinPolicy : ILoadBalancingPolicy
     {
-        ICluster _cluster;
-        int _index;
-
+        [Obsolete("Initialize is not supported. Load balancing is handled by the Rust driver internally.")]
         public void Initialize(ICluster cluster)
         {
-            this._cluster = cluster;
+            throw new NotSupportedException(
+                "Initialize is not supported. Load balancing is handled by the Rust driver internally.");
         }
 
         /// <summary>
@@ -57,6 +53,7 @@ namespace Cassandra
         }
 
         /// <summary>
+        /// <b>This function is not supported. All query routing is handled by the Rust driver internally. </b>
         ///  Returns the hosts to use for a new query. <p> The returned plan will try each
         ///  known host of the cluster. Upon each call to this method, the ith host of the
         ///  plans returned will cycle over all the host of the cluster in a round-robin
@@ -66,26 +63,11 @@ namespace Cassandra
         /// <param name="query"> the query for which to build the plan. </param>
         /// <returns>a new query plan, i.e. an iterator indicating which host to try
         ///  first for querying, which one to use as failover, etc...</returns>
+        [Obsolete("NewQueryPlan is not supported. Load balancing is handled by the Rust driver internally.")]
         public IEnumerable<HostShard> NewQueryPlan(string keyspace, IStatement query)
         {
-            //shallow copy the all hosts
-            var hosts = (from h in _cluster.AllHosts() select h).ToArray();
-            var startIndex = 0;
-            if (query?.IsLwt() != true)
-            {
-                startIndex = Interlocked.Increment(ref _index);
-
-                //Simplified overflow protection
-                if (startIndex > int.MaxValue - 10000)
-                {
-                    Interlocked.Exchange(ref _index, 0);
-                }
-            }
-
-            for (var i = 0; i < hosts.Length; i++)
-            {
-                yield return new HostShard(hosts[(startIndex + i) % hosts.Length], -1);
-            }
+            throw new NotSupportedException(
+                "NewQueryPlan is not supported. Query routing is handled by the Rust driver internally.");
         }
     }
 }
