@@ -42,6 +42,9 @@ namespace Cassandra
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         private static extern FFIMaybeException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
 
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        private static extern FFIMaybeException session_check_local_dc_existence(IntPtr sessionPtr, [MarshalAs(UnmanagedType.LPUTF8Str)] string localDc, IntPtr constructorsPtr);
+
         /// <summary>
         /// Executes a query with values supplied via the populate-callback pattern.
         /// Rust invokes <paramref name="populateValuesCallback"/> synchronously during this call,
@@ -75,7 +78,8 @@ namespace Cassandra
         unsafe private static extern FFIMaybeException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
 
         /// <summary>
-        /// Creates a new session connected to the specified Cassandra URI.
+        /// Creates a new session connected to the specified Cassandra URI. 
+        /// Checks the existence of the configured local datacenter.
         /// </summary>
         /// <param name="uri"></param>
         /// <param name="keyspace"></param>
@@ -102,6 +106,27 @@ namespace Cassandra
             session_create(tcb, bridgedSessionConfig);
 
             var bridgedSession = new BridgedSession(await tcs.Task.ConfigureAwait(false));
+
+            // Validate the configured local datacenter against the connected cluster, mirroring
+            // the post-connect check the old driver performed in DCAwareRoundRobinPolicy.
+            // Only DC-aware policies set a local DC; null means there is nothing to validate.
+            string localDc = bridgedSessionConfig.loadBalancingPolicy.localDC;
+            if (localDc != null)
+            {
+                try
+                {
+                    unsafe
+                    {
+                        bridgedSession.RunWithIncrement(handle =>
+                            session_check_local_dc_existence(handle, localDc, (IntPtr)Globals.ConstructorsPtr));
+                    }
+                }
+                catch
+                {
+                    bridgedSession.Dispose();
+                    throw;
+                }
+            }
 
             return bridgedSession;
         }

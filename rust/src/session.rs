@@ -104,6 +104,68 @@ pub extern "C" fn session_create(tcb: Tcb<ManuallyDestructible>, config: Bridged
     })
 }
 
+/// Validates that `local_dc` matches the datacenter of at least one node in the cluster
+/// reachable through `session`. Raises a `System.ArgumentException` (listing the available
+/// datacenters) when it does not.
+/// Called from C# right after session creation.
+#[unsafe(no_mangle)]
+pub extern "C" fn session_check_local_dc_existence(
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+    local_dc: CSharpStr<'_>,
+    constructors: &'static ExceptionConstructors,
+) -> FFIMaybeException {
+    let session_arc =
+        ArcFFI::as_ref(session_ptr).expect("valid and non-null BridgedSession pointer");
+
+    // Try to acquire an owned read lock.
+    // If the operation fails, treat it as session shutting down.
+    let Ok(session_guard) = session_arc.try_read() else {
+        // Session is currently shutting down.
+        let ex = constructors
+            .already_shutdown_exception_constructor
+            .construct_from_rust("Session has been shut down and can no longer execute operations");
+        return FFIMaybeException::from_exception(ex);
+    };
+
+    // Check if session is connected or if it has been shut down.
+    // If it has been shut down, return appropriate error.
+    let Some(session) = session_guard.session.as_ref() else {
+        let ex = constructors
+            .already_shutdown_exception_constructor
+            .construct_from_rust("Session has been shut down and can no longer execute operations");
+        return FFIMaybeException::from_exception(ex);
+    };
+
+    let local_dc = local_dc.as_cstr().unwrap().to_str().unwrap();
+
+    let cluster_state = session.get_cluster_state();
+
+    if cluster_state
+        .get_nodes_info()
+        .iter()
+        .any(|node| node.datacenter.as_deref() == Some(local_dc))
+    {
+        return FFIMaybeException::ok();
+    }
+
+    // No node matches: build the list of available datacenters and put it in the message.
+    let mut available_dcs: Vec<String> = cluster_state
+        .get_nodes_info()
+        .iter()
+        .filter_map(|node| node.datacenter.clone())
+        .collect();
+    available_dcs.sort_unstable();
+    available_dcs.dedup();
+
+    let ex = constructors
+        .argument_exception_constructor
+        .construct_from_rust(&format!(
+            "Datacenter {local_dc} does not match any of the nodes, available datacenters: {}.",
+            available_dcs.join(", ")
+        ));
+    FFIMaybeException::from_exception(ex)
+}
+
 /// Shuts down the session by acquiring a write lock and clearing the connected state.
 /// This blocks all future queries. Once shutdown, the session cannot be used for queries anymore.
 #[unsafe(no_mangle)]
