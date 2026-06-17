@@ -70,12 +70,12 @@ namespace Cassandra
 
         private Session(
             ICluster cluster,
-            RustBridge.ManuallyDestructible mdSession,
+            BridgedSession bridgedSession,
             ISerializerManager serializerManager)
         {
             _cluster = cluster;
             Configuration = cluster.Configuration;
-            bridgedSession = new BridgedSession(mdSession);
+            this.bridgedSession = bridgedSession;
             _serializerManager = serializerManager;
             UserDefinedTypes = new UdtMappingDefinitions(this, _serializerManager);
         }
@@ -86,11 +86,8 @@ namespace Cassandra
             string keyspace,
             ISerializerManager serializerManager)
         {
-            Task<RustBridge.ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris, keyspace, cluster.Configuration.SocketOptions);
-
-            RustBridge.ManuallyDestructible mdSession = await mdSessionTask.ConfigureAwait(false);
-            var session = new Session(cluster, mdSession, serializerManager);
-            return session;
+            BridgedSession bridgedSession = await BridgedSession.Create(contactPointUris, keyspace, cluster.Configuration).ConfigureAwait(false);
+            return new Session(cluster, bridgedSession, serializerManager);
         }
 
         /// <inheritdoc />

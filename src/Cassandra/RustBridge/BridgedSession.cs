@@ -77,8 +77,8 @@ namespace Cassandra
         /// </summary>
         /// <param name="uri"></param>
         /// <param name="keyspace"></param>
-        /// <param name="socketOptions">Socket options to be applied to the session.</param>
-        static internal Task<ManuallyDestructible> Create(string uri, string keyspace, SocketOptions socketOptions)
+        /// <param name="clusterConfig">Cluster configuration to be applied to the session.</param>
+        static internal async Task<BridgedSession> Create(string uri, string keyspace, Configuration clusterConfig)
         {
             /*
              * TaskCompletionSource is a way to programatically control a Task.
@@ -96,10 +96,12 @@ namespace Cassandra
             // So we pass a pointer to the method and Rust code will call it via that pointer.
             // This is a common pattern to call C# code from native code ("reversed P/Invoke").
             var tcb = Tcb<ManuallyDestructible>.WithTcs(tcs);
-            var bridgedSessionConfig = BridgedSessionConfig.BuildFrom(uri, keyspace, socketOptions);
+            var bridgedSessionConfig = BridgedSessionConfig.BuildFrom(uri, keyspace, clusterConfig);
             session_create(tcb, bridgedSessionConfig);
 
-            return tcs.Task;
+            var bridgedSession = new BridgedSession(await tcs.Task.ConfigureAwait(false));
+
+            return bridgedSession;
         }
 
         /// <summary>
@@ -320,14 +322,14 @@ namespace Cassandra
 
             internal BridgedTcpConfig tcp;
 
-            internal static BridgedSessionConfig BuildFrom(string uri, string keyspace, SocketOptions socketOptions)
+            internal static BridgedSessionConfig BuildFrom(string uri, string keyspace, Configuration clusterConfig)
             {
                 return new BridgedSessionConfig
                 {
                     Uri = uri,
                     Keyspace = keyspace ?? "",
-                    connectTimeoutMillis = socketOptions?.ConnectTimeoutMillis ?? SocketOptions.DefaultConnectTimeoutMillis,
-                    tcp = BridgedTcpConfig.BuildFrom(socketOptions),
+                    connectTimeoutMillis = clusterConfig.SocketOptions?.ConnectTimeoutMillis ?? SocketOptions.DefaultConnectTimeoutMillis,
+                    tcp = BridgedTcpConfig.BuildFrom(clusterConfig.SocketOptions),
                 };
             }
         }
