@@ -8,7 +8,7 @@ use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 
 use crate::error_conversion::{
-    AlreadyExistsConstructor, AlreadyShutdownExceptionConstructor,
+    AlreadyExistsConstructor, AlreadyShutdownExceptionConstructor, ArgumentExceptionConstructor,
     DeserializationExceptionConstructor, ErrorToException, FFIException,
     FunctionFailureExceptionConstructor, InvalidArgumentExceptionConstructor,
     InvalidConfigurationInQueryExceptionConstructor, InvalidQueryConstructor,
@@ -145,6 +145,7 @@ pub struct Tcb<R> {
 pub struct ExceptionConstructors {
     pub already_exists_constructor: AlreadyExistsConstructor,
     pub already_shutdown_exception_constructor: AlreadyShutdownExceptionConstructor,
+    pub argument_exception_constructor: ArgumentExceptionConstructor,
     pub deserialization_exception_constructor: DeserializationExceptionConstructor,
     pub function_failure_exception_constructor: FunctionFailureExceptionConstructor,
     pub invalid_argument_exception_constructor: InvalidArgumentExceptionConstructor,
