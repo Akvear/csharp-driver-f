@@ -303,6 +303,19 @@ namespace Cassandra
         bool WaitForSchemaAgreement(IPEndPoint forHost);
 
         /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host identified by the
+        /// given host id successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="hostId">Host id (UUID) of the node required to successfully return its schema version.</param>
+        /// <remarks> This is a blocking method. If you want to wait for schema agreement asynchronously, use
+        /// <see cref="WaitForSchemaAgreementAsync(Guid)"/> instead.
+        /// When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including when the required host does not return its schema version.</exception>
+        void WaitForSchemaAgreement(Guid hostId);
+
+        /// <summary>
         /// Awaits schema agreement among all reachable nodes. Requires that the host specified by the provided RowSet
         /// successfully returns its schema version during the agreement process.
         /// </summary>
@@ -331,6 +344,17 @@ namespace Cassandra
         /// <exception cref="ArgumentException">Thrown if <paramref name="hostAddress"/> is not a known host in this cluster.</exception>
         /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including when the required host does not return its schema version.</exception>
         Task WaitForSchemaAgreementAsync(IPEndPoint hostAddress);
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host identified by the
+        /// given host id successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="hostId">Host id (UUID) of the node required to successfully return its schema version.</param>
+        /// <remarks> When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including when the required host does not return its schema version.</exception>
+        Task WaitForSchemaAgreementAsync(Guid hostId);
 
         /// <summary>
         /// Awaits schema agreement among all reachable nodes.

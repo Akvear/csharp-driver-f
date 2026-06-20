@@ -457,6 +457,8 @@ namespace Cassandra
             return true;
         }
 
+        public void WaitForSchemaAgreement(Guid hostId) => TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync(hostId));
+
         public Task WaitForSchemaAgreementAsync(RowSet rs)
         {
             if (rs == null)
@@ -478,8 +480,10 @@ namespace Cassandra
                 ?? throw new ArgumentException(
                     $"No known host with address {hostAddress} was found in the cluster.", nameof(hostAddress));
 
-            return bridgedSession.WaitForSchemaAgreementWithRequiredNode(hostId);
+            return WaitForSchemaAgreementAsync(hostId);
         }
+
+        public Task WaitForSchemaAgreementAsync(Guid hostId) => bridgedSession.WaitForSchemaAgreementWithRequiredNode(hostId);
 
         public void WaitForSchemaAgreement() => TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync());
 

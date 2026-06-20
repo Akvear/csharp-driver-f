@@ -358,6 +358,23 @@ namespace Cassandra.IntegrationTests.Core
                     return Task.CompletedTask;
                 }),
                 typeof(ArgumentException)).SetName("WaitForSchemaAgreement_WithUnknownHostAddress_Throws");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)((session, cluster, tableName) =>
+                {
+                    var hostId = cluster.AllHosts().First().HostId;
+                    session.WaitForSchemaAgreement(hostId);
+                    return Task.CompletedTask;
+                }),
+                null).SetName("WaitForSchemaAgreement_WithKnownHostId");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)(async (session, cluster, tableName) =>
+                {
+                    var hostId = cluster.AllHosts().First().HostId;
+                    await session.WaitForSchemaAgreementAsync(hostId).ConfigureAwait(false);
+                }),
+                null).SetName("WaitForSchemaAgreementAsync_WithKnownHostId");
         }
 
         [TestCaseSource(nameof(WaitForSchemaAgreementCases))]
