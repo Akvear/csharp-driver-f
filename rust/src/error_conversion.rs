@@ -191,6 +191,58 @@ impl ArgumentExceptionConstructor {
     }
 }
 
+/// FFI constructor for C# `SchemaAgreementRequiredHostAbsentException`.
+#[repr(transparent)]
+pub struct SchemaAgreementRequiredHostAbsentExceptionConstructor(
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
+);
+
+impl SchemaAgreementRequiredHostAbsentExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
+/// FFI constructor for C# `SchemaAgreementRowsResultException`.
+#[repr(transparent)]
+pub struct SchemaAgreementRowsResultExceptionConstructor(
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
+);
+
+impl SchemaAgreementRowsResultExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
+/// FFI constructor for C# `SchemaAgreementSingleRowException`.
+#[repr(transparent)]
+pub struct SchemaAgreementSingleRowExceptionConstructor(
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
+);
+
+impl SchemaAgreementSingleRowExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
+/// FFI constructor for C# `SchemaAgreementTimeoutException`.
+#[repr(transparent)]
+pub struct SchemaAgreementTimeoutExceptionConstructor(
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
+);
+
+impl SchemaAgreementTimeoutExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
 /// FFI constructor for C# `SyntaxErrorException`.
 #[repr(transparent)]
 pub struct SyntaxErrorExceptionConstructor(
@@ -782,11 +834,28 @@ impl ErrorToException for HostIdError {
 
 impl ErrorToException for SchemaAgreementError {
     fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
-        ctors.rust_exception_constructor.construct_from_rust(&self)
+        match self {
+            SchemaAgreementError::ConnectionPoolError(e) => e.to_exception(ctors),
+            SchemaAgreementError::PrepareError(e) => e.to_exception(ctors),
+            SchemaAgreementError::RequestError(e) => e.to_exception(ctors),
+            e @ SchemaAgreementError::TracesEventsIntoRowsResultError(_) => ctors
+                .schema_agreement_rows_result_exception_constructor
+                .construct_from_rust(&e.to_string()),
+            e @ SchemaAgreementError::SingleRowError(_) => ctors
+                .schema_agreement_single_row_exception_constructor
+                .construct_from_rust(&e.to_string()),
+            e @ SchemaAgreementError::Timeout(_) => ctors
+                .schema_agreement_timeout_exception_constructor
+                .construct_from_rust(&e.to_string()),
+            e @ SchemaAgreementError::RequiredHostAbsent(_) => ctors
+                .schema_agreement_required_host_absent_exception_constructor
+                .construct_from_rust(&e.to_string()),
+            e => ctors.rust_exception_constructor.construct_from_rust(e),
+        }
     }
 }
 
-pub(crate) struct InvalidArgumentError<'a>(pub &'a str);
+pub(crate) struct InvalidArgumentError<'a>(pub(crate) &'a str);
 
 impl ErrorToException for InvalidArgumentError<'_> {
     fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {

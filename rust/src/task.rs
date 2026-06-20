@@ -15,9 +15,11 @@ use crate::error_conversion::{
     InvalidTypeExceptionConstructor, NoHostAvailableExceptionConstructor,
     OperationTimedOutExceptionConstructor, PreparedQueryNotFoundExceptionConstructor,
     RequestInvalidExceptionConstructor, RustExceptionConstructor,
-    SerializationExceptionConstructor, SyntaxErrorExceptionConstructor,
-    TraceRetrievalExceptionConstructor, TruncateExceptionConstructor,
-    UnauthorizedExceptionConstructor,
+    SchemaAgreementRequiredHostAbsentExceptionConstructor,
+    SchemaAgreementRowsResultExceptionConstructor, SchemaAgreementSingleRowExceptionConstructor,
+    SchemaAgreementTimeoutExceptionConstructor, SerializationExceptionConstructor,
+    SyntaxErrorExceptionConstructor, TraceRetrievalExceptionConstructor,
+    TruncateExceptionConstructor, UnauthorizedExceptionConstructor,
 };
 use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr, FFIGCHandle};
 
@@ -177,6 +179,13 @@ pub struct ExceptionConstructors {
     pub prepared_query_not_found_exception_constructor: PreparedQueryNotFoundExceptionConstructor,
     pub request_invalid_exception_constructor: RequestInvalidExceptionConstructor,
     pub rust_exception_constructor: RustExceptionConstructor,
+    pub schema_agreement_required_host_absent_exception_constructor:
+        SchemaAgreementRequiredHostAbsentExceptionConstructor,
+    pub schema_agreement_rows_result_exception_constructor:
+        SchemaAgreementRowsResultExceptionConstructor,
+    pub schema_agreement_single_row_exception_constructor:
+        SchemaAgreementSingleRowExceptionConstructor,
+    pub schema_agreement_timeout_exception_constructor: SchemaAgreementTimeoutExceptionConstructor,
     pub serialization_exception_constructor: SerializationExceptionConstructor,
     pub syntax_error_exception_constructor: SyntaxErrorExceptionConstructor,
     pub trace_retrieval_exception_constructor: TraceRetrievalExceptionConstructor,

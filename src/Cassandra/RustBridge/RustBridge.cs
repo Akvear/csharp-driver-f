@@ -662,6 +662,10 @@ namespace Cassandra
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFISliceRaw, FFIGCHandle> PreparedQueryNotFoundExceptionConstructorPtr = &PreparedQueryNotFoundException.PreparedQueryNotFoundExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> RequestInvalidExceptionConstructorPtr = &RequestInvalidException.RequestInvalidExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> RustExceptionConstructorPtr = &RustException.RustExceptionFromRust;
+            unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SchemaAgreementRequiredHostAbsentExceptionConstructorPtr = &SchemaAgreementRequiredHostAbsentException.SchemaAgreementRequiredHostAbsentExceptionFromRust;
+            unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SchemaAgreementRowsResultExceptionConstructorPtr = &SchemaAgreementRowsResultException.SchemaAgreementRowsResultExceptionFromRust;
+            unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SchemaAgreementSingleRowExceptionConstructorPtr = &SchemaAgreementSingleRowException.SchemaAgreementSingleRowExceptionFromRust;
+            unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SchemaAgreementTimeoutExceptionConstructorPtr = &SchemaAgreementTimeoutException.SchemaAgreementTimeoutExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SerializationExceptionConstructorPtr = &SerializationException.SerializationExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SyntaxErrorExceptionConstructorPtr = &SyntaxError.SyntaxErrorFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> TraceRetrievalExceptionConstructorPtr = &TraceRetrievalException.TraceRetrievalExceptionFromRust;
@@ -691,6 +695,10 @@ namespace Cassandra
                 internal readonly IntPtr prepared_query_not_found_exception_constructor;
                 internal readonly IntPtr request_invalid_exception_constructor;
                 internal readonly IntPtr rust_exception_constructor;
+                internal readonly IntPtr schema_agreement_required_host_absent_exception_constructor;
+                internal readonly IntPtr schema_agreement_rows_result_exception_constructor;
+                internal readonly IntPtr schema_agreement_single_row_exception_constructor;
+                internal readonly IntPtr schema_agreement_timeout_exception_constructor;
                 internal readonly IntPtr serialization_exception_constructor;
                 internal readonly IntPtr syntax_error_exception_constructor;
                 internal readonly IntPtr trace_retrieval_exception_constructor;
@@ -712,6 +720,10 @@ namespace Cassandra
                     IntPtr preparedQueryNotFoundException,
                     IntPtr requestInvalidException,
                     IntPtr rustException,
+                    IntPtr schemaAgreementRequiredHostAbsentException,
+                    IntPtr schemaAgreementRowsResultException,
+                    IntPtr schemaAgreementSingleRowException,
+                    IntPtr schemaAgreementTimeoutException,
                     IntPtr serializationException,
                     IntPtr syntaxErrorException,
                     IntPtr traceRetrievalException,
@@ -732,6 +744,10 @@ namespace Cassandra
                     prepared_query_not_found_exception_constructor = preparedQueryNotFoundException;
                     request_invalid_exception_constructor = requestInvalidException;
                     rust_exception_constructor = rustException;
+                    schema_agreement_required_host_absent_exception_constructor = schemaAgreementRequiredHostAbsentException;
+                    schema_agreement_rows_result_exception_constructor = schemaAgreementRowsResultException;
+                    schema_agreement_single_row_exception_constructor = schemaAgreementSingleRowException;
+                    schema_agreement_timeout_exception_constructor = schemaAgreementTimeoutException;
                     serialization_exception_constructor = serializationException;
                     syntax_error_exception_constructor = syntaxErrorException;
                     trace_retrieval_exception_constructor = traceRetrievalException;
@@ -833,6 +849,10 @@ namespace Cassandra
                     (IntPtr)PreparedQueryNotFoundExceptionConstructorPtr,
                     (IntPtr)RequestInvalidExceptionConstructorPtr,
                     (IntPtr)RustExceptionConstructorPtr,
+                    (IntPtr)SchemaAgreementRequiredHostAbsentExceptionConstructorPtr,
+                    (IntPtr)SchemaAgreementRowsResultExceptionConstructorPtr,
+                    (IntPtr)SchemaAgreementSingleRowExceptionConstructorPtr,
+                    (IntPtr)SchemaAgreementTimeoutExceptionConstructorPtr,
                     (IntPtr)SerializationExceptionConstructorPtr,
                     (IntPtr)SyntaxErrorExceptionConstructorPtr,
                     (IntPtr)TraceRetrievalExceptionConstructorPtr,
