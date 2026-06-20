@@ -449,10 +449,7 @@ namespace Cassandra
             }, TaskContinuationOptions.ExecuteSynchronously);
         }
 
-        public void WaitForSchemaAgreement(RowSet rs)
-        {
-            // Deprecated and implemented as no-op.
-        }
+        public void WaitForSchemaAgreement(RowSet rs) => TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync(rs));
 
         public bool WaitForSchemaAgreement(IPEndPoint hostAddress)
         {
@@ -462,8 +459,12 @@ namespace Cassandra
 
         public Task WaitForSchemaAgreementAsync(RowSet rs)
         {
-            throw new NotImplementedException("WaitForSchemaAgreementAsync(RowSet) is not yet supported. " +
-                                              "Use WaitForSchemaAgreementAsync().");
+            if (rs == null)
+            {
+                throw new ArgumentNullException(nameof(rs));
+            }
+
+            return bridgedSession.WaitForSchemaAgreementWithRowSet(rs.BridgedRowSet);
         }
 
         public Task WaitForSchemaAgreementAsync(IPEndPoint hostAddress)

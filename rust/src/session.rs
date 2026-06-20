@@ -705,6 +705,27 @@ impl<'a> SchemaAgreementBridge<'a> {
         }
     }
 
+    fn new_from_row_set(
+        session_ptr: BridgedBorrowedSharedPtr<'a, BridgedSession>,
+        row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
+    ) -> Result<Self, InvalidArgumentError<'static>> {
+        let Some(row_set) = ArcFFI::as_ref(row_set_ptr) else {
+            return Err(InvalidArgumentError("invalid or null row_set pointer"));
+        };
+
+        let required_node: Option<Uuid> = row_set
+            .pager
+            .blocking_lock()
+            .request_coordinators()
+            .next()
+            .map(|c| c.node().host_id);
+
+        Ok(Self {
+            session_ptr,
+            required_node,
+        })
+    }
+
     fn spawn(self, tcb: Tcb<EmptyAsyncResult>) {
         let Some(session_arc) = ArcFFI::cloned_from_ptr(self.session_ptr) else {
             tcb.fail_sync(InvalidArgumentError("invalid or null session pointer"));
@@ -747,4 +768,16 @@ pub extern "C" fn session_await_schema_agreement(
     session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
 ) {
     SchemaAgreementBridge::new(session_ptr).spawn(tcb);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn session_await_schema_agreement_with_row_set(
+    tcb: Tcb<EmptyAsyncResult>,
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+    row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
+) {
+    match SchemaAgreementBridge::new_from_row_set(session_ptr, row_set_ptr) {
+        Ok(bridge) => bridge.spawn(tcb),
+        Err(e) => tcb.fail_sync(e),
+    }
 }

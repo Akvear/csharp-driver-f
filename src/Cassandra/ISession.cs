@@ -278,8 +278,13 @@ namespace Cassandra
         /// When there's no requirement for a specific host to return its schema version, use
         /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
         /// </remarks>
-        /// FIXME: Mention result / exception when the host does not return its schema version or is not reachable
-        /// when it's implemented.
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="rs"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown if <paramref name="rs"/> does not have an 
+        /// underlying native resource.</exception>
+        /// <exception cref="ObjectDisposedException">Thrown if <paramref name="rs"/> has already been 
+        /// disposed.</exception>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including
+        /// when the required host does not return its schema version.</exception>
         void WaitForSchemaAgreement(RowSet rs);
 
         /// <summary>
@@ -304,8 +309,13 @@ namespace Cassandra
         /// <remarks> When there's no requirement for a specific host to return its schema version, use
         /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
         /// </remarks>
-        /// FIXME: Mention result / exception when the host does not return its schema version or is not reachable
-        /// when it's implemented.
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="rs"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown if <paramref name="rs"/> does not have an 
+        /// underlying native resource.</exception>
+        /// <exception cref="ObjectDisposedException">Thrown if <paramref name="rs"/> has already been 
+        /// disposed.</exception>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including
+        /// when the required host does not return its schema version.</exception>
         Task WaitForSchemaAgreementAsync(RowSet rs);
 
         /// <summary>
@@ -326,12 +336,13 @@ namespace Cassandra
         /// <remarks> This is a blocking method. If you want to wait for schema agreement asynchronously, use
         /// <see cref="WaitForSchemaAgreementAsync()"/> instead.
         /// </remarks>
-        /// FIXME: Mention exception
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out.</exception>
         void WaitForSchemaAgreement();
+
         /// <summary>
         /// Awaits schema agreement among all reachable nodes.
         /// </summary>
-        /// FIXME: Mention exception
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out.</exception>
         Task WaitForSchemaAgreementAsync();
     }
 }

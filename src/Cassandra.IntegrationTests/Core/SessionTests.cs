@@ -314,6 +314,24 @@ namespace Cassandra.IntegrationTests.Core
                         new SimpleStatement($"INSERT INTO {tableName} (id, value) VALUES (1, '1')")).ConfigureAwait(false);
                 }),
                 null).SetName("WaitForSchemaAgreementAsync_NoRequiredNode");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)((session, cluster, tableName) =>
+                {
+                    var rowSet = session.Execute($"INSERT INTO {tableName} (id, value) VALUES (2, '2')");
+                    session.WaitForSchemaAgreement(rowSet);
+                    return Task.CompletedTask;
+                }),
+                null).SetName("WaitForSchemaAgreement_WithRowSet");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)(async (session, cluster, tableName) =>
+                {
+                    var rowSet = await session.ExecuteAsync(
+                        new SimpleStatement($"INSERT INTO {tableName} (id, value) VALUES (3, '3')")).ConfigureAwait(false);
+                    await session.WaitForSchemaAgreementAsync(rowSet).ConfigureAwait(false);
+                }),
+                null).SetName("WaitForSchemaAgreementAsync_WithRowSet");
         }
 
         [TestCaseSource(nameof(WaitForSchemaAgreementCases))]
