@@ -127,6 +127,10 @@ namespace Cassandra
             _genericSerializer = serializerManager?.GetGenericSerializer() ?? new GenericSerializer();
         }
 
+        internal BridgedRowSet BridgedRowSet =>
+            bridgedRowSet
+            ?? throw new InvalidOperationException("This RowSet does not have an underlying native resource.");
+
         /// <summary>
         /// Creates a new instance of RowSet.
         /// </summary>
