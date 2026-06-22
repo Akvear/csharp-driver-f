@@ -56,9 +56,6 @@ jobs:
       - name: Build Rust lib
         run: make build-rust
 
-      - name: Symlink Rust lib
-        run: make create-rust-lib-symlinks
-
       - name: Build the project
         run: dotnet build src/Cassandra/Cassandra.csproj
 
@@ -143,9 +140,6 @@ jobs:
       - name: Build Rust lib
         run: make build-rust
 
-      - name: Symlink Rust lib
-        run: make create-rust-lib-symlinks
-
       - name: Run unit tests
         run: make test-unit
 
@@ -201,9 +195,6 @@ jobs:
 
       - name: Build Rust lib
         run: make build-rust
-
-      - name: Symlink Rust lib
-        run: make create-rust-lib-symlinks
 
       - name: Run unit tests
         run: make test-unit

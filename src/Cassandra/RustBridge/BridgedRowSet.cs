@@ -457,7 +457,7 @@ namespace Cassandra
         }
 
 
-        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         private static extern FFIMaybeException row_set_fill_coordinator(
             IntPtr rowSetPtr,
             IntPtr endpointPtr,
