@@ -33,11 +33,11 @@ namespace Cassandra
         /// </para>  
         /// <para> 
         /// The default load balancing policy is <see cref="DefaultLoadBalancingPolicy"/> as a wrapper around
-        /// <see cref="TokenAwarePolicy"/> with <see cref="DCAwareRoundRobinPolicy"/> as child policy.
+        /// <see cref="TokenAwarePolicy"/> with <see cref="RoundRobinPolicy"/> as child policy.
         /// </para>
         /// </summary>
         public static ILoadBalancingPolicy DefaultLoadBalancingPolicy =>
-            new DefaultLoadBalancingPolicy(new TokenAwarePolicy(new DCAwareRoundRobinPolicy()));
+            new DefaultLoadBalancingPolicy(new TokenAwarePolicy(new RoundRobinPolicy()));
 
         /// <summary>
         /// Creates a new instance of the default load balancing policy with the provided local datacenter.

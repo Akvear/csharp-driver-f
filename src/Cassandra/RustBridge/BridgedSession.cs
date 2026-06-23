@@ -23,6 +23,8 @@ namespace Cassandra
     /// </remarks>
     internal sealed class BridgedSession : RustResource
     {
+        private static readonly Logger Logger = new Logger(typeof(BridgedSession));
+
         internal BridgedSession(ManuallyDestructible mdSession) : base(mdSession)
         {
         }
@@ -39,6 +41,9 @@ namespace Cassandra
 
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         private static extern FFIMaybeException session_get_cluster_state(IntPtr sessionPtr, out ManuallyDestructible clusterState, IntPtr constructorsPtr);
+
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        private static extern FFIMaybeException session_check_local_dc_existence(IntPtr sessionPtr, [MarshalAs(UnmanagedType.LPUTF8Str)] string localDc, IntPtr constructorsPtr);
 
         /// <summary>
         /// Executes a query with values supplied via the populate-callback pattern.
@@ -73,12 +78,13 @@ namespace Cassandra
         unsafe private static extern FFIMaybeException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
 
         /// <summary>
-        /// Creates a new session connected to the specified Cassandra URI.
+        /// Creates a new session connected to the specified Cassandra URI. 
+        /// Checks the existence of the configured local datacenter.
         /// </summary>
         /// <param name="uri"></param>
         /// <param name="keyspace"></param>
-        /// <param name="socketOptions">Socket options to be applied to the session.</param>
-        static internal Task<ManuallyDestructible> Create(string uri, string keyspace, SocketOptions socketOptions)
+        /// <param name="clusterConfig">Cluster configuration to be applied to the session.</param>
+        static internal async Task<BridgedSession> Create(string uri, string keyspace, Configuration clusterConfig)
         {
             /*
              * TaskCompletionSource is a way to programatically control a Task.
@@ -96,10 +102,33 @@ namespace Cassandra
             // So we pass a pointer to the method and Rust code will call it via that pointer.
             // This is a common pattern to call C# code from native code ("reversed P/Invoke").
             var tcb = Tcb<ManuallyDestructible>.WithTcs(tcs);
-            var bridgedSessionConfig = BridgedSessionConfig.BuildFrom(uri, keyspace, socketOptions);
+            var bridgedSessionConfig = BridgedSessionConfig.BuildFrom(uri, keyspace, clusterConfig);
             session_create(tcb, bridgedSessionConfig);
 
-            return tcs.Task;
+            var bridgedSession = new BridgedSession(await tcs.Task.ConfigureAwait(false));
+
+            // Validate the configured local datacenter against the connected cluster, mirroring
+            // the post-connect check the old driver performed in DCAwareRoundRobinPolicy.
+            // Only DC-aware policies set a local DC; null means there is nothing to validate.
+            string localDc = bridgedSessionConfig.loadBalancingPolicy.localDC;
+            if (localDc != null)
+            {
+                try
+                {
+                    unsafe
+                    {
+                        bridgedSession.RunWithIncrement(handle =>
+                            session_check_local_dc_existence(handle, localDc, (IntPtr)Globals.ConstructorsPtr));
+                    }
+                }
+                catch
+                {
+                    bridgedSession.Dispose();
+                    throw;
+                }
+            }
+
+            return bridgedSession;
         }
 
         /// <summary>
@@ -302,7 +331,78 @@ namespace Cassandra
                 };
             }
         }
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct BridgedLoadBalancingPolicy
+        {
+            internal FFIBool isTokenAware;
+            internal FFIBool permitDcFailover;
+            [MarshalAs(UnmanagedType.LPUTF8Str)]
+            internal string localDC;
 
+            /// <summary>
+            /// Extracts the relevant information from the provided ILoadBalancingPolicy and its potential child policies.
+            /// <p>The sensible policies that the user can specify are:</p>
+            /// <list type="bullet">
+            /// <item>RoundRobinPolicy</item>
+            /// <item>DCAwareRoundRobinPolicy</item>
+            /// <item>TokenAwarePolicy(RoundRobinPolicy)</item>
+            /// <item>TokenAwarePolicy(DCAwareRoundRobinPolicy)</item>
+            /// <item>DefaultLoadBalancingPolicy(TokenAwarePolicy(DCAwareRoundRobinPolicy))</item>
+            /// <item>DefaultLoadBalancingPolicy(TokenAwarePolicy(RoundRobinPolicy)) (that policy is constructed when the user does not specify any policy when creating a cluster)</item>
+            /// </list>
+            /// </summary>
+            /// <param name="lbp">The load balancing policy to extract configuration from.</param>
+            /// <returns>A <see cref="BridgedLoadBalancingPolicy"/> representing the extracted configuration.</returns>
+            /// <exception cref="NotSupportedException">Thrown when the policy type is not supported.</exception>
+            internal static BridgedLoadBalancingPolicy BuildFrom(ILoadBalancingPolicy lbp)
+            {
+                BridgedLoadBalancingPolicy rustLBP = new BridgedLoadBalancingPolicy
+                {
+                    isTokenAware = false,
+                    localDC = null,
+                };
+
+                // The loop unwraps layers of TokenAwarePolicy and DefaultLoadBalancingPolicy until it finds DCAwareRoundRobinPolicy or RoundRobinPolicy.
+                // The chain is finite and acyclic because every child policy is assigned once at construction and is
+                // exposed through a get-only property, so this loop is guaranteed to terminate.
+                while (lbp != null)
+                {
+                    switch (lbp)
+                    {
+                        case TokenAwarePolicy tokenAware:
+                            if (rustLBP.isTokenAware)
+                            {
+                                Logger.Warning("Found a TokenAwarePolicy that is a child of another TokenAwarePolicy. Such double wrapping is redundant and unnecessary.");
+                            }
+                            rustLBP.isTokenAware = true;
+                            lbp = tokenAware.ChildPolicy;
+                            break;
+
+                        case DefaultLoadBalancingPolicy defaultPolicy:
+                            lbp = defaultPolicy.ChildPolicy;
+                            break;
+
+                        case DCAwareRoundRobinPolicy dcAware:
+                            rustLBP.permitDcFailover = dcAware.PermitDcFailover;
+                            rustLBP.localDC = dcAware.LocalDc;
+                            return rustLBP;
+
+                        case RoundRobinPolicy:
+                            return rustLBP;
+
+                        case RetryLoadBalancingPolicy:
+                            throw new NotSupportedException(
+                                "RetryLoadBalancingPolicy is not supported. " +
+                                "The Rust driver handles node reconnection internally.");
+
+                        default:
+                            throw new NotSupportedException($"Load balancing policy {lbp.GetType().Name} is not supported.");
+                    }
+                }
+
+                throw new NotSupportedException("Load balancing policy cannot be null or have a null child policy.");
+            }
+        }
         /// <summary>
         /// Configuration struct used to pass session creation parameters from C# to Rust.
         /// Any changes to this struct must be mirrored in the corresponding Rust struct.
@@ -320,14 +420,17 @@ namespace Cassandra
 
             internal BridgedTcpConfig tcp;
 
-            internal static BridgedSessionConfig BuildFrom(string uri, string keyspace, SocketOptions socketOptions)
+            internal BridgedLoadBalancingPolicy loadBalancingPolicy;
+
+            internal static BridgedSessionConfig BuildFrom(string uri, string keyspace, Configuration clusterConfig)
             {
                 return new BridgedSessionConfig
                 {
                     Uri = uri,
                     Keyspace = keyspace ?? "",
-                    connectTimeoutMillis = socketOptions?.ConnectTimeoutMillis ?? SocketOptions.DefaultConnectTimeoutMillis,
-                    tcp = BridgedTcpConfig.BuildFrom(socketOptions),
+                    connectTimeoutMillis = clusterConfig.SocketOptions?.ConnectTimeoutMillis ?? SocketOptions.DefaultConnectTimeoutMillis,
+                    tcp = BridgedTcpConfig.BuildFrom(clusterConfig.SocketOptions),
+                    loadBalancingPolicy = BridgedLoadBalancingPolicy.BuildFrom(clusterConfig.Policies.LoadBalancingPolicy)
                 };
             }
         }

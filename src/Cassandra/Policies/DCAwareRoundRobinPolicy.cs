@@ -16,17 +16,14 @@
 
 using System;
 using System.Collections.Generic;
-using System.Threading;
-using System.Linq;
 
 namespace Cassandra
 {
     /// <summary>
     /// A data-center aware Round-robin load balancing policy.
     /// <para>
-    /// This policy provides round-robin queries over the node of the local datacenter. Currently, it also includes in the query plans
-    /// returned a configurable number of hosts in the remote datacenters (which are always tried after the local nodes)
-    /// but this functionality will be removed in the next major version of the driver.
+    /// This policy provides queries over the nodes of the local datacenter. Also, if the `PermitDcFailover` flag is set, it includes in the query plans
+    /// hosts in remote datacenters (which are always tried after the local nodes).
     /// See the comments on <see cref="DCAwareRoundRobinPolicy(string, int)"/> for more information.
     /// </para>
     /// </summary>
@@ -37,16 +34,8 @@ namespace Cassandra
             "DC failover should not be done in the driver, which does not have the necessary context to know " +
             "what makes sense considering application semantics. See https://datastax-oss.atlassian.net/browse/CSHARP-722";
 
-        private static readonly Logger Logger = new Logger(typeof(DCAwareRoundRobinPolicy));
-
         private string _localDc;
         private readonly int _usedHostsPerRemoteDc;
-
-        private readonly int _maxIndex = Int32.MaxValue - 10000;
-        private volatile Tuple<List<Host>, List<Host>> _hosts;
-        private readonly object _hostCreationLock = new object();
-        ICluster _cluster;
-        int _index;
 
         /// <summary>
         /// Creates a new datacenter aware round robin policy that auto-discover the local data-center.
@@ -59,49 +48,77 @@ namespace Cassandra
         /// constructor of this class.
         /// </para>
         /// </summary>
-#pragma warning disable 618
-        public DCAwareRoundRobinPolicy() : this(null, 0)
-#pragma warning restore 618
+        [Obsolete("Automatic local datacenter detection is not supported. Specify the local datacenter explicitly: new DCAwareRoundRobinPolicy(localDc).")]
+        public DCAwareRoundRobinPolicy()
         {
+            throw new ArgumentException(
+                "Automatic local datacenter detection is no longer supported. " +
+                "Please specify the local datacenter explicitly: new DCAwareRoundRobinPolicy(localDc).");
         }
 
         /// <summary>
         ///  Creates a new datacenter aware round robin policy given the name of the local
         ///  datacenter. <p> The name of the local datacenter provided must be the local
         ///  datacenter name as known by Cassandra. </p><p> The policy created will ignore all
-        ///  remote hosts. In other words, this is equivalent to 
+        ///  remote hosts. In other words, this is equivalent to
         ///  <c>new DCAwareRoundRobinPolicy(localDc, 0)</c>.</p>
         /// </summary>
         /// <param name="localDc"> the name of the local datacenter (as known by Cassandra).</param>
 #pragma warning disable 618
-        public DCAwareRoundRobinPolicy(string localDc) : this(localDc, 0)
+        public DCAwareRoundRobinPolicy(string localDc) : this(localDc, 0, false)
 #pragma warning restore 618
         {
         }
 
         ///<summary>
-        /// Creates a new DCAwareRoundRobin policy given the name of the local
+        /// Obsolete constructor. Creates a new DCAwareRoundRobin policy given the name of the local
         /// datacenter and that uses the provided number of host per remote
-        /// datacenter as failover for the local hosts.
+        /// datacenter as failover for the local hosts. 
+        /// Setting the number of hosts per remote DC does not change anything. It is a deprecated parameter.
+        /// Use DCAwareRoundRobinPolicy(string localDc, bool permitDcFailover) instead, and set permitDcFailover to true to allow DC failover. 
         /// <p>
         /// The name of the local datacenter provided must be the local
         /// datacenter name as known by Cassandra.</p>
         ///</summary>
         /// <param name="localDc">The name of the local datacenter (as known by
         /// Cassandra).</param>
-        /// <param name="usedHostsPerRemoteDc">The number of host per remote
+        /// <param name="usedHostsPerRemoteDc">Obsolete. The number of host per remote
         /// datacenter that policies created by the returned factory should
         /// consider. Created policies <c>distance</c> method will return a
         /// <c>HostDistance.Remote</c> distance for only <c>usedHostsPerRemoteDc</c>
         /// hosts per remote datacenter. Other hosts of the remote datacenters will be ignored
         /// (and thus no connections to them will be maintained).
-        /// <para>Note that this parameter will be removed in the next major release of
+        /// <para>Note that setting this parameter does not change anything and it will be removed in the next major release of
         /// the driver.</para></param>
         [Obsolete(DCAwareRoundRobinPolicy.UsedHostsPerRemoteDcObsoleteMessage)]
         public DCAwareRoundRobinPolicy(string localDc, int usedHostsPerRemoteDc)
+            : this(localDc, usedHostsPerRemoteDc, false)
+        {
+        }
+
+        /// <summary>
+        /// Creates a new datacenter aware round robin policy given the name of the local
+        /// datacenter and whether to permit datacenter failover.
+        /// <p>
+        /// The name of the local datacenter provided must be the local
+        /// datacenter name as known by Cassandra.</p>
+        /// </summary>
+        /// <param name="localDc">The name of the local datacenter (as known by Cassandra).</param>
+        /// <param name="permitDcFailover">Whether to permit failover to remote datacenters.</param>
+        public DCAwareRoundRobinPolicy(string localDc, bool permitDcFailover)
+            : this(localDc, 0, permitDcFailover)
+        {
+        }
+
+        private DCAwareRoundRobinPolicy(string localDc, int usedHostsPerRemoteDc, bool permitDcFailover)
         {
             _localDc = localDc;
+            if (string.IsNullOrWhiteSpace(localDc))
+            {
+                throw new ArgumentException("Local datacenter cannot be null or empty.", nameof(localDc));
+            }
             _usedHostsPerRemoteDc = usedHostsPerRemoteDc;
+            PermitDcFailover = permitDcFailover;
         }
 
         /// <summary>
@@ -115,57 +132,16 @@ namespace Cassandra
         [Obsolete(DCAwareRoundRobinPolicy.UsedHostsPerRemoteDcObsoleteMessage)]
         public int UsedHostsPerRemoteDc => _usedHostsPerRemoteDc;
 
+        /// <summary>
+        /// Gets whether this policy permits failover to remote datacenters.
+        /// </summary>
+        public bool PermitDcFailover { get; }
+
+        [Obsolete("Initialize is not supported. Load balancing is handled by the Rust driver internally.")]
         public void Initialize(ICluster cluster)
         {
-            _cluster = cluster;
-
-            //When the pool changes, it should clear the local cache
-            _cluster.HostAdded += _ => ClearHosts();
-            _cluster.HostRemoved += _ => ClearHosts();
-
-            var availableDcs = _cluster.AllHosts().Select(h => h.Datacenter).Where(dc => dc != null).Distinct().ToList();
-            var availableDcsStr = string.Join(", ", availableDcs);
-
-            if (_localDc == null)
-            {
-                DCAwareRoundRobinPolicy.Logger.Warning(
-                    "Local datacenter was not specified. In the next major release of the driver " +
-                    "applications will be required to specify the local datacenter in the load balancing policy. " +
-                    $"Available datacenters: {availableDcsStr}.");
-
-                var host = GetLocalHost();
-                if (host == null)
-                {
-                    throw new DriverInternalError("Local datacenter could not be determined");
-                }
-
-                _localDc = host.Datacenter;
-                return;
-            }
-
-            //Check that the datacenter exists
-            if (!availableDcs.Contains(_localDc))
-            {
-                throw new ArgumentException(
-                    $"Datacenter {_localDc} does not match any of the nodes, available datacenters: {availableDcsStr}.");
-            }
-        }
-
-        /// <summary>
-        /// Gets the current local host.
-        /// If can not be determined, it returns any of the nodes.
-        /// </summary>
-        private Host GetLocalHost()
-        {
-            if (!(_cluster is Cluster clusterImplementation))
-            {
-                //fallback to use any of the hosts
-                return _cluster.AllHosts().FirstOrDefault(h => h.Datacenter != null);
-            }
-
-            //Use the host used by the control connection
-            // return cc.Host;
-            throw new NotImplementedException(); // FIXME: bridge with Rust LBP implementation.
+            throw new NotSupportedException(
+                "Initialize is not supported. Load balancing is handled by the Rust driver internally.");
         }
 
         /// <summary>
@@ -179,7 +155,7 @@ namespace Cassandra
         /// <returns>the HostDistance to <c>host</c>.</returns>
         public HostDistance Distance(Host host)
         {
-            var dc = GetDatacenter(host);
+            var dc = host.Datacenter ?? _localDc;
             if (dc == _localDc)
             {
                 return HostDistance.Local;
@@ -188,6 +164,7 @@ namespace Cassandra
         }
 
         /// <summary>
+        ///  <b>This function is not supported. All query routing is handled by the Rust driver internally.</b>
         ///  Returns the hosts to use for a new query. <p> The returned plan will always
         ///  try each known host in the local datacenter first, and then, if none of the
         ///  local host is reachable, will try up to a configurable number of other host
@@ -198,100 +175,11 @@ namespace Cassandra
         /// <param name="query"> the query for which to build the plan. </param>
         /// <returns>a new query plan, i.e. an iterator indicating which host to try
         ///  first for querying, which one to use as failover, etc...</returns>
+        [Obsolete("NewQueryPlan is not supported. Load balancing is handled by the Rust driver internally.")]
         public IEnumerable<HostShard> NewQueryPlan(string keyspace, IStatement query)
         {
-            var startIndex = 0;
-            if (query?.IsLwt() != true)
-            {
-                startIndex = Interlocked.Increment(ref _index);
-                //Simplified overflow protection
-                if (startIndex > _maxIndex)
-                {
-                    Interlocked.Exchange(ref _index, 0);
-                }
-            }
-            var hosts = GetHosts();
-            var localHosts = hosts.Item1;
-            var remoteHosts = hosts.Item2;
-            //Round-robin through local nodes
-            for (var i = 0; i < localHosts.Count; i++)
-            {
-                yield return new HostShard(localHosts[(startIndex + i) % localHosts.Count], -1);
-            }
-
-            if (_usedHostsPerRemoteDc == 0)
-            {
-                yield break;
-            }
-            var dcHosts = new Dictionary<string, int>();
-            foreach (var h in remoteHosts)
-            {
-                var dc = GetDatacenter(h);
-                dcHosts.TryGetValue(dc, out int hostYieldedByDc);
-                if (hostYieldedByDc >= _usedHostsPerRemoteDc)
-                {
-                    //We already returned the amount of remotes nodes required
-                    continue;
-                }
-                dcHosts[dc] = hostYieldedByDc + 1;
-                yield return new HostShard(h, -1);
-            }
-        }
-
-        private void ClearHosts()
-        {
-            _hosts = null;
-        }
-
-        private string GetDatacenter(Host host)
-        {
-            var dc = host.Datacenter;
-            return dc ?? _localDc;
-        }
-
-        /// <summary>
-        /// Gets a tuple containing the list of local and remote nodes
-        /// </summary>
-        internal Tuple<List<Host>, List<Host>> GetHosts()
-        {
-            var hosts = _hosts;
-            if (hosts != null)
-            {
-                return hosts;
-            }
-            lock (_hostCreationLock)
-            {
-                //Check that if it has been updated since we were waiting for the lock
-                hosts = _hosts;
-                if (hosts != null)
-                {
-                    return hosts;
-                }
-                var localHosts = new List<Host>();
-                var remoteHosts = new List<Host>();
-
-                //Do not reorder instructions, the host list must be up to date now, not earlier
-                Thread.MemoryBarrier();
-
-                //shallow copy the nodes
-                var allNodes = _cluster.AllHosts().ToArray();
-
-                //Split between local and remote nodes 
-                foreach (var h in allNodes)
-                {
-                    if (GetDatacenter(h) == _localDc)
-                    {
-                        localHosts.Add(h);
-                    }
-                    else if (_usedHostsPerRemoteDc > 0)
-                    {
-                        remoteHosts.Add(h);
-                    }
-                }
-                hosts = new Tuple<List<Host>, List<Host>>(localHosts, remoteHosts);
-                _hosts = hosts;
-            }
-            return hosts;
+            throw new NotSupportedException(
+                "NewQueryPlan is not supported. Query routing is handled by the Rust driver internally.");
         }
     }
 }

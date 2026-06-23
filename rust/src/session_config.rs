@@ -3,7 +3,10 @@ use std::time::Duration;
 use crate::ffi::CSharpStr;
 
 use scylla::client::SelfIdentity;
-use scylla::client::session_builder::SessionBuilder;
+use scylla::{
+    client::{execution_profile::ExecutionProfile, session_builder::SessionBuilder},
+    policies::load_balancing::DefaultPolicy,
+};
 
 const DEFAULT_DRIVER_NAME: &str = "ScyllaDB C# RS Driver";
 const DEFAULT_DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -65,6 +68,38 @@ impl BridgedTcpConfig {
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub(crate) struct BridgedLoadBalancingPolicy<'a> {
+    is_token_aware: bool,
+    permit_dc_failover: bool,
+    local_dc: CSharpStr<'a>,
+}
+
+impl<'a> BridgedLoadBalancingPolicy<'a> {
+    /// Returns the configured builder
+    pub(crate) fn apply_to_builder(self, builder: SessionBuilder) -> SessionBuilder {
+        let local_dc = self
+            .local_dc
+            .as_cstr()
+            .map(|cstr| cstr.to_str().unwrap().to_owned());
+
+        let mut lbpbuilder = DefaultPolicy::builder()
+            .token_aware(self.is_token_aware)
+            .permit_dc_failover(self.permit_dc_failover);
+
+        if let Some(preferred_dc) = local_dc {
+            lbpbuilder = lbpbuilder.prefer_datacenter(preferred_dc);
+        }
+
+        let profile_handle = ExecutionProfile::builder()
+            .load_balancing_policy(lbpbuilder.build())
+            .build()
+            .into_handle();
+
+        builder.default_execution_profile_handle(profile_handle)
+    }
+}
 /// Output of [`BridgedSessionConfig::into_session_builder`]: a fully-configured
 /// [`SessionBuilder`] together with the URI and keyspace it was built from,
 /// borrowed directly from the C#-managed config memory.
@@ -93,6 +128,8 @@ pub(crate) struct BridgedSessionConfig<'a> {
 
     /// TCP socket options.
     tcp: BridgedTcpConfig,
+
+    load_balancing_policy: BridgedLoadBalancingPolicy<'a>,
 }
 
 impl<'a> BridgedSessionConfig<'a> {
@@ -120,6 +157,7 @@ impl<'a> BridgedSessionConfig<'a> {
         }
 
         builder = self.tcp.apply_to_builder(builder);
+        builder = self.load_balancing_policy.apply_to_builder(builder);
 
         let identity = SelfIdentity::new()
             .with_custom_driver_name(DEFAULT_DRIVER_NAME)

@@ -180,6 +180,17 @@ impl AlreadyShutdownExceptionConstructor {
     }
 }
 
+/// FFI constructor for C# `System.ArgumentException`.
+#[repr(transparent)]
+pub struct ArgumentExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException);
+
+impl ArgumentExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
 /// FFI constructor for C# `SyntaxErrorException`.
 #[repr(transparent)]
 pub struct SyntaxErrorExceptionConstructor(

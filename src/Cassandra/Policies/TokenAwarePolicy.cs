@@ -16,8 +16,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
 
 namespace Cassandra
 {
@@ -27,18 +25,10 @@ namespace Cassandra
     /// </para>
     /// <list type="number">
     /// <item>The <see cref="Distance(Host)"/> method is inherited  from the child policy.</item>
-    /// <item>The host yielded by the <see cref="NewQueryPlan(string, IStatement)"/> method will first return the
-    /// <see cref="HostDistance.Local"/> replicas for the statement, based on the <see cref="Statement.RoutingKey"/>.
-    /// </item>
     /// </list>
     /// </summary>
     public class TokenAwarePolicy : ILoadBalancingPolicy
     {
-        private ICluster _cluster;
-        private readonly ThreadLocal<Random> _prng = new ThreadLocal<Random>(() => new Random(
-            // Predictable random numbers are OK
-            Environment.TickCount * Environment.CurrentManagedThreadId));
-
         /// <summary>
         ///  Creates a new <c>TokenAware</c> policy that wraps the provided child
         ///  load balancing policy.
@@ -47,15 +37,16 @@ namespace Cassandra
         ///  awareness.</param>
         public TokenAwarePolicy(ILoadBalancingPolicy childPolicy)
         {
-            ChildPolicy = childPolicy;
+            ChildPolicy = childPolicy ?? throw new ArgumentNullException(nameof(childPolicy));
         }
 
         public ILoadBalancingPolicy ChildPolicy { get; }
 
+        [Obsolete("Initialize is not supported. Load balancing is handled by the Rust driver internally.")]
         public void Initialize(ICluster cluster)
         {
-            _cluster = cluster;
-            ChildPolicy.Initialize(cluster);
+            throw new NotSupportedException(
+                "Initialize is not supported. Load balancing is handled by the Rust driver internally.");
         }
 
         /// <summary>
@@ -71,6 +62,7 @@ namespace Cassandra
         }
 
         /// <summary>
+        /// <b> This function is not supported. All query routing is handled by the Rust driver internally.</b>
         ///  Returns the hosts to use for a new query. <p> The returned plan will first
         ///  return replicas (whose <c>HostDistance</c> for the child policy is
         ///  <c>Local</c>) for the query if it can determine them (i.e. mainly if
@@ -80,9 +72,11 @@ namespace Cassandra
         /// <param name="loggedKeyspace">Keyspace on which the query is going to be executed</param>
         /// <param name="query"> the query for which to build the plan. </param>
         /// <returns>the new query plan.</returns>
+        [Obsolete("NewQueryPlan is not supported. Load balancing is handled by the Rust driver internally.")]
         public IEnumerable<HostShard> NewQueryPlan(string loggedKeyspace, IStatement query)
         {
-            throw new NotImplementedException();
+            throw new NotSupportedException(
+                "NewQueryPlan is not supported. Query routing is handled by the Rust driver internally.");
         }
     }
 }

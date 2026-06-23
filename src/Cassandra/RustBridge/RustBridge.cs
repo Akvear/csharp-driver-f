@@ -597,6 +597,7 @@ namespace Cassandra
             // Exception constructors passed to Rust
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIString, FFIGCHandle> AlreadyExistsConstructorPtr = &AlreadyExistsException.AlreadyExistsExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> AlreadyShutdownExceptionConstructorPtr = &AlreadyShutdownException.AlreadyShutdownExceptionFromRust;
+            unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> ArgumentExceptionConstructorPtr = &ArgumentExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> DeserializationExceptionConstructorPtr = &DeserializationException.DeserializationExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> FunctionFailureExceptionConstructorPtr = &FunctionFailureException.FunctionFailureExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> InvalidArgumentExceptionConstructorPtr = &InvalidArgumentException.InvalidArgumentExceptionFromRust;
@@ -625,6 +626,7 @@ namespace Cassandra
             {
                 internal readonly IntPtr already_exists_constructor;
                 internal readonly IntPtr already_shutdown_exception_constructor;
+                internal readonly IntPtr argument_exception_constructor;
                 internal readonly IntPtr deserialization_exception_constructor;
                 internal readonly IntPtr function_failure_exception_constructor;
                 internal readonly IntPtr invalid_argument_exception_constructor;
@@ -645,6 +647,7 @@ namespace Cassandra
                 internal Constructors(
                     IntPtr alreadyExistsException,
                     IntPtr alreadyShutdownException,
+                    IntPtr argumentException,
                     IntPtr deserializationException,
                     IntPtr functionFailureException,
                     IntPtr invalidArgumentException,
@@ -664,6 +667,7 @@ namespace Cassandra
                 {
                     already_exists_constructor = alreadyExistsException;
                     already_shutdown_exception_constructor = alreadyShutdownException;
+                    argument_exception_constructor = argumentException;
                     deserialization_exception_constructor = deserializationException;
                     function_failure_exception_constructor = functionFailureException;
                     invalid_argument_exception_constructor = invalidArgumentException;
@@ -702,6 +706,19 @@ namespace Cassandra
 
             [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
             private static unsafe extern void configure_rust_logging(IntPtr callback, byte min_level);
+
+            // Constructor for a System.ArgumentException meant for use by Rust.
+            // Defined here, because an exception from the C# Base Class Library cannot have custom constructors added.
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            private static FFIGCHandle ArgumentExceptionFromRust(FFIString message)
+            {
+                string msg = message.ToManagedString();
+
+                var exception = new ArgumentException(msg);
+
+                GCHandle handle = GCHandle.Alloc(exception);
+                return new(handle);
+            }
 
             [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
             private static void ForwardRustLog(byte level, FFIString message)
@@ -751,6 +768,7 @@ namespace Cassandra
                 *ConstructorsPtr = new Constructors(
                     (IntPtr)AlreadyExistsConstructorPtr,
                     (IntPtr)AlreadyShutdownExceptionConstructorPtr,
+                    (IntPtr)ArgumentExceptionConstructorPtr,
                     (IntPtr)DeserializationExceptionConstructorPtr,
                     (IntPtr)FunctionFailureExceptionConstructorPtr,
                     (IntPtr)InvalidArgumentExceptionConstructorPtr,

@@ -190,3 +190,25 @@ After:
 - Warning: `Rust: MM/dd/yyyy H:mm:ss.fff zzz WARNING [csharp_wrapper::logging] This is a warning message`
 - Info: `Rust: MM/dd/yyyy H:mm:ss.fff zzz INFO [csharp_wrapper::logging] This is an info message`
 - Verbose: `Rust: MM/dd/yyyy H:mm:ss.fff zzz VERBOSE [csharp_wrapper::logging] This is a verbose message`
+
+## Load Balancing Policies
+
+### DefaultLoadBalancingPolicy
+- DC-awareness-by-default, with the DC of the contact point as the local DC, was removed. Now, if the user does not specify a load balancing policy when building the `Cluster`, the driver will be DC unaware, treating all nodes equally.
+
+### DCAwareRoundRobinPolicy
+- The local DC detection mechanism was fully removed. Now the local DC must be specified in the constructor.
+
+- `usedHostsPerRemoteDc` field is not supported anymore. There is a new boolean property `PermitDcFailover`. Setting it to true permits the driver to query nodes from remote DCs. Nodes from the local DC are always tried first.
+
+- This policy no longer uses a round-robin algorithm.
+The nodes are chosen at random, from the nodes from the local 
+DC (and after that, from remote DCs, if `PermitDcFailover` is enabled), exactly like in the Rust driver.
+
+### RoundRobinPolicy
+- This policy no longer uses a round-robin algorithm.
+The nodes are chosen at random, exactly like in the Rust driver.
+
+### NewQueryPlan()
+All the `NewQueryPlan` methods in the policy classes are no longer supported, since all query routing is handled by the Rust driver.
+
