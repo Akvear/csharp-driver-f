@@ -96,6 +96,80 @@ cargo run --manifest-path "$SDB_MANIFEST" -- \
 
 Output plot: `benchmark/results/insert-compare.svg`
 
+## 3) Generate Flamegraphs
+
+This requires some extra setup:
+
+- Clone [FlameGraph](https://github.com/brendangregg/FlameGraph) to a known location
+- Set `perf_event_paranoid` to `-1` to allow perf profiling:
+  ```bash
+  sudo sysctl kernel.perf_event_paranoid=-1
+  ```
+- You will need to install dotnet directly from Microsoft
+  ```bash
+mkdir -p "$HOME/dotnet-ms"
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --version latest --channel 9.0 --install-dir "$HOME/dotnet-ms"
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --runtime dotnet --channel 8.0 --install-dir "$HOME/dotnet-ms"
+
+MS_RUNTIME_DIR=$(dirname $(find $HOME/dotnet-ms/ -name "libcoreclr.so" | grep "8.0"))
+
+dotnet tool install --global dotnet-symbol
+dotnet symbol --symbols --output "$MS_RUNTIME_DIR" \
+    "$MS_RUNTIME_DIR/libcoreclr.so" \
+    "$MS_RUNTIME_DIR/libclrjit.so"
+  ```
+
+You can use this example flame graph generation script:
+```bash
+#!/bin/bash
+set -euo pipefail
+
+: "${BENCH:=ParametrizedSelect}"
+: "${SCYLLA_URI=172.47.0.2:9042}"
+: "${CNT:=1000}"
+: "${N_WORKERS:=1}"
+: "${N_ROWS:=1000}"
+: "${PAGE_SIZE:=1000}"
+: "${FLAMEGRAPH_DIR:=$HOME/repos/FlameGraph}"
+
+DOTNET_BIN="$HOME/dotnet-ms/dotnet"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+OUTPUT_DIR="$SCRIPT_DIR/results/flamegraph"
+ENTRY_POINT="${BENCH}BenchmarkEntryPoint"
+OUTPUT_NAME="flamegraph-${BENCH}"
+PROJECT_PATH="$SCRIPT_DIR/csharp-driver/csharp-rs/ScyllaCSharpBench.csproj"
+BUILD_OUTPUT_DIR="$SCRIPT_DIR/csharp-driver/csharp-rs/bin/Release/$ENTRY_POINT/net8.0"
+
+mkdir -p "$OUTPUT_DIR"
+
+$DOTNET_BIN build "$PROJECT_PATH" -c Release \
+    -p:BenchmarkEntryPoint="$ENTRY_POINT" \
+    -p:DebugSymbols=true \
+    -p:DebugType=full
+
+sudo \
+    SCYLLA_URI="$SCYLLA_URI" \
+    CNT="$CNT" \
+    N_WORKERS="$N_WORKERS" \
+    N_ROWS="$N_ROWS" \
+    PAGE_SIZE="$PAGE_SIZE" \
+    DOTNET_PerfMapEnabled=1 \
+    DOTNET_PerfMapIgnoreSingleFileMapping=1 \
+    DOTNET_EnableWriteXorExecute=0 \
+    DOTNET_PreserveFramePointer=1 \
+    perf record -F 1000 -g -- "$DOTNET_BIN" "$BUILD_OUTPUT_DIR/ScyllaCSharpBench.dll"
+
+sudo perf script > "$OUTPUT_DIR/out.perf"
+
+"$FLAMEGRAPH_DIR/stackcollapse-perf.pl" "$OUTPUT_DIR/out.perf" > "$OUTPUT_DIR/out.folded"
+"$FLAMEGRAPH_DIR/flamegraph.pl" --width 1000 "$OUTPUT_DIR/out.folded" > "$OUTPUT_DIR/$OUTPUT_NAME.svg"
+
+cp "$OUTPUT_DIR/out.folded" "$OUTPUT_DIR/$OUTPUT_NAME.speedscope.folded"
+```
+The flamegraph is in the .svg file.
+Alternatively you can use speedscope.folded files in [Speedscope](https://www.speedscope.app/).
+This script is designed to be placed in csharp-driver/benchmark
+
 ## Notes
 
 - `--series` backend names must match the backend names saved by each config.
