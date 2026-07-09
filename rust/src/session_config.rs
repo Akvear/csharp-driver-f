@@ -35,8 +35,11 @@ pub(crate) struct BridgedTcpConfig {
     /// Send buffer size in bytes. Values <= 0 mean "use default".
     send_buffer_size: i32,
 
-    /// SO_LINGER time in seconds. Values < 0 mean "use default".
-    so_linger: i32,
+    /// Whether to enable SO_LINGER flag.
+    // NOTE: `tcp_set_linger()` in Rust Driver is deprecated, because tokio is incompatible with blocking sockets.
+    // Instead, Rust Driver exposes `tcp_zero_linger()` which sets SO_LINGER with a timeout of 0.
+    // Therefore, we only expose a boolean here to indicate whether to enable SO_LINGER with a timeout of 0.
+    so_linger: FFIBool,
 }
 
 impl BridgedTcpConfig {
@@ -60,8 +63,9 @@ impl BridgedTcpConfig {
 
         builder = builder.tcp_reuse_address(self.reuse_address.into());
 
-        if self.so_linger >= 0 {
-            builder = builder.tcp_linger(Duration::from_secs(self.so_linger as u64));
+        if self.so_linger.into() {
+            // FIXME: switch to `tcp_zero_linger()` upon Rust Driver version bump to 1.7.0.
+            builder = builder.tcp_linger(Duration::ZERO);
         }
 
         builder

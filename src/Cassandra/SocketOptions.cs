@@ -155,6 +155,9 @@ namespace Cassandra
 
         /// <summary>
         /// Sets the number of seconds to remain open after the Socket.Close() is called.
+        /// Only 0 is supported, which means that the socket will be closed immediately and any unsent data will be discarded.
+        /// Passing a negative value will disable the linger option.
+        /// Passing a positive value will result in a NonSupportedException being thrown, as this is not supported by the driver.
         /// </summary>
         public SocketOptions SetSoLinger(int soLinger)
         {
