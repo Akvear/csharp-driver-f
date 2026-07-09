@@ -64,8 +64,7 @@ impl BridgedTcpConfig {
         builder = builder.tcp_reuse_address(self.reuse_address.into());
 
         if self.so_linger.into() {
-            // FIXME: switch to `tcp_zero_linger()` upon Rust Driver version bump to 1.7.0.
-            builder = builder.tcp_linger(Duration::ZERO);
+            builder = builder.tcp_zero_linger();
         }
 
         builder

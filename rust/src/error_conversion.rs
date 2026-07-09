@@ -585,6 +585,10 @@ impl ErrorToException for NewSessionError {
                 ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
+            NewSessionError::IllegalConfig(s) => ctors
+                .rust_exception_constructor
+                .construct_from_rust(format!("Illegal Session configuration: {}", s)),
+
             _ => ctors.rust_exception_constructor.construct_from_rust(&self),
         }
     }
@@ -600,7 +604,8 @@ impl ErrorToException for MetadataError {
             | MetadataError::Peers(_)
             | MetadataError::Keyspaces(_)
             | MetadataError::Udts(_)
-            | MetadataError::Tables(_) => {
+            | MetadataError::Tables(_)
+            | MetadataError::ClientRoutes(_) => {
                 ctors.rust_exception_constructor.construct_from_rust(&self)
             }
 
