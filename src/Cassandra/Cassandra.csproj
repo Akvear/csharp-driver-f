@@ -75,7 +75,7 @@
 
   <Target Name="BuildRustNativeWrapperDebug"
           BeforeTargets="Build"
-      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Debug' and '$(IsCrossTargetingBuild)' == 'true'">
+      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Debug'">
     <PropertyGroup>
       <RepoRootDir>$(MSBuildThisFileDirectory)../..</RepoRootDir>
     </PropertyGroup>
@@ -85,7 +85,7 @@
 
   <Target Name="BuildRustNativeWrapperRelease"
           BeforeTargets="Build"
-      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Release' and '$(IsCrossTargetingBuild)' == 'true'">
+      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Release'">
     <PropertyGroup>
       <RustProjectDir>$(MSBuildThisFileDirectory)../../rust</RustProjectDir>
     </PropertyGroup>
