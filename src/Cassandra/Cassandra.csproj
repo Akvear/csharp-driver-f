@@ -41,24 +41,24 @@
 
   <ItemGroup>
     <DirectPInvoke Include="csharp_wrapper"/>
-    
+
     <!-- Native library staging for proper runtime loading -->
-    <Content Include="$(RustNativeLibDir)/libcsharp_wrapper.so" 
+    <Content Include="$(RustNativeLibDir)/libcsharp_wrapper.so"
               Condition="$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Linux))) and Exists('$(RustNativeLibDir)/libcsharp_wrapper.so')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Pack>false</Pack>
     </Content>
-    <Content Include="$(RustNativeLibDir)/libcsharp_wrapper.dylib" 
+    <Content Include="$(RustNativeLibDir)/libcsharp_wrapper.dylib"
               Condition="$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::OSX))) and Exists('$(RustNativeLibDir)/libcsharp_wrapper.dylib')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Pack>false</Pack>
     </Content>
-    <Content Include="$(RustNativeLibDir)/csharp_wrapper.dll" 
+    <Content Include="$(RustNativeLibDir)/csharp_wrapper.dll"
               Condition="$([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform($([System.Runtime.InteropServices.OSPlatform]::Windows))) and Exists('$(RustNativeLibDir)/csharp_wrapper.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Pack>false</Pack>
     </Content>
-    
+
     <None Include="..\..\LICENSE.md" Pack="true" PackagePath="LICENSE.md" />
   </ItemGroup>
 
