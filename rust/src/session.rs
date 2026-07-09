@@ -7,7 +7,7 @@ use scylla::cluster::ClusterState;
 use scylla::errors::SchemaAgreementError;
 use scylla::errors::{NewSessionError, PagerExecutionError, PrepareError};
 use scylla::statement::Statement;
-use scylla_cql::serialize::row::SerializedValues;
+use scylla_cql_core::serialize::row::SerializedValues;
 use tokio::sync::RwLock;
 
 use crate::error_conversion::FFIMaybeException;
