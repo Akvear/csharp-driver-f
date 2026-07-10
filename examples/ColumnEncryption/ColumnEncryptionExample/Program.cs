@@ -80,7 +80,7 @@ namespace ColumnEncryptionExample
             try {
 
                 // prepare schema
-                await _session.ExecuteAsync(new SimpleStatement($"CREATE KEYSPACE IF NOT EXISTS {Keyspace} WITH replication = {{ 'class': 'SimpleStrategy', 'replication_factor': '1' }}")).ConfigureAwait(false);
+                await _session.ExecuteAsync(new SimpleStatement($"CREATE KEYSPACE IF NOT EXISTS {Keyspace} WITH replication = {{ 'class': 'NetworkTopologyStrategy', 'replication_factor': '1' }}")).ConfigureAwait(false);
                 await _session.ExecuteAsync(new SimpleStatement($"CREATE TABLE IF NOT EXISTS {Keyspace}.{Table}(id blob, address blob, public_notes text, PRIMARY KEY(id))")).ConfigureAwait(false);
 
                 await PreparedStatementsExample().ConfigureAwait(false);
@@ -119,7 +119,7 @@ namespace ColumnEncryptionExample
             var user = users[0];
             Console.WriteLine($"User {user.GetValue<Guid>("id")} has address \"{user.GetValue<string>("address")}\" and public notes \"{user.GetValue<string>("public_notes")}\"");
         }
-        
+
         private async Task SimpleStatementsExample()
         {
             var userId = Guid.NewGuid();
@@ -128,9 +128,9 @@ namespace ColumnEncryptionExample
 
             // using encrypted columns with SimpleStatements require the parameters to be wrapped with the EncryptedValue type
             var insert = new SimpleStatement(
-                InsertCqlQuery, 
-                new EncryptedValue(userId, _userKeyAndIv), 
-                new EncryptedValue(address, _addressKey), 
+                InsertCqlQuery,
+                new EncryptedValue(userId, _userKeyAndIv),
+                new EncryptedValue(address, _addressKey),
                 publicNotes);
             await _session.ExecuteAsync(insert).ConfigureAwait(false);
 

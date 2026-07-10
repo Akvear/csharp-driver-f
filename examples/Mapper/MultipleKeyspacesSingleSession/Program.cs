@@ -48,7 +48,7 @@ namespace MultipleKeyspacesSingleSession
             {
                 session.Execute(
                     $"CREATE KEYSPACE IF NOT EXISTS {ks} WITH replication = " +
-                    "{ 'class' : 'SimpleStrategy', 'replication_factor' : 1 }");
+                    "{ 'class' : 'NetworkTopologyStrategy', 'replication_factor' : 1 }");
                 session.Execute(
                     $"CREATE TABLE IF NOT EXISTS {ks}.users (id uuid PRIMARY KEY, name text)");
             }
