@@ -72,13 +72,28 @@ nupkgs/
 # Ignore dotnet project configuration
 global.json
 
-# Claude / AI assistant metadata
-CLAUDE.md
-.claude/ 
-
 # Ignore Rust build files
 rust/target/
 rust/libcsharp_wrapper.so
 
 # Ignore rust-analyzer files
 target/rust-analyzer/
+
+# Personal and AI TODO list
+TODO*.md
+
+# Codex - AI assistant metadata
+.codex/
+.codex-cache/
+.codex-config.json
+.codex-settings.json
+codex.log
+AGENTS.md
+
+# Claude - AI assistant metadata
+.anthropic/
+.claude/
+claude.log
+claude_history.json
+claude_config.json
+CLAUDE.md

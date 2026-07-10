@@ -111,7 +111,7 @@ namespace Cassandra.IntegrationTests.Core
                 };
         }
 
-        [Test, TestCaseSource(nameof(VectorTestCaseData)), TestScyllaVersion(2025, 4)]
+        [Test, TestCassandraOrScyllaVersion(5, 0, 2025, 4), TestCaseSource(nameof(VectorTestCaseData))]
         public void VectorSimpleStatementTest<T>(string cqlSubType, Func<T> elementGeneratorFn, Action<object, object> assertFn)
         {
             SetupVectorUdtSchema();
@@ -132,7 +132,7 @@ namespace Cassandra.IntegrationTests.Core
             vectorSimpleStmtTestFn((i, v) => new SimpleStatement(new Dictionary<string, object> { { "idx", i }, { "vec", v } }, $"INSERT INTO {tableName} (i, j) VALUES (:idx, :vec)"));
         }
 
-        [Test, TestCaseSource(nameof(VectorTestCaseData)), TestScyllaVersion(2025, 4)]
+        [Test, TestCassandraOrScyllaVersion(5, 0, 2025, 4), TestCaseSource(nameof(VectorTestCaseData))]
         public void VectorSimpleStatementTestComplex<T>(string cqlSubType, Func<T> elementGeneratorFn, Action<object, object> assertFn)
         {
             SetupVectorUdtSchema();
@@ -169,7 +169,7 @@ namespace Cassandra.IntegrationTests.Core
                 $"INSERT INTO {tableNameComplex} (i, k, l) VALUES (:idx, :vec, :vecc)"));
         }
 
-        [Test, TestCaseSource(nameof(VectorTestCaseData)), TestScyllaVersion(2025, 4)]
+        [Test, TestCassandraOrScyllaVersion(5, 0, 2025, 4), TestCaseSource(nameof(VectorTestCaseData))]
         public void VectorPreparedStatementTest<T>(string cqlSubType, Func<T> elementGeneratorFn, Action<object, object> assertFn)
         {
             SetupVectorUdtSchema();
@@ -193,7 +193,7 @@ namespace Cassandra.IntegrationTests.Core
             vectorPreparedStmtTestFn($"INSERT INTO {tableName} (i, j) VALUES (:idx, :vec)", (i, v, ps) => ps.Bind(new { idx = i, vec = v }));
         }
 
-        [Test, TestCaseSource(nameof(VectorTestCaseData)), TestScyllaVersion(2025, 4)]
+        [Test, TestCassandraOrScyllaVersion(5, 0, 2025, 4), TestCaseSource(nameof(VectorTestCaseData))]
         public void VectorPreparedStatementTestComplex<T>(string cqlSubType, Func<T> elementGeneratorFn, Action<object, object> assertFn)
         {
             SetupVectorUdtSchema();
@@ -238,7 +238,8 @@ namespace Cassandra.IntegrationTests.Core
                 ));
         }
 
-        [Test, TestScyllaVersion(2025, 4)]
+        [Test]
+        [TestCassandraOrScyllaVersion(5, 0, 2025, 4)]
         public void VectorFloatTest()
         {
             var tableName = TestUtils.GetUniqueTableName();

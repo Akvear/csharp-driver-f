@@ -567,8 +567,7 @@ namespace Cassandra.Tests
                                     }
                                 }
                             }
-                            else
-                            if (j % 2 == 0)
+                            else if (j % 2 == 0)
                             {
                                 if (bag.TryTake(out var ksName))
                                 {

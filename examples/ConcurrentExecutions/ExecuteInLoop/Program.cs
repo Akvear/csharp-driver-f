@@ -60,7 +60,7 @@ namespace ExecuteInLoop
             _session = await _cluster.ConnectAsync().ConfigureAwait(false);
 
             // prepare schema
-            await _session.ExecuteAsync(new SimpleStatement("CREATE KEYSPACE IF NOT EXISTS examples WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': '1' }")).ConfigureAwait(false);
+            await _session.ExecuteAsync(new SimpleStatement("CREATE KEYSPACE IF NOT EXISTS examples WITH replication = { 'class': 'NetworkTopologyStrategy', 'replication_factor': '1' }")).ConfigureAwait(false);
             await _session.ExecuteAsync(new SimpleStatement("USE examples")).ConfigureAwait(false);
             await _session.ExecuteAsync(new SimpleStatement("CREATE TABLE IF NOT EXISTS tbl_sample_kv(id uuid, value text, PRIMARY KEY(id))")).ConfigureAwait(false);
 

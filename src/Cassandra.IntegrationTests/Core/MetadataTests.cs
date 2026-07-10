@@ -153,7 +153,7 @@ namespace Cassandra.IntegrationTests.Core
         [Test]
         public void Metadata_Hosts_Should_Be_Cached_When_Topology_Is_Stable()
         {
-            // Validates that repeated calls without topology changes return the same Host instances 
+            // Validates that repeated calls without topology changes return the same Host instances
             // verifying the caching mechanism.
             var metadata = Cluster.Metadata;
             var hosts1 = metadata.AllHosts();
@@ -171,13 +171,13 @@ namespace Cassandra.IntegrationTests.Core
         }
 
         [Test]
-        public void CheckSimpleStrategyKeyspace()
+        public void CheckNetworkTopologyStrategyKeyspace_SingleDatacenter()
         {
             var metadata = Cluster.Metadata;
 
             string keyspaceName = TestUtils.GetUniqueKeyspaceName().ToLower();
             bool durableWrites = Randomm.Instance.NextBoolean();
-            string strategyClass = ReplicationStrategies.SimpleStrategy;
+            string strategyClass = ReplicationStrategies.NetworkTopologyStrategy;
             int replicationFactor = Randomm.Instance.Next(1, DefaultNodeCount + 1);
 
             Dictionary<string, string> replicationStrategy = new Dictionary<string, string>
@@ -199,8 +199,8 @@ namespace Cassandra.IntegrationTests.Core
 
             // Verify replication settings are present
             Assert.NotNull(ksmd.Replication);
-            Assert.True(ksmd.Replication.ContainsKey("replication_factor"));
-            Assert.AreEqual(replicationFactor, ksmd.Replication["replication_factor"]);
+            Assert.True(ksmd.Replication.ContainsKey("datacenter1"));
+            Assert.AreEqual(replicationFactor, ksmd.Replication["datacenter1"]);
 
             var keyspaces = metadata.GetKeyspaces();
             Assert.NotNull(keyspaces, "GetKeyspaces() should not return null");
