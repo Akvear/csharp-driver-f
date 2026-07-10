@@ -11,12 +11,12 @@ from redirects_cli import cli as redirects_cli
 # -- Global variables
 
 # Builds documentation for the following tags and branches.
-TAGS = ["v3.22.0.1", "v3.22.0.2"]
+TAGS = ["v3.22.0.1", "v3.22.0.2", "v3.22.0.3", "v3.22.0.4"]
 BRANCHES = [
     "master",
 ]
 # Sets the latest version.
-LATEST_VERSION = "v3.22.0.2"
+LATEST_VERSION = "v3.22.0.4"
 # Set which versions are not released yet.
 UNSTABLE_VERSIONS = ["master"]
 # Set which versions are deprecated
@@ -52,7 +52,7 @@ author = "ScyllaDB Project Contributors"
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/_partials", "api-docs"]
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/_partials", "api-docs", ".venv"]
 
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = "sphinx"

@@ -1,9 +1,14 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/docs"
     schedule:
       interval: "daily"
     allow:
       - dependency-name: "sphinx-scylladb-theme"
       - dependency-name: "sphinx-multiversion-scylla"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
