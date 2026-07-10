@@ -59,9 +59,10 @@ namespace Cassandra.IntegrationTests.Core
             string tableName1 = TestUtils.GetUniqueTableName().ToLower();
             string tableName2 = TestUtils.GetUniqueTableName().ToLower();
             string tableName3 = TestUtils.GetUniqueTableName().ToLower();
+            var datacenter = session.Cluster.AllHosts().First().Datacenter;
             session.CreateKeyspace(
                 keyspaceName,
-                ReplicationStrategies.CreateSimpleStrategyReplicationProperty(1),
+                ReplicationStrategies.CreateNetworkTopologyStrategyReplicationProperty(new Dictionary<string, int> { { datacenter, 1 } }),
                 true
             );
 
@@ -133,9 +134,10 @@ namespace Cassandra.IntegrationTests.Core
 
             string keyspaceName = TestUtils.GetUniqueKeyspaceName().ToLower();
             string tableName = TestUtils.GetUniqueTableName().ToLower();
+            var datacenter = session.Cluster.AllHosts().First().Datacenter;
             session.CreateKeyspace(
                 keyspaceName,
-                ReplicationStrategies.CreateSimpleStrategyReplicationProperty(1),
+                ReplicationStrategies.CreateNetworkTopologyStrategyReplicationProperty(new Dictionary<string, int> { { datacenter, 1 } }),
                 true
             );
 
@@ -166,10 +168,11 @@ namespace Cassandra.IntegrationTests.Core
 
             string keyspaceName = TestUtils.GetUniqueKeyspaceName().ToLower();
             string tableName = TestUtils.GetUniqueTableName().ToLower();
+            var datacenter = session.Cluster.AllHosts().First().Datacenter;
 
             session.CreateKeyspace(
                 keyspaceName,
-                ReplicationStrategies.CreateSimpleStrategyReplicationProperty(1),
+                ReplicationStrategies.CreateNetworkTopologyStrategyReplicationProperty(new Dictionary<string, int> { { datacenter, 1 } }),
                 true
             );
 
