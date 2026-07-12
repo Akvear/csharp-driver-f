@@ -858,6 +858,12 @@ impl<'a, T> Debug for FFIPtr<'a, T> {
     }
 }
 
+impl<'a, T: Sized> FFIPtr<'a, T> {
+    pub(crate) fn as_non_null(&self) -> Option<std::ptr::NonNull<T>> {
+        self.ptr.map(|nn| nn.ptr)
+    }
+}
+
 // Compile-time assertion that `FFIPtr` is pointer-sized.
 // Ensures ABI compatibility with C# (opaque GCHandle/IntPtr across FFI).
 const _: [(); std::mem::size_of::<FFIPtr<'_, ()>>()] = [(); std::mem::size_of::<*const ()>()];

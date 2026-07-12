@@ -77,6 +77,15 @@ namespace Cassandra
         [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern FFIMaybeException session_get_keyspace(IntPtr session, IntPtr writeToStr, IntPtr context, IntPtr constructorsPtr);
 
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void session_await_schema_agreement(Tcb<EmptyAsyncResult> tcb, IntPtr session);
+
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void session_await_schema_agreement_with_row_set(Tcb<EmptyAsyncResult> tcb, IntPtr session, IntPtr rowSet);
+
+        [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void session_await_schema_agreement_with_required_node(Tcb<EmptyAsyncResult> tcb, IntPtr session, byte* hostId);
+
         /// <summary>
         /// Creates a new session connected to the specified Cassandra URI. 
         /// Checks the existence of the configured local datacenter.
@@ -265,6 +274,67 @@ namespace Cassandra
                     executionOptions));
             GC.KeepAlive(populateCtx);
             return task;
+        }
+
+        /// <summary>
+        /// Waits for schema agreement on the session, requiring agreement from the coordinator
+        /// node that served the given <paramref name="rowSet"/>. 
+        /// </summary>
+        /// <param name="rowSet">The RowSet resource whose coordinator must agree.</param>
+        internal Task WaitForSchemaAgreementWithRowSet(BridgedRowSet rowSet)
+        {
+            // Lifetime: it is sufficient to keep the RowSet referenced only until
+            // session_await_schema_agreement_with_row_set returns. The native side only
+            // borrows the RowSet synchronously.
+            return RunAsyncWithIncrement<EmptyAsyncResult>((tcb, sessionPtr) =>
+            {
+                try
+                {
+                    rowSet.RunWithIncrement(rowSetHandle =>
+                    {
+                        session_await_schema_agreement_with_row_set(tcb, sessionPtr, rowSetHandle);
+                        return FFIMaybeException.Ok();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // The native call never started (e.g. the RowSet was already disposed, so its
+                    // DangerousAddRef threw), which means the Rust-invoked completion callback that
+                    // frees the TCB's GCHandle will never run. We need to call it ourselves to finish 
+                    // the TCB and avoid a memory leak.
+                    Tcb<EmptyAsyncResult>.FailTask(tcb.tcs, FFIMaybeException.FromException(ex));
+                }
+            });
+        }
+
+        /// <summary>
+        /// Waits for cluster-wide schema agreement on the session.
+        /// </summary>
+        internal Task WaitForSchemaAgreement()
+        {
+            return RunAsyncWithIncrement<EmptyAsyncResult>(
+                (tcb, ptr) => session_await_schema_agreement(tcb, ptr));
+        }
+
+        /// <summary>
+        /// Waits for schema agreement on the session, requiring agreement from the node
+        /// identified by <paramref name="hostId"/>.
+        /// </summary>
+        /// <param name="hostId">The host ID (UUID) of the node that must agree.</param>
+        internal Task WaitForSchemaAgreementWithRequiredNode(Guid hostId)
+        {
+            Span<byte> hostIdBytes = stackalloc byte[16];
+            GuidToFFIFormat(hostId, hostIdBytes);
+
+            unsafe
+            {
+                fixed (byte* hostIdPtr = hostIdBytes)
+                {
+                    var hostIdAddr = (IntPtr)hostIdPtr; //pointer-typed variables cannot be captured in lambdas, thus this trick
+                    return RunAsyncWithIncrement<EmptyAsyncResult>(
+                        (tcb, ptr) => session_await_schema_agreement_with_required_node(tcb, ptr, (byte*)hostIdAddr));
+                }
+            }
         }
 
         /// <summary>

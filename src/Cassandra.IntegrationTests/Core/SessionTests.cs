@@ -294,5 +294,131 @@ namespace Cassandra.IntegrationTests.Core
             // Assert.AreEqual(0, rowSet.Count());
             // Assert.AreEqual(0, rowSet.GetAvailableWithoutFetching());
         }
+
+        private static System.Collections.Generic.IEnumerable<TestCaseData> WaitForSchemaAgreementCases()
+        {
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)((session, cluster, tableName) =>
+                {
+                    session.WaitForSchemaAgreement();
+                    session.Execute($"INSERT INTO {tableName} (id, value) VALUES (1, '1')");
+                    return Task.CompletedTask;
+                }),
+                null).SetName("WaitForSchemaAgreement_NoRequiredNode");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)(async (session, cluster, tableName) =>
+                {
+                    await session.WaitForSchemaAgreementAsync().ConfigureAwait(false);
+                    await session.ExecuteAsync(
+                        new SimpleStatement($"INSERT INTO {tableName} (id, value) VALUES (1, '1')")).ConfigureAwait(false);
+                }),
+                null).SetName("WaitForSchemaAgreementAsync_NoRequiredNode");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)((session, cluster, tableName) =>
+                {
+                    var rowSet = session.Execute($"INSERT INTO {tableName} (id, value) VALUES (2, '2')");
+                    session.WaitForSchemaAgreement(rowSet);
+                    return Task.CompletedTask;
+                }),
+                null).SetName("WaitForSchemaAgreement_WithRowSet");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)(async (session, cluster, tableName) =>
+                {
+                    var rowSet = await session.ExecuteAsync(
+                        new SimpleStatement($"INSERT INTO {tableName} (id, value) VALUES (3, '3')")).ConfigureAwait(false);
+                    await session.WaitForSchemaAgreementAsync(rowSet).ConfigureAwait(false);
+                }),
+                null).SetName("WaitForSchemaAgreementAsync_WithRowSet");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)((session, cluster, tableName) =>
+                {
+                    var hostAddress = cluster.AllHosts().First().Address;
+                    session.WaitForSchemaAgreement(hostAddress);
+                    return Task.CompletedTask;
+                }),
+                null).SetName("WaitForSchemaAgreement_WithKnownHostAddress");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)(async (session, cluster, tableName) =>
+                {
+                    var hostAddress = cluster.AllHosts().First().Address;
+                    await session.WaitForSchemaAgreementAsync(hostAddress).ConfigureAwait(false);
+                }),
+                null).SetName("WaitForSchemaAgreementAsync_WithKnownHostAddress");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)((session, cluster, tableName) =>
+                {
+                    var unknownAddress = new System.Net.IPEndPoint(System.Net.IPAddress.Parse("192.0.2.1"), 9042);
+                    session.WaitForSchemaAgreement(unknownAddress);
+                    return Task.CompletedTask;
+                }),
+                typeof(ArgumentException)).SetName("WaitForSchemaAgreement_WithUnknownHostAddress_Throws");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)((session, cluster, tableName) =>
+                {
+                    var hostId = cluster.AllHosts().First().HostId;
+                    session.WaitForSchemaAgreement(hostId);
+                    return Task.CompletedTask;
+                }),
+                null).SetName("WaitForSchemaAgreement_WithKnownHostId");
+
+            yield return new TestCaseData(
+                (Func<ISession, ICluster, string, Task>)(async (session, cluster, tableName) =>
+                {
+                    var hostId = cluster.AllHosts().First().HostId;
+                    await session.WaitForSchemaAgreementAsync(hostId).ConfigureAwait(false);
+                }),
+                null).SetName("WaitForSchemaAgreementAsync_WithKnownHostId");
+        }
+
+        [TestCaseSource(nameof(WaitForSchemaAgreementCases))]
+        public void Session_WaitForSchemaAgreement(Func<ISession, ICluster, string, Task> bridgedCall, Type expectedException)
+        {
+            var localCluster = GetNewTemporaryCluster();
+            var localSession = localCluster.Connect();
+            localSession.CreateKeyspaceIfNotExists(KeyspaceName, null, false);
+            localSession.ChangeKeyspace(KeyspaceName);
+            var tableName = "table_" + Guid.NewGuid().ToString("N");
+            localSession.Execute($"CREATE TABLE {tableName} (id int PRIMARY KEY, value text)");
+
+            if (expectedException != null)
+            {
+                NUnit.Framework.Assert.ThrowsAsync(expectedException,
+                    async () => await bridgedCall(localSession, localCluster, tableName).ConfigureAwait(false));
+            }
+            else
+            {
+                NUnit.Framework.Assert.DoesNotThrowAsync(
+                    async () => await bridgedCall(localSession, localCluster, tableName).ConfigureAwait(false));
+            }
+        }
+
+        [Test]
+        public void Session_WaitForSchemaAgreement_WithKnownHostAddress_ResolvesHost()
+        {
+            var localCluster = GetNewTemporaryCluster();
+            var localSession = localCluster.Connect();
+
+            var hostAddress = localCluster.AllHosts().First().Address;
+
+            NUnit.Framework.Assert.DoesNotThrow(() => localSession.WaitForSchemaAgreement(hostAddress));
+        }
+
+        [Test]
+        public void Session_WaitForSchemaAgreement_WithUnknownHostAddress_Throws()
+        {
+            var localCluster = GetNewTemporaryCluster();
+            var localSession = localCluster.Connect();
+
+            var unknownAddress = new System.Net.IPEndPoint(System.Net.IPAddress.Parse("192.0.2.1"), 9042);
+
+            NUnit.Framework.Assert.Throws<ArgumentException>(() => localSession.WaitForSchemaAgreement(unknownAddress));
+        }
     }
 }

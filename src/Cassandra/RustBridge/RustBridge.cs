@@ -310,6 +310,59 @@ namespace Cassandra
         }
 
         /// <summary>
+        /// Represents a Void counterpart of an async result.
+        /// </summary>
+        /// <remarks>
+        /// This struct contains a dummy byte field to ensure consistent size (1 byte) across FFI boundary.
+        /// Empty structs have different sizes in C# (1 byte) and Rust with #[repr(C)] (0 bytes),
+        /// which would cause memory layout mismatches. The dummy field ensures both sides agree.
+        /// The Rust side must also define this struct with a u8 field.
+        /// </remarks>
+        [StructLayout(LayoutKind.Sequential)]
+        internal readonly struct EmptyAsyncResult : IBridgedTaskResult
+        {
+            // Dummy field to ensure consistent size across FFI boundary.
+            private readonly byte _dummy;
+
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            internal static void CompleteTask(FFIGCHandle tcsHandle, EmptyAsyncResult result)
+            {
+                Tcb<EmptyAsyncResult>.CompleteTask(tcsHandle, result);
+            }
+
+            [UnmanagedCallersOnly(CallConvs = new Type[] { typeof(CallConvCdecl) })]
+            internal static void FailTask(FFIGCHandle tcsHandle, FFIMaybeException ffiException)
+            {
+                Tcb<EmptyAsyncResult>.FailTask(tcsHandle, ffiException);
+            }
+
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, EmptyAsyncResult, void> completeTaskDel = &CompleteTask;
+            internal unsafe readonly static delegate* unmanaged[Cdecl]<FFIGCHandle, FFIMaybeException, void> failTaskDel = &FailTask;
+
+            static IntPtr IBridgedTaskResult.CompleteTaskDelegate
+            {
+                get
+                {
+                    unsafe
+                    {
+                        return (IntPtr)completeTaskDel;
+                    }
+                }
+            }
+
+            static IntPtr IBridgedTaskResult.FailTaskDelegate
+            {
+                get
+                {
+                    unsafe
+                    {
+                        return (IntPtr)failTaskDel;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// Struct used to pass a native pointer along with its destructor function pointer.
         /// This is used to transfer ownership of Rust resources to C# code.
         /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
@@ -609,6 +662,10 @@ namespace Cassandra
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFISliceRaw, FFIGCHandle> PreparedQueryNotFoundExceptionConstructorPtr = &PreparedQueryNotFoundException.PreparedQueryNotFoundExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> RequestInvalidExceptionConstructorPtr = &RequestInvalidException.RequestInvalidExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> RustExceptionConstructorPtr = &RustException.RustExceptionFromRust;
+            unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SchemaAgreementRequiredHostAbsentExceptionConstructorPtr = &SchemaAgreementRequiredHostAbsentException.SchemaAgreementRequiredHostAbsentExceptionFromRust;
+            unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SchemaAgreementRowsResultExceptionConstructorPtr = &SchemaAgreementRowsResultException.SchemaAgreementRowsResultExceptionFromRust;
+            unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SchemaAgreementSingleRowExceptionConstructorPtr = &SchemaAgreementSingleRowException.SchemaAgreementSingleRowExceptionFromRust;
+            unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SchemaAgreementTimeoutExceptionConstructorPtr = &SchemaAgreementTimeoutException.SchemaAgreementTimeoutExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SerializationExceptionConstructorPtr = &SerializationException.SerializationExceptionFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> SyntaxErrorExceptionConstructorPtr = &SyntaxError.SyntaxErrorFromRust;
             unsafe readonly static delegate* unmanaged[Cdecl]<FFIString, FFIGCHandle> TraceRetrievalExceptionConstructorPtr = &TraceRetrievalException.TraceRetrievalExceptionFromRust;
@@ -638,6 +695,10 @@ namespace Cassandra
                 internal readonly IntPtr prepared_query_not_found_exception_constructor;
                 internal readonly IntPtr request_invalid_exception_constructor;
                 internal readonly IntPtr rust_exception_constructor;
+                internal readonly IntPtr schema_agreement_required_host_absent_exception_constructor;
+                internal readonly IntPtr schema_agreement_rows_result_exception_constructor;
+                internal readonly IntPtr schema_agreement_single_row_exception_constructor;
+                internal readonly IntPtr schema_agreement_timeout_exception_constructor;
                 internal readonly IntPtr serialization_exception_constructor;
                 internal readonly IntPtr syntax_error_exception_constructor;
                 internal readonly IntPtr trace_retrieval_exception_constructor;
@@ -659,6 +720,10 @@ namespace Cassandra
                     IntPtr preparedQueryNotFoundException,
                     IntPtr requestInvalidException,
                     IntPtr rustException,
+                    IntPtr schemaAgreementRequiredHostAbsentException,
+                    IntPtr schemaAgreementRowsResultException,
+                    IntPtr schemaAgreementSingleRowException,
+                    IntPtr schemaAgreementTimeoutException,
                     IntPtr serializationException,
                     IntPtr syntaxErrorException,
                     IntPtr traceRetrievalException,
@@ -679,6 +744,10 @@ namespace Cassandra
                     prepared_query_not_found_exception_constructor = preparedQueryNotFoundException;
                     request_invalid_exception_constructor = requestInvalidException;
                     rust_exception_constructor = rustException;
+                    schema_agreement_required_host_absent_exception_constructor = schemaAgreementRequiredHostAbsentException;
+                    schema_agreement_rows_result_exception_constructor = schemaAgreementRowsResultException;
+                    schema_agreement_single_row_exception_constructor = schemaAgreementSingleRowException;
+                    schema_agreement_timeout_exception_constructor = schemaAgreementTimeoutException;
                     serialization_exception_constructor = serializationException;
                     syntax_error_exception_constructor = syntaxErrorException;
                     trace_retrieval_exception_constructor = traceRetrievalException;
@@ -780,6 +849,10 @@ namespace Cassandra
                     (IntPtr)PreparedQueryNotFoundExceptionConstructorPtr,
                     (IntPtr)RequestInvalidExceptionConstructorPtr,
                     (IntPtr)RustExceptionConstructorPtr,
+                    (IntPtr)SchemaAgreementRequiredHostAbsentExceptionConstructorPtr,
+                    (IntPtr)SchemaAgreementRowsResultExceptionConstructorPtr,
+                    (IntPtr)SchemaAgreementSingleRowExceptionConstructorPtr,
+                    (IntPtr)SchemaAgreementTimeoutExceptionConstructorPtr,
                     (IntPtr)SerializationExceptionConstructorPtr,
                     (IntPtr)SyntaxErrorExceptionConstructorPtr,
                     (IntPtr)TraceRetrievalExceptionConstructorPtr,
@@ -888,6 +961,41 @@ namespace Cassandra
             {
                 res.maybeException = FFIMaybeGCHandle.Empty();
             }
+        }
+
+        /// <summary>
+        /// Convert a .NET <see cref="Guid"/> to the RFC 4122 / network (big-endian) byte
+        /// order used by native code (for example Rust's <c>Uuid::from_slice</c>).
+        ///
+        /// Reason: .NET's default <c>Guid.ToByteArray()</c> (and the parameterless
+        /// <c>Guid.TryWriteBytes</c>) use a mixed-endian layout on little-endian platforms (the
+        /// first three fields are written in little-endian), while RFC 4122 (and the Rust uuid
+        /// crate) expect the canonical network byte order (big-endian). Passing .NET's raw Guid
+        /// bytes directly over FFI will therefore produce the wrong UUID value on the native side
+        /// (observed as a byte-order mismatch). This helper avoids that by writing big-endian bytes.
+        ///
+        /// Use this helper wherever a Guid must be marshaled to native code as a 16-byte UUID
+        /// to ensure the bytes are ordered per RFC 4122.
+        /// </summary>
+        internal static void GuidToFFIFormat(Guid guid, Span<byte> buffer)
+        {
+            Debug.Assert(buffer.Length >= 16, "Buffer must be at least 16 bytes");
+
+            // bigEndian: true writes the canonical RFC 4122 / network byte order directly,
+            // instead of .NET's default mixed-endian layout.
+            guid.TryWriteBytes(buffer, bigEndian: true, out int bytesWritten);
+            Debug.Assert(bytesWritten == 16, $"Guid.TryWriteBytes wrote {bytesWritten} bytes instead of 16");
+        }
+
+        /// <summary>
+        /// Inverse of <see cref="GuidToFFIFormat(Guid, Span{byte})"/>: builds a <see cref="Guid"/> from a 16-byte
+        /// RFC 4122 / network-order UUID produced by native code (e.g. <c>Uuid::as_bytes()</c>).
+        /// </summary>
+        internal static Guid GuidFromFFIFormat(ReadOnlySpan<byte> bytes)
+        {
+            // bigEndian: true interprets the bytes as canonical RFC 4122 / network order,
+            // matching what GuidToFFIFormat produces.
+            return new Guid(bytes, bigEndian: true);
         }
     }
 }

@@ -268,9 +268,107 @@ namespace Cassandra
         /// </summary>
         Task ShutdownAsync();
 
-        [Obsolete("Method deprecated. The driver internally waits for schema agreement when there is an schema change. See ProtocolOptions.MaxSchemaAgreementWaitSeconds for more info.")]
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host specified by the provided RowSet
+        /// successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="rs">RowSet's queried host is required to successfully return its schema version.</param>
+        /// <remarks> This is a blocking method. If you want to wait for schema agreement asynchronously, use
+        /// <see cref="WaitForSchemaAgreementAsync(RowSet)"/> instead.
+        /// When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="rs"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown if <paramref name="rs"/> does not have an 
+        /// underlying native resource.</exception>
+        /// <exception cref="ObjectDisposedException">Thrown if <paramref name="rs"/> has already been 
+        /// disposed.</exception>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including
+        /// when the required host does not return its schema version.</exception>
         void WaitForSchemaAgreement(RowSet rs);
-        [Obsolete("Method deprecated. The driver internally waits for schema agreement when there is an schema change. See ProtocolOptions.MaxSchemaAgreementWaitSeconds for more info.")]
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host specified in the parameter
+        /// successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="forHost">Host required to successfully return its schema version.</param>
+        /// <remarks> This is a blocking method. If you want to wait for schema agreement asynchronously, use
+        /// <see cref="WaitForSchemaAgreementAsync(IPEndPoint)"/> instead.
+        /// When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="forHost"/> is null.</exception>
+        /// <exception cref="ArgumentException">Thrown if <paramref name="forHost"/> is not a known host in this cluster.</exception>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including when the required host does not return its schema version.</exception>
         bool WaitForSchemaAgreement(IPEndPoint forHost);
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host identified by the
+        /// given host id successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="hostId">Host id (UUID) of the node required to successfully return its schema version.</param>
+        /// <remarks> This is a blocking method. If you want to wait for schema agreement asynchronously, use
+        /// <see cref="WaitForSchemaAgreementAsync(Guid)"/> instead.
+        /// When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including when the required host does not return its schema version.</exception>
+        void WaitForSchemaAgreement(Guid hostId);
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host specified by the provided RowSet
+        /// successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="rs">RowSet's queried host is required to successfully return its schema version.</param>
+        /// <remarks> When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="rs"/> is null.</exception>
+        /// <exception cref="InvalidOperationException">Thrown if <paramref name="rs"/> does not have an 
+        /// underlying native resource.</exception>
+        /// <exception cref="ObjectDisposedException">Thrown if <paramref name="rs"/> has already been 
+        /// disposed.</exception>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including
+        /// when the required host does not return its schema version.</exception>
+        Task WaitForSchemaAgreementAsync(RowSet rs);
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host specified in the parameter
+        /// successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="hostAddress">Host required to successfully return its schema version.</param>
+        /// <remarks> When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// <exception cref="ArgumentNullException">Thrown if <paramref name="hostAddress"/> is null.</exception>
+        /// <exception cref="ArgumentException">Thrown if <paramref name="hostAddress"/> is not a known host in this cluster.</exception>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including when the required host does not return its schema version.</exception>
+        Task WaitForSchemaAgreementAsync(IPEndPoint hostAddress);
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes. Requires that the host identified by the
+        /// given host id successfully returns its schema version during the agreement process.
+        /// </summary>
+        /// <param name="hostId">Host id (UUID) of the node required to successfully return its schema version.</param>
+        /// <remarks> When there's no requirement for a specific host to return its schema version, use
+        /// <see cref="WaitForSchemaAgreement()"/> or <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out, including when the required host does not return its schema version.</exception>
+        Task WaitForSchemaAgreementAsync(Guid hostId);
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes.
+        /// </summary>
+        /// <remarks> This is a blocking method. If you want to wait for schema agreement asynchronously, use
+        /// <see cref="WaitForSchemaAgreementAsync()"/> instead.
+        /// </remarks>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out.</exception>
+        void WaitForSchemaAgreement();
+
+        /// <summary>
+        /// Awaits schema agreement among all reachable nodes.
+        /// </summary>
+        /// <exception cref="SchemaAgreementException">Thrown if schema agreement fails or times out.</exception>
+        Task WaitForSchemaAgreementAsync();
     }
 }

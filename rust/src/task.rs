@@ -15,9 +15,11 @@ use crate::error_conversion::{
     InvalidTypeExceptionConstructor, NoHostAvailableExceptionConstructor,
     OperationTimedOutExceptionConstructor, PreparedQueryNotFoundExceptionConstructor,
     RequestInvalidExceptionConstructor, RustExceptionConstructor,
-    SerializationExceptionConstructor, SyntaxErrorExceptionConstructor,
-    TraceRetrievalExceptionConstructor, TruncateExceptionConstructor,
-    UnauthorizedExceptionConstructor,
+    SchemaAgreementRequiredHostAbsentExceptionConstructor,
+    SchemaAgreementRowsResultExceptionConstructor, SchemaAgreementSingleRowExceptionConstructor,
+    SchemaAgreementTimeoutExceptionConstructor, SerializationExceptionConstructor,
+    SyntaxErrorExceptionConstructor, TraceRetrievalExceptionConstructor,
+    TruncateExceptionConstructor, UnauthorizedExceptionConstructor,
 };
 use crate::ffi::{ArcFFI, BridgedOwnedSharedPtr, FFIGCHandle};
 
@@ -119,6 +121,26 @@ struct Tcs<T> {
     _phantom: PhantomData<T>,
 }
 
+/// Represents an empty async result for operations that don't return a value.
+///
+/// This struct matches the C# `EmptyAsyncResult` layout: a single `byte` field
+/// to ensure a consistent non-zero size across the FFI boundary. Use this type
+/// as the `R` parameter for `Tcb<R>` when an async API returns no value (i.e. `()`),
+/// so the runtime can safely call the managed completion callback with a concrete
+/// struct parameter.
+#[repr(C)]
+#[derive(Default)]
+pub struct EmptyAsyncResult {
+    // Dummy field to ensure non-zero size for C# FFI compatibility (1 byte).
+    _dummy: u8,
+}
+
+impl From<()> for EmptyAsyncResult {
+    fn from(_: ()) -> Self {
+        EmptyAsyncResult::default()
+    }
+}
+
 /// **Task Control Block** (TCB)
 ///
 /// Contains the necessary information to manually control a Task execution from Rust.
@@ -135,7 +157,7 @@ pub struct Tcb<R> {
     /// Pointer to the collection of exception constructors.
     // SAFETY: The memory is a leaked unmanaged allocation on the C# side.
     // This guarantees that the pointer remains valid and is not moved or deallocated.
-    constructors: &'static ExceptionConstructors,
+    pub(crate) constructors: &'static ExceptionConstructors,
 }
 
 /// Collection of exception constructors passed from C#.
@@ -157,6 +179,13 @@ pub struct ExceptionConstructors {
     pub prepared_query_not_found_exception_constructor: PreparedQueryNotFoundExceptionConstructor,
     pub request_invalid_exception_constructor: RequestInvalidExceptionConstructor,
     pub rust_exception_constructor: RustExceptionConstructor,
+    pub schema_agreement_required_host_absent_exception_constructor:
+        SchemaAgreementRequiredHostAbsentExceptionConstructor,
+    pub schema_agreement_rows_result_exception_constructor:
+        SchemaAgreementRowsResultExceptionConstructor,
+    pub schema_agreement_single_row_exception_constructor:
+        SchemaAgreementSingleRowExceptionConstructor,
+    pub schema_agreement_timeout_exception_constructor: SchemaAgreementTimeoutExceptionConstructor,
     pub serialization_exception_constructor: SerializationExceptionConstructor,
     pub syntax_error_exception_constructor: SyntaxErrorExceptionConstructor,
     pub trace_retrieval_exception_constructor: TraceRetrievalExceptionConstructor,
@@ -177,6 +206,11 @@ impl<R> Tcb<R> {
         unsafe {
             (self.fail_task)(self.tcs, exception);
         }
+    }
+
+    pub(crate) fn fail_sync(self, e: impl ErrorToException) {
+        let exception = e.to_exception(self.constructors);
+        self.fail_task(exception);
     }
 }
 

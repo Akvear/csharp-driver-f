@@ -2,8 +2,8 @@ use crate::ffi::{FFIGCHandle, FFIMaybeGCHandle, FFISlice, FFIStr};
 use scylla::errors::{
     BadKeyspaceName, ClusterStateTokenError, ConnectionError, ConnectionPoolError, DbError,
     DeserializationError, MetadataError, NewSessionError, NextPageError, NextRowError,
-    PagerExecutionError, PrepareError, RequestAttemptError, RequestError, SerializationError,
-    TypeCheckError, UseKeyspaceError,
+    PagerExecutionError, PrepareError, RequestAttemptError, RequestError, SchemaAgreementError,
+    SerializationError, TypeCheckError, UseKeyspaceError,
 };
 use std::fmt::{Debug, Display};
 use std::mem::size_of;
@@ -185,6 +185,58 @@ impl AlreadyShutdownExceptionConstructor {
 pub struct ArgumentExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException);
 
 impl ArgumentExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
+/// FFI constructor for C# `SchemaAgreementRequiredHostAbsentException`.
+#[repr(transparent)]
+pub struct SchemaAgreementRequiredHostAbsentExceptionConstructor(
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
+);
+
+impl SchemaAgreementRequiredHostAbsentExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
+/// FFI constructor for C# `SchemaAgreementRowsResultException`.
+#[repr(transparent)]
+pub struct SchemaAgreementRowsResultExceptionConstructor(
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
+);
+
+impl SchemaAgreementRowsResultExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
+/// FFI constructor for C# `SchemaAgreementSingleRowException`.
+#[repr(transparent)]
+pub struct SchemaAgreementSingleRowExceptionConstructor(
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
+);
+
+impl SchemaAgreementSingleRowExceptionConstructor {
+    pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
+        let message = FFIStr::new(message);
+        unsafe { (self.0)(message) }
+    }
+}
+
+/// FFI constructor for C# `SchemaAgreementTimeoutException`.
+#[repr(transparent)]
+pub struct SchemaAgreementTimeoutExceptionConstructor(
+    unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
+);
+
+impl SchemaAgreementTimeoutExceptionConstructor {
     pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
@@ -425,9 +477,7 @@ impl ErrorToException for PagerExecutionError {
 
             PagerExecutionError::UseKeyspaceError(e) => e.to_exception(ctors),
 
-            PagerExecutionError::SchemaAgreementError(_) => {
-                ctors.rust_exception_constructor.construct_from_rust(&self)
-            }
+            PagerExecutionError::SchemaAgreementError(e) => e.to_exception(ctors),
 
             PagerExecutionError::MetadataError(e) => e.to_exception(ctors),
 
@@ -763,5 +813,54 @@ where
                 .invalid_argument_exception_constructor
                 .construct_from_rust(&msg),
         }
+    }
+}
+
+#[derive(Error, Debug, Clone)]
+pub(crate) enum HostIdError {
+    #[error("invalid host id: not a valid uuid: {0}")]
+    InvalidUuidBytes(#[from] uuid::Error),
+}
+
+impl ErrorToException for HostIdError {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
+        match self {
+            HostIdError::InvalidUuidBytes(_) => ctors
+                .invalid_argument_exception_constructor
+                .construct_from_rust(&self.to_string()),
+        }
+    }
+}
+
+impl ErrorToException for SchemaAgreementError {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
+        match self {
+            SchemaAgreementError::ConnectionPoolError(e) => e.to_exception(ctors),
+            SchemaAgreementError::PrepareError(e) => e.to_exception(ctors),
+            SchemaAgreementError::RequestError(e) => e.to_exception(ctors),
+            e @ SchemaAgreementError::TracesEventsIntoRowsResultError(_) => ctors
+                .schema_agreement_rows_result_exception_constructor
+                .construct_from_rust(&e.to_string()),
+            e @ SchemaAgreementError::SingleRowError(_) => ctors
+                .schema_agreement_single_row_exception_constructor
+                .construct_from_rust(&e.to_string()),
+            e @ SchemaAgreementError::Timeout(_) => ctors
+                .schema_agreement_timeout_exception_constructor
+                .construct_from_rust(&e.to_string()),
+            e @ SchemaAgreementError::RequiredHostAbsent(_) => ctors
+                .schema_agreement_required_host_absent_exception_constructor
+                .construct_from_rust(&e.to_string()),
+            e => ctors.rust_exception_constructor.construct_from_rust(e),
+        }
+    }
+}
+
+pub(crate) struct InvalidArgumentError<'a>(pub(crate) &'a str);
+
+impl ErrorToException for InvalidArgumentError<'_> {
+    fn to_exception(self, ctors: &ExceptionConstructors) -> FFIException {
+        ctors
+            .invalid_argument_exception_constructor
+            .construct_from_rust(self.0)
     }
 }

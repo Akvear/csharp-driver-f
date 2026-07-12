@@ -4,12 +4,17 @@ use std::sync::RwLock as StdRwLock;
 
 use scylla::client::session::Session;
 use scylla::cluster::ClusterState;
+use scylla::errors::SchemaAgreementError;
 use scylla::errors::{NewSessionError, PagerExecutionError, PrepareError};
 use scylla::statement::Statement;
 use scylla_cql::serialize::row::SerializedValues;
 use tokio::sync::RwLock;
 
-use crate::error_conversion::{FFIMaybeException, SessionOperationError};
+use crate::error_conversion::FFIMaybeException;
+use crate::error_conversion::HostIdError;
+use crate::error_conversion::InvalidArgumentError;
+use crate::error_conversion::SessionOperationError;
+use crate::ffi::FFIPtr;
 use crate::ffi::{
     ArcFFI, BridgedBorrowedSharedPtr, BridgedOwnedSharedPtr, CSharpManagedStringPtr, CSharpStr,
     FFI, FFIBool, FFIStr, FromArc, WriteStringCallback,
@@ -18,7 +23,39 @@ use crate::pre_serialized_values::{PopulateValues, PopulateValuesContext, PreSer
 use crate::prepared_statement::BridgedPreparedStatement;
 use crate::row_set::RowSet;
 use crate::session_config::{BridgedSessionConfig, BridgedSessionConfigResult};
+use crate::task::EmptyAsyncResult;
 use crate::task::{BridgedFuture, ExceptionConstructors, ManuallyDestructible, Tcb};
+use uuid::Uuid;
+
+// Number of bytes in an RFC-4122 UUID.
+const UUID_BYTE_LEN: usize = 16;
+
+enum HostId {}
+
+#[repr(transparent)]
+pub struct HostIdPtr<'a> {
+    inner: FFIPtr<'a, HostId>,
+}
+
+impl HostIdPtr<'_> {
+    /// Parse an optional UUID from this host-id pointer.
+    ///
+    /// - Returns `Ok(None)` when the pointer is null (no required node).
+    /// - When non-null, assumes the caller provided exactly `UUID_BYTE_LEN` bytes at the
+    ///   address in big-endian order.
+    /// - The caller (managed side) is responsible for ensuring the memory is valid and pinned.
+    pub fn parse_uuid(&self) -> Result<Option<Uuid>, HostIdError> {
+        let Some(nn) = self.inner.as_non_null() else {
+            return Ok(None);
+        };
+
+        let bytes = unsafe { std::slice::from_raw_parts(nn.as_ptr() as *const u8, UUID_BYTE_LEN) };
+
+        Uuid::from_slice(bytes)
+            .map(Some)
+            .map_err(HostIdError::InvalidUuidBytes)
+    }
+}
 
 /// Internal representation of a session bridged to C#.
 /// It contains optional connected session state to allow for shutdown.
@@ -649,4 +686,117 @@ pub extern "C" fn session_get_cluster_state(
         *out_cluster_state = md;
     }
     FFIMaybeException::ok()
+}
+
+/// Ephemeral bridge for the `WaitForSchemaAgreement` family of FFI calls.
+struct SchemaAgreementBridge<'a> {
+    session_ptr: BridgedBorrowedSharedPtr<'a, BridgedSession>,
+    required_node: Option<Uuid>,
+}
+
+impl<'a> SchemaAgreementBridge<'a> {
+    fn new(session_ptr: BridgedBorrowedSharedPtr<'a, BridgedSession>) -> Self {
+        Self {
+            session_ptr,
+            required_node: None,
+        }
+    }
+
+    fn new_from_row_set(
+        session_ptr: BridgedBorrowedSharedPtr<'a, BridgedSession>,
+        row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
+    ) -> Result<Self, InvalidArgumentError<'static>> {
+        let Some(row_set) = ArcFFI::as_ref(row_set_ptr) else {
+            return Err(InvalidArgumentError("invalid or null row_set pointer"));
+        };
+
+        let required_node: Option<Uuid> = row_set
+            .pager
+            .blocking_lock()
+            .request_coordinators()
+            .next()
+            .map(|c| c.node().host_id);
+
+        Ok(Self {
+            session_ptr,
+            required_node,
+        })
+    }
+
+    fn new_with_required_node(
+        session_ptr: BridgedBorrowedSharedPtr<'a, BridgedSession>,
+        host_id: HostIdPtr<'_>,
+    ) -> Result<Self, HostIdError> {
+        Ok(Self {
+            session_ptr,
+            required_node: host_id.parse_uuid()?,
+        })
+    }
+
+    fn spawn(self, tcb: Tcb<EmptyAsyncResult>) {
+        let Some(session_arc) = ArcFFI::cloned_from_ptr(self.session_ptr) else {
+            tcb.fail_sync(InvalidArgumentError("invalid or null session pointer"));
+            return;
+        };
+
+        let session_guard_res = session_arc.try_read_owned();
+        let required_node = self.required_node;
+
+        tracing::trace!(
+            "[FFI] Scheduling session_await_schema_agreement (required_node: {:?})",
+            required_node
+        );
+
+        BridgedFuture::spawn::<_, _, SessionOperationError<SchemaAgreementError>, _>(
+            tcb,
+            async move {
+                let Ok(session_guard) = session_guard_res else {
+                    return Err(SessionOperationError::AlreadyShutdown);
+                };
+
+                let Some(session) = session_guard.session.as_ref() else {
+                    return Err(SessionOperationError::AlreadyShutdown);
+                };
+
+                session
+                    .await_schema_agreement_with_required_node_external(required_node)
+                    .await
+                    .map_err(SessionOperationError::Inner)?;
+
+                Ok(())
+            },
+        );
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn session_await_schema_agreement(
+    tcb: Tcb<EmptyAsyncResult>,
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+) {
+    SchemaAgreementBridge::new(session_ptr).spawn(tcb);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn session_await_schema_agreement_with_row_set(
+    tcb: Tcb<EmptyAsyncResult>,
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+    row_set_ptr: BridgedBorrowedSharedPtr<'_, RowSet>,
+) {
+    match SchemaAgreementBridge::new_from_row_set(session_ptr, row_set_ptr) {
+        Ok(bridge) => bridge.spawn(tcb),
+        Err(e) => tcb.fail_sync(e),
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn session_await_schema_agreement_with_required_node(
+    tcb: Tcb<EmptyAsyncResult>,
+    session_ptr: BridgedBorrowedSharedPtr<'_, BridgedSession>,
+    host_id: HostIdPtr<'_>,
+) {
+    match SchemaAgreementBridge::new_with_required_node(session_ptr, host_id) {
+        Ok(bridge) => bridge.spawn(tcb),
+        Err(e) => tcb.fail_sync(e),
+    }
 }

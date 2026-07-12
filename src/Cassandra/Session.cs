@@ -16,7 +16,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -450,16 +449,45 @@ namespace Cassandra
             }, TaskContinuationOptions.ExecuteSynchronously);
         }
 
-        public void WaitForSchemaAgreement(RowSet rs)
-        {
-            // Deprecated and implemented as no-op.
-        }
+        public void WaitForSchemaAgreement(RowSet rs) => TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync(rs));
 
         public bool WaitForSchemaAgreement(IPEndPoint hostAddress)
         {
-            // Deprecated and implemented as no-op.
-            return false;
+            TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync(hostAddress));
+            return true;
         }
+
+        public void WaitForSchemaAgreement(Guid hostId) => TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync(hostId));
+
+        public Task WaitForSchemaAgreementAsync(RowSet rs)
+        {
+            if (rs == null)
+            {
+                throw new ArgumentNullException(nameof(rs));
+            }
+
+            return bridgedSession.WaitForSchemaAgreementWithRowSet(rs.BridgedRowSet);
+        }
+
+        public Task WaitForSchemaAgreementAsync(IPEndPoint hostAddress)
+        {
+            if (hostAddress == null)
+            {
+                throw new ArgumentNullException(nameof(hostAddress));
+            }
+
+            var hostId = _cluster.Metadata.GetHostIdByIp(hostAddress)
+                ?? throw new ArgumentException(
+                    $"No known host with address {hostAddress} was found in the cluster.", nameof(hostAddress));
+
+            return WaitForSchemaAgreementAsync(hostId);
+        }
+
+        public Task WaitForSchemaAgreementAsync(Guid hostId) => bridgedSession.WaitForSchemaAgreementWithRequiredNode(hostId);
+
+        public void WaitForSchemaAgreement() => TaskHelper.WaitToComplete(WaitForSchemaAgreementAsync());
+
+        public Task WaitForSchemaAgreementAsync() => bridgedSession.WaitForSchemaAgreement();
 
         private IStatement GetDefaultStatement(string cqlQuery)
         {
