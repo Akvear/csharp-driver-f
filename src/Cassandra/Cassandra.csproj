@@ -37,6 +37,7 @@
     <MyMode>debug</MyMode>
     <MyMode Condition="'$(Configuration)' == 'Release'">release</MyMode>
     <RustNativeLibDir>../../rust/target/$(MyMode)</RustNativeLibDir>
+    <BuildRust Condition="'$(BuildRust)' == ''">true</BuildRust>
   </PropertyGroup>
 
   <ItemGroup>
@@ -75,7 +76,7 @@
 
   <Target Name="BuildRustNativeWrapperDebug"
           BeforeTargets="Build"
-      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Debug'">
+      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Debug' and '$(BuildRust)' == 'true'">
     <PropertyGroup>
       <RepoRootDir>$(MSBuildThisFileDirectory)../..</RepoRootDir>
     </PropertyGroup>
@@ -85,7 +86,7 @@
 
   <Target Name="BuildRustNativeWrapperRelease"
           BeforeTargets="Build"
-      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Release'">
+      Condition="'$(OS)' != 'Windows_NT' and '$(DesignTimeBuild)' != 'true' and '$(Configuration)' == 'Release' and '$(BuildRust)' == 'true'">
     <PropertyGroup>
       <RustProjectDir>$(MSBuildThisFileDirectory)../../rust</RustProjectDir>
     </PropertyGroup>
