@@ -87,7 +87,7 @@ namespace Cassandra
         unsafe private static extern void session_await_schema_agreement_with_required_node(Tcb<EmptyAsyncResult> tcb, IntPtr session, byte* hostId);
 
         /// <summary>
-        /// Creates a new session connected to the specified Cassandra URI. 
+        /// Creates a new session connected to the specified Cassandra URI.
         /// Checks the existence of the configured local datacenter.
         /// </summary>
         /// <param name="uri"></param>
@@ -385,10 +385,14 @@ namespace Cassandra
             internal int receiveBufferSize;
             internal FFIBool reuseAddress;
             internal int sendBufferSize;
-            internal int soLinger;
+            internal FFIBool soLinger;
 
             internal static BridgedTcpConfig BuildFrom(SocketOptions socketOptions)
             {
+                // If soLinger is non null and greater than 0, throw an exception because the Rust driver does not support it.
+                if (socketOptions?.SoLinger != null && socketOptions.SoLinger > 0)
+                    throw new NotSupportedException("Passed SocketOptions.SoLinger greater than 0. The Rust driver does not support setting SO_LINGER with non-zero linger time.");
+
                 return new BridgedTcpConfig
                 {
                     tcpNoDelay = socketOptions?.TcpNoDelay ?? SocketOptions.DefaultTcpNoDelay,
@@ -397,7 +401,7 @@ namespace Cassandra
                     receiveBufferSize = socketOptions?.ReceiveBufferSize ?? 0,
                     reuseAddress = socketOptions?.ReuseAddress ?? false,
                     sendBufferSize = socketOptions?.SendBufferSize ?? 0,
-                    soLinger = socketOptions?.SoLinger ?? -1,
+                    soLinger = (socketOptions?.SoLinger ?? -1) == 0,
                 };
             }
         }

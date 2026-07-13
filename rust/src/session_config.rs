@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::ffi::CSharpStr;
+use crate::ffi::{CSharpStr, FFIBool};
 
 use scylla::client::SelfIdentity;
 use scylla::{
@@ -18,10 +18,10 @@ const DEFAULT_DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct BridgedTcpConfig {
     /// Whether to enable TCP_NODELAY.
-    tcp_nodelay: bool,
+    tcp_nodelay: FFIBool,
 
     /// Whether to enable TCP keepalive.
-    keepalive: bool,
+    keepalive: FFIBool,
 
     /// TCP keepalive interval in milliseconds.
     tcp_keepalive_interval_millis: i32,
@@ -30,21 +30,24 @@ pub(crate) struct BridgedTcpConfig {
     receive_buffer_size: i32,
 
     /// Whether to enable SO_REUSEADDR.
-    reuse_address: bool,
+    reuse_address: FFIBool,
 
     /// Send buffer size in bytes. Values <= 0 mean "use default".
     send_buffer_size: i32,
 
-    /// SO_LINGER time in seconds. Values < 0 mean "use default".
-    so_linger: i32,
+    /// Whether to enable SO_LINGER flag.
+    // NOTE: `tcp_set_linger()` in Rust Driver is deprecated, because tokio is incompatible with blocking sockets.
+    // Instead, Rust Driver exposes `tcp_zero_linger()` which sets SO_LINGER with a timeout of 0.
+    // Therefore, we only expose a boolean here to indicate whether to enable SO_LINGER with a timeout of 0.
+    so_linger: FFIBool,
 }
 
 impl BridgedTcpConfig {
     /// Apply all TCP socket options in this config to `builder` and return it.
     pub(crate) fn apply_to_builder(self, mut builder: SessionBuilder) -> SessionBuilder {
-        builder = builder.tcp_nodelay(self.tcp_nodelay);
+        builder = builder.tcp_nodelay(self.tcp_nodelay.into());
 
-        if self.keepalive {
+        if self.keepalive.into() {
             builder = builder.tcp_keepalive_interval(Duration::from_millis(
                 self.tcp_keepalive_interval_millis as u64,
             ));
@@ -58,10 +61,11 @@ impl BridgedTcpConfig {
             builder = builder.tcp_send_buffer_size(self.send_buffer_size as usize);
         }
 
-        builder = builder.tcp_reuse_address(self.reuse_address);
+        builder = builder.tcp_reuse_address(self.reuse_address.into());
 
-        if self.so_linger >= 0 {
-            builder = builder.tcp_linger(Duration::from_secs(self.so_linger as u64));
+        if self.so_linger.into() {
+            // FIXME: switch to `tcp_zero_linger()` upon Rust Driver version bump to 1.7.0.
+            builder = builder.tcp_linger(Duration::ZERO);
         }
 
         builder

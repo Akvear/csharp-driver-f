@@ -157,6 +157,10 @@ The underlying Rust driver only supports a global, session-level request timeout
 
 **Migration Impact:** Remove any calls to `SetReadTimeoutMillis`. Once the Rust driver gains support for per-attempt timeouts, this option will usable again.
 
+#### `soLinger`
+
+The underlying Rust driver, due to its architecture based on the tokio async framework, only supports `SO_LINGER` set to 0. Enabling non-0 linger is not supported and will result in an exception being thrown.
+
 ## SimpleStatement API
 
 ### Removed APIs
@@ -211,4 +215,3 @@ The nodes are chosen at random, exactly like in the Rust driver.
 
 ### NewQueryPlan()
 All the `NewQueryPlan` methods in the policy classes are no longer supported, since all query routing is handled by the Rust driver.
-
