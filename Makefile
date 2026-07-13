@@ -207,9 +207,7 @@ clean-rust:
 .PHONY: build-rust
 build-rust:
 	cd rust; \
-	cargo build; \
-	cd ../examples/RustWrapper/bin/Debug/net9/; \
-	ln -f -s ../../../../../rust/target/debug/libcsharp_wrapper.so . || true
+	cargo build;
 
 .PHONY: build-rust-testing
 build-rust-testing:
@@ -224,9 +222,7 @@ build-rust-asan:
 		-Zsanitizer=address \
 		-C link-arg=-Wl,--whole-archive \
 		-C link-arg=/usr/lib/clang/20/lib/x86_64-redhat-linux-gnu/libclang_rt.asan_static.a" \
-	cargo +nightly build -Zbuild-std --target x86_64-unknown-linux-gnu; \
-	cd ../examples/RustWrapper/bin/Debug/net9/ ; \
-	ln -f -s ../../../../../rust/target/x86_64-unknown-linux-gnu/debug/libcsharp_wrapper.so . || true
+	cargo +nightly build -Zbuild-std --target x86_64-unknown-linux-gnu;
 
 .PHONY: run-wrapper-example
 run-wrapper-example:
