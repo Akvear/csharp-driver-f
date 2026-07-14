@@ -25,7 +25,7 @@ namespace Cassandra.IntegrationTests.Core
             var tabletsClause = TestClusterManager.IsScylla ? " AND tablets = { 'enabled' : false }" : "";
             Session.Execute(
                 $"CREATE KEYSPACE {_keyspaceName} WITH replication = " +
-                $"{{ 'class' : 'NetworkTopologyStrategy', 'replication_factor' : 1 }}{tabletsClause}");
+                $"{{ 'class' : 'NetworkTopologyStrategy', 'replication_factor' : 2 }}{tabletsClause}");
         }
 
         #region Simple Partition Key Tests
@@ -237,20 +237,17 @@ namespace Cassandra.IntegrationTests.Core
             CollectionAssert.AreEqual(addresses1, addresses2);
         }
 
-        #region NetworkTopologyStrategy / tablet-aware path
+        #region NetworkTopologyStrategy
 
         [Test]
         public void GetReplicas_ReturnsCorrectReplicaCount_ForNetworkTopologyStrategy()
         {
             var dc = Cluster.AllHosts().First().Datacenter;
-            var keyspaceName = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            Session.Execute($"CREATE KEYSPACE {keyspaceName} WITH replication = " +
-                            $"{{ 'class' : 'NetworkTopologyStrategy', '{dc}' : 2 }}");
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {keyspaceName}.{tableName} (id text PRIMARY KEY, value text)");
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (id text PRIMARY KEY, value text)");
             var allHosts = Cluster.AllHosts();
 
-            var replicas = Cluster.Metadata.GetReplicas(keyspaceName, tableName, new object[] { "key1" });
+            var replicas = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { "key1" });
 
             Assert.IsNotNull(replicas);
             Assert.AreEqual(2, replicas.Count);
