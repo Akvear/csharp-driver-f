@@ -53,9 +53,6 @@ jobs:
       - name: Copy development signing key
         run: "cp -f build/scylladb-dev.snk build/scylladb.snk"
 
-      - name: Build Rust lib
-        run: make build-rust
-
       - name: Build the project
         run: dotnet build src/Cassandra/Cassandra.csproj
 
@@ -137,9 +134,6 @@ jobs:
             exit 1
           fi
 
-      - name: Build Rust lib
-        run: make build-rust
-
       - name: Run unit tests
         run: make test-unit
 
@@ -192,9 +186,6 @@ jobs:
             echo "Opening for 127.0.$sub"
             for i in {0..255}; do sudo ifconfig lo0 alias 127.0.$sub.$i up; done
           done
-
-      - name: Build Rust lib
-        run: make build-rust
 
       - name: Run unit tests
         run: make test-unit
