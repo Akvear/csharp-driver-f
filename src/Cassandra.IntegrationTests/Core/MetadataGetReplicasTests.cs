@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using Cassandra.IntegrationTests.TestBase;
+using Cassandra.IntegrationTests.TestClusterManagement;
 using Cassandra.Tests;
 using NUnit.Framework;
 using NUnit.Framework.Legacy;
@@ -12,8 +13,19 @@ namespace Cassandra.IntegrationTests.Core
     [Category(TestCategory.Short), Category(TestCategory.RealCluster)]
     public class MetadataGetReplicasTests : SharedClusterTest
     {
+        private readonly string _keyspaceName = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
+
         public MetadataGetReplicasTests() : base(3)
         {
+        }
+
+        public override void OneTimeSetUp()
+        {
+            base.OneTimeSetUp();
+            var tabletsClause = TestClusterManager.IsScylla ? " AND tablets = { 'enabled' : false }" : "";
+            Session.Execute(
+                $"CREATE KEYSPACE {_keyspaceName} WITH replication = " +
+                $"{{ 'class' : 'NetworkTopologyStrategy', 'replication_factor' : 1 }}{tabletsClause}");
         }
 
         #region Simple Partition Key Tests
@@ -27,10 +39,10 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_ReturnsValidReplicas_ForSimplePartitionKey(string cqlType, object keyValue)
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk {cqlType} PRIMARY KEY, value text)");
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk {cqlType} PRIMARY KEY, value text)");
             var allHosts = Cluster.AllHosts();
 
-            var replicas = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { keyValue });
+            var replicas = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { keyValue });
 
             Assert.IsNotNull(replicas);
             Assert.Greater(replicas.Count, 0);
@@ -45,11 +57,11 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_ReturnsConsistentReplicas_ForSimpleKey_UUID()
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk uuid PRIMARY KEY, value text)");
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk uuid PRIMARY KEY, value text)");
             var uuid = Guid.Parse("550e8400-e29b-41d4-a716-446655440000");
 
-            var replicas1 = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { uuid });
-            var replicas2 = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { uuid });
+            var replicas1 = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { uuid });
+            var replicas2 = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { uuid });
 
             Assert.AreEqual(replicas1.Count, replicas2.Count);
             var addresses1 = replicas1.Select(r => r.Host.Address).OrderBy(a => a.ToString()).ToList();
@@ -66,8 +78,8 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_HandlesEdgeCases_ForTextKeys(string keyValue)
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk text PRIMARY KEY, value text)");
-            var replicas = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { keyValue });
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk text PRIMARY KEY, value text)");
+            var replicas = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { keyValue });
 
             Assert.IsNotNull(replicas);
             Assert.Greater(replicas.Count, 0);
@@ -80,8 +92,8 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_HandlesEdgeCases_ForIntKeys(int keyValue)
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk int PRIMARY KEY, value text)");
-            var replicas = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { keyValue });
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk int PRIMARY KEY, value text)");
+            var replicas = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { keyValue });
 
             Assert.IsNotNull(replicas);
             Assert.Greater(replicas.Count, 0);
@@ -99,10 +111,10 @@ namespace Cassandra.IntegrationTests.Core
             string type1, string type2, object value1, object value2)
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk1 {type1}, pk2 {type2}, value text, PRIMARY KEY ((pk1, pk2)))");
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk1 {type1}, pk2 {type2}, value text, PRIMARY KEY ((pk1, pk2)))");
             var allHosts = Cluster.AllHosts();
 
-            var replicas = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { value1, value2 });
+            var replicas = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { value1, value2 });
 
             Assert.IsNotNull(replicas);
             Assert.Greater(replicas.Count, 0);
@@ -117,8 +129,8 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_ReturnsValidReplicas_ForCompositeKey_ThreeComponents()
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk1 text, pk2 int, pk3 bigint, value text, PRIMARY KEY ((pk1, pk2, pk3)))");
-            var replicas = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { "component1", 42, 9876543210L });
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk1 text, pk2 int, pk3 bigint, value text, PRIMARY KEY ((pk1, pk2, pk3)))");
+            var replicas = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { "component1", 42, 9876543210L });
 
             Assert.IsNotNull(replicas);
             Assert.Greater(replicas.Count, 0);
@@ -128,9 +140,9 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_ReturnsValidReplicas_ForCompositeKey_FourComponents()
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk1 text, pk2 int, pk3 boolean, pk4 double, value text, " +
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk1 text, pk2 int, pk3 boolean, pk4 double, value text, " +
                            $"PRIMARY KEY ((pk1, pk2, pk3, pk4)))");
-            var replicas = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { "part1", 100, false, 3.14159 });
+            var replicas = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { "part1", 100, false, 3.14159 });
 
             Assert.IsNotNull(replicas);
             Assert.Greater(replicas.Count, 0);
@@ -140,12 +152,12 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_ReturnsConsistentReplicas_ForSameCompositeKey()
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk1 text, pk2 int, value text, PRIMARY KEY ((pk1, pk2)))");
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk1 text, pk2 int, value text, PRIMARY KEY ((pk1, pk2)))");
             IReadOnlyList<object> key = new object[] { "consistency_test", 999 };
 
-            var replicas1 = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, key);
-            var replicas2 = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, key);
-            var replicas3 = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, key);
+            var replicas1 = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, key);
+            var replicas2 = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, key);
+            var replicas3 = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, key);
 
             Assert.AreEqual(replicas1.Count, replicas2.Count);
             Assert.AreEqual(replicas1.Count, replicas3.Count);
@@ -162,8 +174,8 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_HandlesEdgeCases_ForCompositeKeys(string textValue, int intValue)
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk1 text, pk2 int, value text, PRIMARY KEY ((pk1, pk2)))");
-            var replicas = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { textValue, intValue });
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk1 text, pk2 int, value text, PRIMARY KEY ((pk1, pk2)))");
+            var replicas = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { textValue, intValue });
 
             Assert.IsNotNull(replicas);
             Assert.Greater(replicas.Count, 0);
@@ -173,7 +185,7 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_DifferentKeys_ReturnValidReplicas()
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (pk1 text, pk2 int, value text, PRIMARY KEY ((pk1, pk2)))");
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (pk1 text, pk2 int, value text, PRIMARY KEY ((pk1, pk2)))");
             var keys = new object[][]
             {
                 new object[] { "key_a", 1 },
@@ -182,7 +194,7 @@ namespace Cassandra.IntegrationTests.Core
                 new object[] { "different_prefix", 1000 },
             };
 
-            var allReplicas = keys.Select(k => Cluster.Metadata.GetReplicas(KeyspaceName, tableName, k)).ToList();
+            var allReplicas = keys.Select(k => Cluster.Metadata.GetReplicas(_keyspaceName, tableName, k)).ToList();
 
             foreach (var replicas in allReplicas)
             {
@@ -197,10 +209,10 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_ReturnsHosts_ForGivenPartitionKey()
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (id text PRIMARY KEY, value text)");
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (id text PRIMARY KEY, value text)");
             var allHosts = Cluster.AllHosts();
 
-            var replicas = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { "key1" });
+            var replicas = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { "key1" });
 
             Assert.IsNotNull(replicas);
             Assert.Greater(replicas.Count, 0);
@@ -215,9 +227,9 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_ReturnsSameReplicas_ForSameKey()
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (id text PRIMARY KEY, value text)");
-            var replicas1 = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { "consistent_key" });
-            var replicas2 = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, new object[] { "consistent_key" });
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (id text PRIMARY KEY, value text)");
+            var replicas1 = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { "consistent_key" });
+            var replicas2 = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, new object[] { "consistent_key" });
 
             Assert.AreEqual(replicas1.Count, replicas2.Count);
             var addresses1 = replicas1.Select(r => r.Host.Address).OrderBy(a => a.ToString()).ToList();
@@ -257,11 +269,11 @@ namespace Cassandra.IntegrationTests.Core
         public void GetReplicas_Cluster_DelegatesToMetadata()
         {
             var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
-            Session.Execute($"CREATE TABLE {KeyspaceName}.{tableName} (id text PRIMARY KEY, value text)");
+            Session.Execute($"CREATE TABLE {_keyspaceName}.{tableName} (id text PRIMARY KEY, value text)");
             IReadOnlyList<object> key = new object[] { "facade_key" };
 
-            var viaCluster = Cluster.GetReplicas(KeyspaceName, tableName, key);
-            var viaMetadata = Cluster.Metadata.GetReplicas(KeyspaceName, tableName, key);
+            var viaCluster = Cluster.GetReplicas(_keyspaceName, tableName, key);
+            var viaMetadata = Cluster.Metadata.GetReplicas(_keyspaceName, tableName, key);
 
             Assert.IsNotNull(viaCluster);
             var clusterAddresses = viaCluster.Select(r => r.Host.Address).OrderBy(a => a.ToString()).ToList();
@@ -323,7 +335,8 @@ namespace Cassandra.IntegrationTests.Core
             for (var rf = 1; rf <= AmountOfNodes; rf++)
             {
                 var keyspaceName = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant() + $"_rf{rf}_n{AmountOfNodes}";
-                Session.Execute($"CREATE KEYSPACE IF NOT EXISTS {keyspaceName} WITH replication = {{ 'class' : 'NetworkTopologyStrategy', 'replication_factor' : {rf} }}");
+                var tabletsClause = TestClusterManager.IsScylla ? " AND tablets = { 'enabled' : false }" : "";
+                Session.Execute($"CREATE KEYSPACE IF NOT EXISTS {keyspaceName} WITH replication = {{ 'class' : 'NetworkTopologyStrategy', 'replication_factor' : {rf} }}{tabletsClause}");
                 var tableName = TestUtils.GetUniqueTableName().ToLowerInvariant();
                 Session.Execute($"CREATE TABLE {keyspaceName}.{tableName} (id text PRIMARY KEY, value text)");
 
