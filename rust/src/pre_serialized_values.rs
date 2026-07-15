@@ -1,11 +1,11 @@
 use crate::error_conversion::{FFIException, FFIMaybeException};
 use crate::ffi::{BridgedBorrowedExclusivePtr, FFI, FFIPtr, FFISlice, FromBox};
 use crate::task::ExceptionConstructors;
-use scylla_cql::frame::response::result::{ColumnType, NativeType};
-use scylla_cql::serialize::SerializationError;
-use scylla_cql::serialize::row::SerializedValues;
-use scylla_cql::serialize::value::SerializeValue;
-use scylla_cql::serialize::writers::CellWriter;
+use scylla::frame::response::result::{ColumnType, NativeType};
+use scylla::serialize::SerializationError;
+use scylla::serialize::value::SerializeValue;
+use scylla::serialize::writers::CellWriter;
+use scylla_cql_core::serialize::row::SerializedValues;
 
 /// A single pre-serialized cell: either a C#-backed value, or a
 /// logical null/unset marker.
@@ -22,7 +22,7 @@ impl SerializeValue for PreSerializedCell<'_> {
         &self,
         _typ: &ColumnType,
         writer: CellWriter<'b>,
-    ) -> Result<scylla_cql::serialize::writers::WrittenCellProof<'b>, SerializationError> {
+    ) -> Result<scylla::serialize::writers::WrittenCellProof<'b>, SerializationError> {
         match self {
             PreSerializedCell::Value(val) => writer
                 .set_value(val.as_slice())
@@ -34,7 +34,6 @@ impl SerializeValue for PreSerializedCell<'_> {
 }
 
 /// Holds the final serialized values that can be used with queries.
-/// Wraps scylla_cql::SerializedValues.
 pub(crate) struct PreSerializedValues {
     serialized_values: SerializedValues,
 }
