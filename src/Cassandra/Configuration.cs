@@ -238,25 +238,62 @@ namespace Cassandra
             MonitorReportingOptions = monitorReportingOptions ?? new MonitorReportingOptions();
         }
 
+        /// <summary>
+        /// Parses a collection of contact points (string hostnames, <see cref="System.Net.IPAddress"/>,
+        /// or <see cref="System.Net.IPEndPoint"/> instances) into "host:port" strings suitable for
+        /// the Rust driver. Strings must not contain a port; the port from <see cref="ProtocolOptions"/>
+        /// is used unless an <see cref="System.Net.IPEndPoint"/> provides its own.
+        /// </summary>
+        /// <param name="contactPoints">Contact points as strings, IPAddress, or IPEndPoint objects.</param>
+        /// <returns>Formatted "host:port" strings.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// Thrown when a string contact point contains a colon (port) or an unsupported type is provided.
+        /// </exception>
         internal IEnumerable<string> ParseContactPoints(IEnumerable<object> contactPoints)
         {
+            int port = ProtocolOptions.Port;
+
+
             return contactPoints.Select(cp =>
             {
                 switch (cp)
                 {
                     case string contactPointText:
-                        return contactPointText;
+                        // If the contact point is a string, throw if it's host:port.
+                        if (!System.Net.IPAddress.TryParse(contactPointText, out var _ip) && contactPointText.Contains(':'))
+                        {
+                            throw new InvalidOperationException(
+                                $"Contact point '{contactPointText}' should not contain a port. " +
+                                $"Use WithPort() to set the port for all contact points.");
+                        }
+                        return FormatHostPort(contactPointText, port);
                     case System.Net.IPEndPoint ipEndPoint:
-                        return ipEndPoint.ToString();
+                        return FormatHostPort(ipEndPoint.Address.ToString(), ipEndPoint.Port);
                     case System.Net.IPAddress ipAddress:
-                        // Rust Driver correctly supports bare IPs passed as contact points. It first tries to resolve the hostname as containing the port.
-                        // If resolution fails, it retries with the default port (9042) appended.
-                        // https://github.com/scylladb/scylla-rust-driver/blob/d1a5c373a5fbab95f84635c25c5174480b7d6491/scylla/src/cluster/node.rs#L309-L338
-                        return ipAddress.ToString();
+                        return FormatHostPort(ipAddress.ToString(), port);
+
                     default:
                         throw new InvalidOperationException($"Contact points should be either string, IPEndPoint, or IPAddress instances, not {cp.GetType()}");
                 }
             });
+        }
+
+        /// <summary>
+        /// Formats a host and port into a connection string for the Rust driver.
+        /// IPv6 addresses are wrapped in brackets (e.g. "[::1]:9042"),
+        /// while IPv4 addresses and hostnames are formatted as-is (e.g. "127.0.0.1:9042").
+        /// </summary>
+        /// <param name="host">The hostname or IP address string.</param>
+        /// <param name="port">The port number.</param>
+        /// <returns>A formatted "host:port" string.</returns>
+        private static string FormatHostPort(string host, int port)
+        {
+            if (host.Contains(':'))
+            {
+                // IPv6 address — wrap in brackets
+                return $"[{host}]:{port}";
+            }
+            return $"{host}:{port}";
         }
     }
 }
