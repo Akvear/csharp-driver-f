@@ -118,7 +118,11 @@ namespace Cassandra
 
             internal string ToManagedString()
             {
-                return Marshal.PtrToStringUTF8(ptr, (int)len);
+                if (ptr == IntPtr.Zero)
+                {
+                    return null;
+                }
+                return Marshal.PtrToStringUTF8(ptr, checked((int)len));
             }
         }
 
@@ -758,7 +762,7 @@ namespace Cassandra
 
             internal static readonly Constructors* ConstructorsPtr;
 
-            // Enum to use as the logger type for messages forwarded from Rust code. 
+            // Enum to use as the logger type for messages forwarded from Rust code.
             private enum Rust { }
 
             // Logger used for messages forwarded from Rust code. The logger is static so all callbacks reuse
