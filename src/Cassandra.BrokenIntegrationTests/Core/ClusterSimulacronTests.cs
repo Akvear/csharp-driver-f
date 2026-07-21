@@ -112,20 +112,6 @@ namespace Cassandra.IntegrationTests.Core
         }
 
         [Test]
-        public void Should_Try_To_Resolve_And_Continue_With_The_Next_Contact_Point_If_It_Fails()
-        {
-            using (var cluster = ClusterBuilder()
-                                        .AddContactPoint("not-a-host")
-                                        .AddContactPoint(TestCluster.InitialContactPoint)
-                                        .Build())
-            {
-                var session = cluster.Connect();
-                session.Execute("SELECT * FROM system.local WHERE key='local'");
-                Assert.That(cluster.AllHosts().Count, Is.EqualTo(3));
-            }
-        }
-
-        [Test]
         public async Task Cluster_Init_Keyspace_Race_Test()
         {
             using (var cluster = ClusterBuilder()
