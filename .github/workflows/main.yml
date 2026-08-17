@@ -50,6 +50,9 @@ jobs:
       - name: Run static checks (checks formatting, linting and performs code analysis)
         run: make check
 
+      - name: Run Rust unit tests
+        run: make test-rust
+
       - name: Copy development signing key
         run: "cp -f build/scylladb-dev.snk build/scylladb.snk"
 

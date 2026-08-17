@@ -68,6 +68,10 @@ fix-csharp:
 fix-rust:
 	cd rust; cargo fmt && cargo fix && cargo clippy --all-targets --all-features --fix
 
+.PHONY: test-rust
+test-rust:
+	cd rust; cargo test --all-features
+
 .PHONY: test-unit
 test-unit: .use-development-snk build-rust-testing
 	dotnet build-server shutdown

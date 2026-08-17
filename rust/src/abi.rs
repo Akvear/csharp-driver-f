@@ -93,8 +93,6 @@ registry! {
     // Exception plumbing.
     FFIException,
     FFIMaybeException,
-    // The 23-slot constructor table. A slot added on one side only is the exact failure this whole
-    // mechanism exists for: Rust would read one entry past the end of C#'s allocation.
     ExceptionConstructors,
 
     // Async plumbing.
