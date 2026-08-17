@@ -335,6 +335,7 @@ impl InvalidQueryConstructor {
 }
 
 /// FFI constructor for C# `InvalidTypeException`.
+#[repr(transparent)]
 pub struct InvalidTypeExceptionConstructor(
     unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
@@ -347,6 +348,7 @@ impl InvalidTypeExceptionConstructor {
 }
 
 /// FFI constructor for C# `SerializationException`.
+#[repr(transparent)]
 pub struct SerializationExceptionConstructor(
     unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
@@ -359,6 +361,7 @@ impl SerializationExceptionConstructor {
 }
 
 /// FFI constructor for C# `DeserializationException`.
+#[repr(transparent)]
 pub struct DeserializationExceptionConstructor(
     unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException,
 );
