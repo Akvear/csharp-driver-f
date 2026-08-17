@@ -1,3 +1,4 @@
+use ffi_type_derive::FFIType;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::sync::RwLock as StdRwLock;
@@ -67,7 +68,7 @@ pub(crate) struct BridgedSessionInner {
 
 /// Execution options for bound statements mirrored with the managed FFI struct.
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, FFIType)]
 pub struct BoundStatementExecutionOptions {
     pub consistency_level: u16,
     pub has_consistency_level: FFIBool,
@@ -78,7 +79,7 @@ pub struct BoundStatementExecutionOptions {
 /// Execution options for simple (unprepared) statements mirrored with
 /// the managed FFI struct.
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, FFIType)]
 pub struct SimpleStatementExecutionOptions {
     pub consistency_level: u16,
     pub has_consistency_level: FFIBool,

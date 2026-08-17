@@ -6,6 +6,7 @@ use crate::ffi::{
 use crate::pre_serialized_values::{PopulateValues, PopulateValuesContext, PreSerializedValues};
 use crate::row_set::column_type_to_code;
 use crate::task::ExceptionConstructors;
+use ffi_type_derive::FFIType;
 use scylla::cluster::ClusterState;
 use scylla::cluster::metadata::{ColumnType, Strategy};
 use scylla::frame::response::result::TableSpec;
@@ -43,6 +44,7 @@ type ConstructCSharpHost = unsafe extern "C" fn(
 /// Struct for passing node metadata from Rust to C# in a single callback parameter.
 /// Any change to this struct must be reflected in the C# definition and the AddHostToList method.
 #[repr(C)]
+#[derive(FFIType)]
 pub struct CSharpHostData<'a> {
     id_bytes: FFISlice<'a, u8>,
     ip_bytes: FFISlice<'a, u8>,
@@ -60,7 +62,7 @@ pub struct ReplicasCallbackContext<'a>(FFINonNullPtr<'a, ReplicaList>);
 /// A replica handed to C#: a pointer to the node's host ID (`Uuid`, which C# copies
 /// into a `Guid`) plus its shard.
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, FFIType)]
 pub struct ReplicaPair<'a> {
     host_id_ptr: FFINonNullPtr<'a, Uuid>,
     shard: Shard,
@@ -399,9 +401,15 @@ type OtherStrategyAddRepFactor = unsafe extern "C" fn(
 
 // Replication factor callbacks grouped into a single struct to simplify passing them to the keyspace metadata construction function.
 #[repr(C)]
+#[derive(FFIType)]
 pub struct StrategyAddRepFactor {
+    // Described as plain machine words: the offsets are verified against C#, the signatures are
+    // taken on trust. See `crate::abi`.
+    #[ffi_type(word)]
     simple_strategy: SimpleStrategyAddRepFactor,
+    #[ffi_type(word)]
     network_topology_strategy: NetworkTopologyStrategyAddRepFactor,
+    #[ffi_type(word)]
     other_strategy: OtherStrategyAddRepFactor,
 }
 

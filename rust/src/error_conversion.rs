@@ -1,4 +1,5 @@
 use crate::ffi::{FFIGCHandle, FFIMaybeGCHandle, FFISlice, FFIStr};
+use ffi_type_derive::FFIType;
 use scylla::errors::{
     BadKeyspaceName, ClusterStateTokenError, ConnectionError, ConnectionPoolError, DbError,
     DeserializationError, MetadataError, NewSessionError, NextPageError, NextRowError,
@@ -17,7 +18,7 @@ enum Exception {}
 
 /// A GCHandle'd C# Exception.
 /// This is used across the FFI boundary to represent exceptions created on the C# side.
-#[derive(Debug)]
+#[derive(Debug, FFIType)]
 #[repr(transparent)]
 pub struct FFIException(FFIGCHandle<Exception>);
 
@@ -33,6 +34,7 @@ const _: [(); size_of::<FFIException>()] = [(); size_of::<(*const (), *const ())
 /// All changes to this struct must be mirrored in C# code in the exact same order.
 #[repr(transparent)]
 #[must_use]
+#[derive(FFIType)]
 pub struct FFIMaybeException(FFIMaybeGCHandle<Exception>);
 
 // Compile-time assertion that `FFIMaybeException` is double-pointer-sized.

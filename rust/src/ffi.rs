@@ -1,4 +1,6 @@
 use crate::error_conversion::{FFIException, FFIMaybeException};
+use crate::ffi_type::WordLike;
+use ffi_type_derive::FFIType;
 use std::ffi::{CStr, c_char, c_void};
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -88,6 +90,7 @@ impl<O: Ownership> Properties for O {
 /// we are guaranteed, that for `T: Sized`, our struct has the same layout
 /// and function call ABI as simply [`NonNull<T>`].
 #[repr(transparent)]
+#[derive(FFIType)]
 pub struct BridgedPtr<'a, T: Sized, P: Properties> {
     ptr: Option<NonNull<T>>,
     _phantom: PhantomData<&'a P>,
@@ -675,6 +678,7 @@ mod tests {
 /// Represents a slice passed over FFI from Rust to C#.
 /// SAFETY: `ptr` must be a valid pointer to an array of length `len`.
 #[repr(C)]
+#[derive(FFIType)]
 pub struct FFISlice<'a, T: Sized + Blittable> {
     ptr: BridgedBorrowedSharedPtr<'a, T>,
     len: usize,
@@ -739,6 +743,7 @@ impl IpOctets {
 /// Represents a string passed over FFI from Rust to C#.
 /// SAFETY: `slice` must be a valid pointer a UTF-8 encoded string with correctly set length.
 #[repr(transparent)]
+#[derive(FFIType)]
 pub struct FFIStr<'a> {
     slice: FFISlice<'a, u8>,
 }
@@ -771,7 +776,7 @@ const _: [(); std::mem::align_of::<FFIStr<'static>>()] =
 /// Uses u8 representation to match C#'s byte.
 /// SAFETY: Only 0 (false) and 1 (true) are valid values.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, FFIType)]
 pub struct FFIBool {
     value: u8,
 }
@@ -797,10 +802,14 @@ const _: [(); std::mem::align_of::<FFIBool>()] = [(); std::mem::align_of::<u8>()
 
 /// Represents a non-null pointer to C#-allocated data.
 #[repr(transparent)]
+#[derive(FFIType)]
 pub struct FFINonNullPtr<'a, T: Sized> {
     ptr: NonNull<T>,
     _phantom: PhantomData<&'a ()>,
 }
+
+// Wraps a `NonNull`, so it keeps the null niche that makes `Option<Self>` a single word.
+impl<'a, T: Sized> WordLike for FFINonNullPtr<'a, T> {}
 
 impl<'a, T> FFINonNullPtr<'a, T> {
     pub(crate) fn from_ref(value: &'a T) -> Self {
@@ -834,6 +843,7 @@ const _: [(); std::mem::size_of::<FFINonNullPtr<'_, ()>>()] =
 
 /// Represents a nullable pointer to C#-allocated data.
 #[repr(transparent)]
+#[derive(FFIType)]
 pub struct FFIPtr<'a, T: Sized> {
     ptr: Option<FFINonNullPtr<'a, T>>,
 }
@@ -878,7 +888,7 @@ impl<'a> CSharpStr<'a> {
 
 enum CSharpManagedString {}
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, FFIType)]
 #[repr(transparent)]
 pub(crate) struct CSharpManagedStringPtr(FFIPtr<'static, CSharpManagedString>);
 
@@ -905,7 +915,12 @@ pub(crate) unsafe fn ffi_callback_for_each<Ctx: Copy, T>(
 }
 
 #[repr(transparent)]
+#[derive(FFIType)]
 pub(crate) struct GCHandlePtr<'a, T>(FFINonNullPtr<'a, T>);
+
+// Transparent over `FFINonNullPtr`, so `Option<Self>` is still a single word - which is what
+// `FFIMaybeGCHandle` relies on.
+impl<'a, T> WordLike for GCHandlePtr<'a, T> {}
 
 impl<'a, T> Clone for GCHandlePtr<'a, T> {
     fn clone(&self) -> Self {
@@ -930,8 +945,10 @@ const _: [(); std::mem::size_of::<GCHandlePtr<'_, ()>>()] = [(); std::mem::size_
 /// This is useful to ensure that GCHandle is freed when Rust-side
 /// object is dropped. Mainly employable in async scenarios.
 #[repr(C)]
+#[derive(FFIType)]
 pub struct FFIGCHandle<T> {
     gchandle: GCHandlePtr<'static, T>,
+    #[ffi_type(word)]
     free: unsafe extern "C" fn(GCHandlePtr<T>),
 }
 
@@ -981,8 +998,10 @@ impl<T> Drop for FFIGCHandle<T> {
 /// This is useful to ensure that GCHandle is freed when Rust-side
 /// object is dropped. Mainly employable in async scenarios.
 #[repr(C)]
+#[derive(FFIType)]
 pub struct FFIMaybeGCHandle<T> {
     gchandle: Option<GCHandlePtr<'static, T>>,
+    #[ffi_type(word)]
     free: Option<unsafe extern "C" fn(GCHandlePtr<T>)>,
 }
 

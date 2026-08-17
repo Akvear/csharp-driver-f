@@ -1,3 +1,4 @@
+use ffi_type_derive::FFIType;
 use std::time::Duration;
 
 use crate::ffi::{CSharpStr, FFIBool};
@@ -15,7 +16,7 @@ const DEFAULT_DRIVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 ///
 /// Any changes to this struct must be mirrored in the corresponding C# struct.
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, FFIType)]
 pub(crate) struct BridgedTcpConfig {
     /// Whether to enable TCP_NODELAY.
     tcp_nodelay: FFIBool,
@@ -72,7 +73,7 @@ impl BridgedTcpConfig {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, FFIType)]
 pub(crate) struct BridgedLoadBalancingPolicy<'a> {
     is_token_aware: FFIBool,
     permit_dc_failover: FFIBool,
@@ -118,7 +119,7 @@ pub(crate) struct BridgedSessionConfigResult<'a> {
 ///
 /// Any changes to this struct must be mirrored in the corresponding C# struct.
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, FFIType)]
 pub(crate) struct BridgedSessionConfig<'a> {
     /// Contact point URIs, comma-separated.
     uri: CSharpStr<'a>,

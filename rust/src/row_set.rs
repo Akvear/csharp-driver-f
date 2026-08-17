@@ -1,3 +1,4 @@
+use ffi_type_derive::FFIType;
 use std::task::Poll;
 
 use scylla::client::pager::QueryPager;
@@ -146,6 +147,7 @@ type DeserializeValueDirect = unsafe extern "C" fn(
 
 /// Result of a synchronous attempt to read the next row.
 #[repr(u8)]
+#[derive(FFIType)]
 pub enum SyncNextRowResult {
     /// A row was successfully read and deserialized.
     GotRow = 0,
