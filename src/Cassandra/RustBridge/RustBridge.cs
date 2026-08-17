@@ -21,6 +21,8 @@ namespace Cassandra
         /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("FFIGCHandle")]
+        [FfiLayout("FFIException")]
         internal readonly struct FFIGCHandle
         {
             internal readonly IntPtr gchandle;
@@ -54,6 +56,7 @@ namespace Cassandra
         /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("FFIMaybeGCHandle")]
         internal readonly struct FFIMaybeGCHandle
         {
             internal readonly IntPtr gchandle;
@@ -105,6 +108,7 @@ namespace Cassandra
         /// Used to pass strings from Rust to C#.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("FFIStr")]
         internal readonly struct FFIString
         {
             internal readonly IntPtr ptr;
@@ -157,6 +161,7 @@ namespace Cassandra
         /// Used to pass slices from Rust to C#.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("FFISlice")]
         internal readonly struct FFISlice<T>
             where T : unmanaged
         {
@@ -212,6 +217,7 @@ namespace Cassandra
         /// Has identical memory layout to FFISlice, allowing safe reinterpretation.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("FFISlice")]
         internal readonly struct FFISliceRaw
         {
             internal readonly IntPtr ptr;
@@ -247,6 +253,7 @@ namespace Cassandra
         /// Used to pass bools between Rust and C#, in both directions.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("FFIBool")]
         internal readonly struct FFIBool : IBridgedTaskResult
         {
             private readonly byte value;
@@ -323,6 +330,7 @@ namespace Cassandra
         /// The Rust side must also define this struct with a u8 field.
         /// </remarks>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("EmptyAsyncResult")]
         internal readonly struct EmptyAsyncResult : IBridgedTaskResult
         {
             // Dummy field to ensure consistent size across FFI boundary.
@@ -372,6 +380,7 @@ namespace Cassandra
         /// All changes to this struct's fields must be mirrored in Rust code in the exact same order.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("ManuallyDestructible")]
         internal readonly struct ManuallyDestructible : IBridgedTaskResult
         {
             internal readonly IntPtr Ptr;
@@ -457,6 +466,7 @@ namespace Cassandra
         /// - squeeze multiple native function parameters into 1.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("Tcb")]
         internal readonly struct Tcb<R> where R : IBridgedTaskResult
         {
             /// <summary>
@@ -683,6 +693,7 @@ namespace Cassandra
             /// and in Rust code in the exact same order (alphabetical).
             /// </summary>
             [StructLayout(LayoutKind.Sequential)]
+            [FfiLayout("ExceptionConstructors")]
             internal readonly struct Constructors
             {
                 internal readonly IntPtr already_exists_constructor;
@@ -879,6 +890,7 @@ namespace Cassandra
         // Note that there's no FFIException on the C# side, because lack of move semantics in C# makes
         // it impossible to enforce _freeing exactly once_.
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("FFIMaybeException")]
         internal struct FFIMaybeException
         {
             // Fields:

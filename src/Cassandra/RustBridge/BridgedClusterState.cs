@@ -21,6 +21,7 @@ namespace Cassandra
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("CSharpHostData")]
         struct CSharpHostData
         {
             public FFISliceRaw IdBytes;
@@ -127,6 +128,7 @@ namespace Cassandra
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("ReplicaPair")]
         private readonly struct ReplicaPair
         {
             // Points to a 16-byte UUID (Rust side: *const [u8; 16]).
@@ -302,6 +304,7 @@ namespace Cassandra
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("StrategyAddRepFactor")]
         private unsafe readonly struct StrategyAddRepFactorCallbacks
         {
             public readonly IntPtr SimpleStrategyCallback;

@@ -13,6 +13,7 @@ namespace Cassandra
     /// Result of a synchronous attempt to read the next row.
     /// Must match the Rust <c>SyncNextRowResult</c> enum layout.
     /// </summary>
+    [FfiLayout("SyncNextRowResult")]
     internal enum SyncNextRowResult : byte
     {
         /// <summary>A row was successfully read and deserialized.</summary>

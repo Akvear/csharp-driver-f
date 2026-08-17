@@ -377,6 +377,7 @@ namespace Cassandra
         /// Any changes to this struct must be mirrored in the corresponding Rust struct.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("BridgedTcpConfig")]
         internal struct BridgedTcpConfig
         {
             internal FFIBool tcpNoDelay;
@@ -406,6 +407,7 @@ namespace Cassandra
             }
         }
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("BridgedLoadBalancingPolicy")]
         internal struct BridgedLoadBalancingPolicy
         {
             internal FFIBool isTokenAware;
@@ -482,6 +484,7 @@ namespace Cassandra
         /// Any changes to this struct must be mirrored in the corresponding Rust struct.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("BridgedSessionConfig")]
         internal struct BridgedSessionConfig
         {
             [MarshalAs(UnmanagedType.LPUTF8Str)]
@@ -514,6 +517,7 @@ namespace Cassandra
         /// Any changes to this struct must be mirrored in the Rust FFI definition.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("BoundStatementExecutionOptions")]
         private readonly struct PreparedStatementExecutionOptions
         {
             internal readonly ushort ConsistencyLevel;
@@ -539,6 +543,7 @@ namespace Cassandra
         /// Any changes to this struct must be mirrored in the Rust FFI definition.
         /// </summary>
         [StructLayout(LayoutKind.Sequential)]
+        [FfiLayout("SimpleStatementExecutionOptions")]
         private readonly struct SimpleStatementExecutionOptions
         {
             internal readonly ushort ConsistencyLevel;
