@@ -1,0 +1,15 @@
+[package]
+name = "ffi-type-derive"
+version = "0.0.0"
+edition = "2024"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
+
+[lints.rust]
+unsafe-op-in-unsafe-fn = "warn"

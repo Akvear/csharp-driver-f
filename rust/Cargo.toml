@@ -1,9 +1,16 @@
+[workspace]
+members = [".", "ffi-type-derive"]
+
 [package]
 name = "csharp_wrapper"
 version = "0.0.0"
 edition = "2024"
 
 [dependencies]
+# Compile-time only: derives `FFIType`, which describes the layout of every type that crosses the
+# FFI boundary so the managed side can be verified against it. Kept as a mandatory (not optional)
+# dependency so that a plain `cargo build` type-checks every derive.
+ffi-type-derive = { path = "ffi-type-derive" }
 scylla = { version = "1.9.0", features = [
     "unstable-csharp-rs",
 ] }
