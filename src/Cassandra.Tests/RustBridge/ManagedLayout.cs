@@ -52,12 +52,12 @@ namespace Cassandra.Tests
     /// </summary>
     internal readonly struct AbiLeaf
     {
-        internal AbiLeaf(int offset, int size, AbiKind kind, string path)
+        internal AbiLeaf(int offset, int size, AbiKind kind, string name)
         {
             Offset = offset;
             Size = size;
             Kind = kind;
-            Path = path;
+            Name = name;
         }
 
         internal int Offset { get; }
@@ -67,21 +67,30 @@ namespace Cassandra.Tests
         internal AbiKind Kind { get; }
 
         /// <summary>
-        /// Dotted field path, for failure messages only. Null for leaves that came from Rust: field
-        /// names deliberately play no part in the comparison, so there is nothing to carry across.
+        /// Dotted path of the field names leading to this leaf, e.g. <c>tcp.tcpNoDelay</c>. Built by
+        /// the same rule on both sides - see <see cref="ManagedLayout"/> - and compared through
+        /// <see cref="ManagedLayout.NormalizeName"/>.
         /// </summary>
-        internal string Path { get; }
+        internal string Name { get; }
 
         internal bool SameShapeAs(AbiLeaf other)
         {
             return Offset == other.Offset && Size == other.Size && Kind == other.Kind;
         }
 
+        /// <summary>
+        /// This leaf as seen from the struct containing <paramref name="field"/>.
+        /// </summary>
+        internal AbiLeaf NamedAfter(string field)
+        {
+            return new AbiLeaf(Offset, Size, Kind, Name.Length == 0 ? field : $"{field}.{Name}");
+        }
+
         public override string ToString()
         {
             var kind = Kind == AbiKind.Float ? " float" : string.Empty;
-            var path = Path == null ? string.Empty : $" ({Path})";
-            return $"offset {Offset}, {Size} byte{(Size == 1 ? string.Empty : "s")}{kind}{path}";
+            var name = Name.Length == 0 ? string.Empty : $" ({Name})";
+            return $"offset {Offset}, {Size} byte{(Size == 1 ? string.Empty : "s")}{kind}{name}";
         }
     }
 
@@ -96,6 +105,13 @@ namespace Cassandra.Tests
     /// <c>[MarshalAs(UnmanagedType.LPUTF8Str)] string</c> (<c>BridgedSessionConfig</c>,
     /// <c>BridgedLoadBalancingPolicy</c>) be measured correctly even though they are not blittable:
     /// the string marshals to a single pointer.
+    /// </para>
+    /// <para>
+    /// Every leaf is named after the fields leading to it, by the same rule as Rust's
+    /// <c>ffi_type::describe_fields</c>: each struct prefixes its fields' leaves with the field
+    /// name, unless only one of its fields has any leaves. Such a struct is a wrapper and adds no
+    /// segment of its own, which is what lets <c>FFIString { ptr, len }</c> line up with Rust's
+    /// <c>FFIStr { slice: FFISlice { ptr, len } }</c>.
     /// </para>
     /// <para>
     /// Nothing here guesses. An unsupported field type throws with an explanation rather than being
@@ -135,16 +151,25 @@ namespace Cassandra.Tests
         /// </summary>
         internal static ManagedLayout OfEnum(int underlyingSize)
         {
-            var leaves = new[] { new AbiLeaf(0, underlyingSize, AbiKind.Integer, "value") };
+            var leaves = new[] { new AbiLeaf(0, underlyingSize, AbiKind.Integer, string.Empty) };
             return new ManagedLayout(underlyingSize, underlyingSize, leaves);
         }
 
         internal static ManagedLayout Of(Type type)
         {
-            var leaves = new List<AbiLeaf>();
-            Flatten(type, 0, null, leaves);
+            var leaves = Flatten(type, 0, null);
             var align = leaves.Count == 0 ? 1 : leaves.Max(leaf => leaf.Size);
             return new ManagedLayout(Marshal.SizeOf(type), align, leaves);
+        }
+
+        /// <summary>
+        /// A field name as it takes part in the comparison: case and underscores are ignored, so that
+        /// Rust's <c>tcp_nodelay</c> matches C#'s <c>tcpNoDelay</c> and each language keeps its own
+        /// naming convention.
+        /// </summary>
+        internal static string NormalizeName(string name)
+        {
+            return name.Replace("_", string.Empty).ToLowerInvariant();
         }
 
         /// <summary>
@@ -167,21 +192,27 @@ namespace Cassandra.Tests
             return type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         }
 
-        private static void Flatten(Type type, int baseOffset, string path, List<AbiLeaf> leaves)
+        /// <param name="path">
+        /// Full dotted path to <paramref name="type"/>, wrappers included - for error messages only.
+        /// </param>
+        private static List<AbiLeaf> Flatten(Type type, int baseOffset, string path)
         {
+            var fields = new List<(string Name, List<AbiLeaf> Leaves)>();
             foreach (var (field, offset) in OrderedFields(type))
             {
                 var fieldPath = path == null ? field.Name : $"{path}.{field.Name}";
                 var primitive = Classify(field, fieldPath);
-                if (primitive.HasValue)
-                {
-                    leaves.Add(new AbiLeaf(baseOffset + offset, primitive.Value.Size, primitive.Value.Kind, fieldPath));
-                }
-                else
-                {
-                    Flatten(field.FieldType, baseOffset + offset, fieldPath, leaves);
-                }
+                var fieldLeaves = primitive.HasValue
+                    ? new List<AbiLeaf> { new AbiLeaf(baseOffset + offset, primitive.Value.Size, primitive.Value.Kind, string.Empty) }
+                    : Flatten(field.FieldType, baseOffset + offset, fieldPath);
+                fields.Add((field.Name, fieldLeaves));
             }
+
+            // The wrapper rule; see the class remarks.
+            var isWrapper = fields.Count(field => field.Leaves.Count > 0) == 1;
+            return fields
+                .SelectMany(field => field.Leaves.Select(leaf => isWrapper ? leaf : leaf.NamedAfter(field.Name)))
+                .ToList();
         }
 
         /// <summary>

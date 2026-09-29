@@ -22,14 +22,15 @@
 //!
 //! Two things are deliberately left out.
 //!
-//! **Function pointers passed directly as parameters.** The callback typedefs that cross the
-//! boundary as individual `extern "C"` arguments (`OnReplicaPair`, `ConstructCSharpHost`, and the
-//! rest) are not described here, and neither are the signatures of function pointers stored inside
-//! registered structs - a `#[ffi_type(word)]` field is reported as one machine word and nothing
-//! more. Signatures are taken on trust; a wrong one fails loudly at run time anyway. What *is*
-//! verified is the layout of the structs carrying them, which is the part that fails silently:
-//! `ExceptionConstructors` gaining a slot on one side only, or `StrategyAddRepFactor`'s three
-//! callbacks landing at different offsets, corrupts memory rather than crashing.
+//! **Function signatures.** Neither the parameter lists of the exported functions nor the callback
+//! typedefs that cross the boundary as individual `extern "C"` arguments (`OnReplicaPair`,
+//! `ConstructCSharpHost`, and the rest) are described here, and a `#[ffi_type(word)]` field is
+//! reported as one named machine word and nothing more. Signatures are taken on trust - and a wrong
+//! one is not guaranteed to fail loudly: a missing trailing argument just makes Rust read whatever
+//! the next register or stack slot holds. What *is* verified is the layout of the structs carrying
+//! function pointers: `ExceptionConstructors` gaining or reordering a slot on one side only, or
+//! `StrategyAddRepFactor`'s three callbacks being declared in a different order, would corrupt
+//! memory or call the wrong function rather than crash.
 //!
 //! **Types registered on neither side.** Registration is one line, but omitting it in both places
 //! is invisible. A one-sided omission *is* caught - the managed test asserts the pairing is
@@ -141,6 +142,8 @@ pub struct AbiTypeInfo {
 #[repr(C)]
 #[derive(ffi_type_derive::FFIType)]
 pub struct AbiLeafInfo {
+    /// Dotted field path, as described in [`crate::ffi_type`].
+    name: FFIStr<'static>,
     offset: usize,
     size: usize,
     /// An [`AbiKind`] discriminant.
@@ -206,6 +209,7 @@ pub extern "C" fn ffi_abi_leaf_info(
     };
 
     *out = AbiLeafInfo {
+        name: FFIStr::new(&leaf.name),
         offset: leaf.offset,
         size: leaf.size,
         kind: leaf.kind as u8,
@@ -237,7 +241,6 @@ pub extern "C" fn ffi_abi_variant_info(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ffi_type::AbiKind;
 
     #[test]
     fn registry_names_are_unique() {
@@ -307,21 +310,27 @@ mod tests {
     }
 
     #[test]
-    fn exception_constructor_table_is_a_packed_pointer_array() {
-        // `ExceptionConstructors` is described by hand (see the impl in `task.rs`), so verify the
-        // assumption that impl rests on. No magic field count here: the point is only that the
-        // struct is nothing but tightly packed pointers, which is what makes deriving the leaf
-        // count from its size sound.
-        let word = size_of::<*const ()>();
-        let layout = layout_of::<ExceptionConstructors>();
-
-        assert_eq!(layout.align, word);
-        assert_eq!(layout.size % word, 0);
-        assert_eq!(layout.leaves.len(), layout.size / word);
-        for (index, leaf) in layout.leaves.iter().enumerate() {
-            assert_eq!(leaf.offset, index * word);
-            assert_eq!(leaf.size, word);
-            assert_eq!(leaf.kind, AbiKind::Integer);
+    fn leaf_names_tell_every_leaf_apart() {
+        // The managed side relies on names to catch two same-width fields swapped on one side.
+        // That only works if no two leaves of a type share a name - including the empty name a
+        // lone leaf gets, which must therefore never appear next to another leaf.
+        for (name, layout) in manifest() {
+            if layout.leaves.len() == 1 {
+                continue;
+            }
+            let mut leaf_names: Vec<&str> = layout
+                .leaves
+                .iter()
+                .map(|leaf| leaf.name.as_str())
+                .collect();
+            assert!(
+                !leaf_names.contains(&""),
+                "{name} has an unnamed leaf next to others: {leaf_names:?}"
+            );
+            leaf_names.sort_unstable();
+            let count = leaf_names.len();
+            leaf_names.dedup();
+            assert_eq!(count, leaf_names.len(), "{name} has duplicate leaf names");
         }
     }
 
@@ -341,6 +350,7 @@ mod tests {
         assert!(bool::from(ffi_abi_type_info(0, &mut type_info)));
 
         let mut leaf_info = AbiLeafInfo {
+            name: FFIStr::null(),
             offset: 0,
             size: 0,
             kind: 0,

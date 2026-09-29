@@ -14,7 +14,8 @@ use syn::{Attribute, Data, DeriveInput, Error, Fields, Index, LitStr, Result, pa
 ///
 /// Supported shapes:
 /// - `#[repr(C)]` / `#[repr(transparent)]` structs: each field's leaves are emitted in turn, at
-///   the offset the compiler chose for that field (via `offset_of!`). Nested structs and
+///   the offset the compiler chose for that field (via `offset_of!`) and named after the field
+///   (via `describe_fields`, which leaves single-field wrappers unnamed). Nested structs and
 ///   transparent newtypes flatten automatically, because the recursion bottoms out at the
 ///   primitive impls.
 /// - `#[repr(u8)]` (or another integer repr) fieldless enums: a single integer leaf, plus the
@@ -31,11 +32,17 @@ use syn::{Attribute, Data, DeriveInput, Error, Fields, Index, LitStr, Result, pa
 /// `impl`, and "one machine word" is in any case all that can meaningfully be said about a function
 /// pointer - argument lists are not part of what this machinery verifies.
 ///
-/// # Type attribute
+/// # Type attributes
+///
+/// `#[ffi_type(all_words)]` on a struct is `#[ffi_type(word)]` on every one of its fields. It is
+/// for tables of callbacks such as `ExceptionConstructors`, whose 23 fields are newtypes over
+/// higher-ranked function pointers.
 ///
 /// `#[ffi_type(name = "...")]` overrides the name the type is registered under. The derive also
 /// implements `FFITypeName`, and by default that name is the type's own, without its generic
 /// parameters (`Tcb<R>` is `"Tcb"`) - which is what the C# mirror claims with `[FfiLayout]`.
+///
+/// Options may be combined in one attribute: `#[ffi_type(all_words, name = "...")]`.
 #[proc_macro_derive(FFIType, attributes(ffi_type))]
 pub fn derive_ffi_type(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -55,7 +62,8 @@ enum Repr {
 
 fn expand(input: DeriveInput) -> Result<TokenStream2> {
     let repr = parse_repr(&input)?;
-    let options = parse_options(&input.attrs, &["name"])?;
+    let options = parse_options(&input.attrs, &["all_words", "name"])?;
+    let all_words = options.all_words;
     let name = &input.ident;
     let registered_name = match options.name {
         Some(name) => name,
@@ -68,7 +76,13 @@ fn expand(input: DeriveInput) -> Result<TokenStream2> {
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let body = match (&input.data, repr) {
-        (Data::Struct(data), Repr::Struct) => struct_body(&data.fields)?,
+        (Data::Struct(data), Repr::Struct) => struct_body(&data.fields, all_words)?,
+        (Data::Enum(_), _) if all_words => {
+            return Err(Error::new_spanned(
+                &input.ident,
+                "`#[ffi_type(all_words)]` only applies to structs",
+            ));
+        }
         (Data::Enum(data), Repr::Integer) => enum_body(name, data)?,
         (Data::Struct(_), Repr::Integer) => {
             return Err(Error::new_spanned(
@@ -103,38 +117,32 @@ fn expand(input: DeriveInput) -> Result<TokenStream2> {
     })
 }
 
-/// Emits `describe_leaves` for a struct: delegate to each field at the offset the compiler chose.
-fn struct_body(fields: &Fields) -> Result<TokenStream2> {
+/// Emits `describe_leaves` for a struct: collect each field's leaves at the offset the compiler
+/// chose, then let `describe_fields` name them.
+fn struct_body(fields: &Fields, all_words: bool) -> Result<TokenStream2> {
     let mut describe = Vec::new();
     for (index, field) in fields.iter().enumerate() {
         let ty = &field.ty;
         // Named fields are addressed by identifier, tuple fields by index; `offset_of!` accepts
         // both spellings.
-        let member = match &field.ident {
-            Some(ident) => quote!(#ident),
+        let (member, field_name) = match &field.ident {
+            Some(ident) => (quote!(#ident), ident.unraw().to_string()),
             None => {
                 let index = Index::from(index);
-                quote!(#index)
+                (quote!(#index), index.index.to_string())
             }
         };
+        let offset = quote!(base + ::std::mem::offset_of!(Self, #member));
 
-        describe.push(if parse_options(&field.attrs, &["word"])?.word {
-            // `describe_as_word` is an unbounded free function, which is exactly why this works for
+        let is_word = parse_options(&field.attrs, &["word"])?.word;
+        let leaves = if all_words || is_word {
+            // `word_leaves` is an unbounded free function, which is exactly why this works for
             // higher-ranked function pointer types that no `impl` can cover.
-            quote! {
-                crate::ffi_type::describe_as_word::<#ty>(
-                    base + ::std::mem::offset_of!(Self, #member),
-                    out,
-                );
-            }
+            quote!(crate::ffi_type::word_leaves::<#ty>(#offset))
         } else {
-            quote! {
-                <#ty as crate::ffi_type::FFIType>::describe_leaves(
-                    base + ::std::mem::offset_of!(Self, #member),
-                    out,
-                );
-            }
-        });
+            quote!(crate::ffi_type::leaves_of::<#ty>(#offset))
+        };
+        describe.push(quote!((#field_name, #leaves)));
     }
 
     // A fieldless struct would leave both parameters unused, and the crate builds with
@@ -151,7 +159,7 @@ fn struct_body(fields: &Fields) -> Result<TokenStream2> {
 
     Ok(quote! {
         fn describe_leaves(base: usize, out: &mut ::std::vec::Vec<crate::ffi_type::AbiLeaf>) {
-            #(#describe)*
+            crate::ffi_type::describe_fields(::std::vec![#(#describe),*], out);
         }
     })
 }
@@ -161,6 +169,8 @@ fn struct_body(fields: &Fields) -> Result<TokenStream2> {
 struct Options {
     /// `word`: describe this field as one machine word.
     word: bool,
+    /// `all_words`: describe every field of this struct as one machine word.
+    all_words: bool,
     /// `name = "..."`: register this type under a name other than its own.
     name: Option<LitStr>,
 }
@@ -188,6 +198,7 @@ fn parse_options(attrs: &[Attribute], allowed: &[&str]) -> Result<Options> {
             }
             match key.as_str() {
                 "word" => options.word = true,
+                "all_words" => options.all_words = true,
                 _ => {
                     let name: LitStr = meta.value()?.parse()?;
                     if name.value().is_empty() {
@@ -235,11 +246,11 @@ fn enum_body(name: &syn::Ident, data: &syn::DataEnum) -> Result<TokenStream2> {
 
     Ok(quote! {
         fn describe_leaves(base: usize, out: &mut ::std::vec::Vec<crate::ffi_type::AbiLeaf>) {
-            out.push(crate::ffi_type::AbiLeaf {
-                offset: base,
-                size: ::std::mem::size_of::<Self>(),
-                kind: crate::ffi_type::AbiKind::Integer,
-            });
+            out.push(crate::ffi_type::AbiLeaf::unnamed(
+                base,
+                ::std::mem::size_of::<Self>(),
+                crate::ffi_type::AbiKind::Integer,
+            ));
         }
 
         fn describe_variants(out: &mut ::std::vec::Vec<crate::ffi_type::AbiVariant>) {

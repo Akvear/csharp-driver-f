@@ -37,9 +37,14 @@ namespace Cassandra
     /// <c>"Tcb"</c>), unless the Rust type overrides it with <c>#[ffi_type(name = "...")]</c>. The
     /// Rust spelling is canonical where the two languages disagree: C#'s
     /// <c>PreparedStatementExecutionOptions</c> claims <c>"BoundStatementExecutionOptions"</c>, and
-    /// <c>FFIString</c> claims <c>"FFIStr"</c>. Field <em>names</em> never take part in the
-    /// comparison - only the flattened primitive layout does - so both sides are free to name their
-    /// fields however reads best.
+    /// <c>FFIString</c> claims <c>"FFIStr"</c>.
+    /// </para>
+    /// <para>
+    /// Field names, on the other hand, must match: they are what tells two same-width fields apart.
+    /// They are compared ignoring case and underscores, so each side keeps its own convention
+    /// (Rust's <c>tcp_nodelay</c> is C#'s <c>tcpNoDelay</c>), and a struct wrapping a single field
+    /// adds no name of its own (C#'s flat <c>FFIString { ptr, len }</c> matches Rust's
+    /// <c>FFIStr { slice: FFISlice { ptr, len } }</c>).
     /// </para>
     /// <para>
     /// Multiple types may claim the same Rust name (<c>FFISlice&lt;T&gt;</c> and

@@ -167,6 +167,8 @@ pub struct Tcb<R> {
 /// This struct holds function pointers to create various exception types.
 /// Any changes here must be mirrored on the C# side in the exact same order (alphabetical).
 #[repr(C)]
+#[derive(FFIType)]
+#[ffi_type(all_words)]
 pub struct ExceptionConstructors {
     pub already_exists_constructor: AlreadyExistsConstructor,
     pub already_shutdown_exception_constructor: AlreadyShutdownExceptionConstructor,
@@ -194,35 +196,6 @@ pub struct ExceptionConstructors {
     pub trace_retrieval_exception_constructor: TraceRetrievalExceptionConstructor,
     pub truncate_exception_constructor: TruncateExceptionConstructor,
     pub unauthorized_exception_constructor: UnauthorizedExceptionConstructor,
-}
-
-/// Hand-written rather than derived, unlike every other checked type.
-///
-/// `#[derive(FFIType)]` would require each of the 23 constructor newtypes above to implement
-/// `FFIType` too. Each wraps a higher-ranked function pointer, so each would need its own derive
-/// plus an `#[ffi_type(word)]` field attribute - 46 lines of annotation to describe what is already
-/// known by construction: a packed array of function pointers. This impl says that directly.
-///
-/// The assumption that makes deriving the leaf count from the struct's size sound is verified by
-/// `crate::abi::tests::exception_constructor_table_is_a_packed_pointer_array`. The managed side
-/// compares its own 23-field `Globals.Constructors` against that leaf count, so a slot added on one
-/// side only - which would make Rust read past the end of C#'s allocation - is caught.
-impl crate::ffi_type::FFIType for ExceptionConstructors {
-    fn describe_leaves(base: usize, out: &mut Vec<crate::ffi_type::AbiLeaf>) {
-        let word = size_of::<*const ()>();
-        for index in 0..size_of::<Self>() / word {
-            out.push(crate::ffi_type::AbiLeaf {
-                offset: base + index * word,
-                size: word,
-                kind: crate::ffi_type::AbiKind::Integer,
-            });
-        }
-    }
-}
-
-/// Hand-written for the same reason as the `FFIType` impl above.
-impl crate::ffi_type::FFITypeName for ExceptionConstructors {
-    const NAME: &'static str = "ExceptionConstructors";
 }
 
 impl<R> Tcb<R> {

@@ -36,11 +36,16 @@ namespace Cassandra.Tests
     /// </para>
     /// <para>
     /// The comparison is over *flattened primitive leaves*: Rust reports, for each registered type,
-    /// the offset/size/kind of every primitive after recursing through nested structs and
-    /// transparent newtypes, and this fixture computes the same list for the managed mirror. Field
-    /// names never cross the boundary, so <c>FFIString</c>'s two fields compare equal to Rust's
-    /// single nested <c>FFIStr.slice</c> with no special-casing, and either side can rename its
-    /// fields freely. What cannot change unnoticed is a field's width, position, or existence.
+    /// the name/offset/size/kind of every primitive after recursing through nested structs and
+    /// transparent newtypes, and this fixture computes the same list for the managed mirror. What
+    /// cannot change unnoticed is a field's width, position, existence, or name.
+    /// </para>
+    /// <para>
+    /// Names matter because most mirrors are nothing but pointers, and offsets alone cannot tell two
+    /// same-width fields apart: swapping <c>complete_task</c> and <c>fail_task</c> in <c>Tcb</c> on
+    /// one side only keeps every offset intact. Names are compared ignoring case and underscores,
+    /// and a single-field wrapper contributes no name of its own (see <see cref="ManagedLayout"/>),
+    /// so <c>FFIString</c>'s two fields still match Rust's nested <c>FFIStr.slice</c>.
     /// </para>
     /// <para>
     /// Registration is one line per type on each side: <c>rust/src/abi.rs</c> lists the Rust type,
@@ -71,6 +76,7 @@ namespace Cassandra.Tests
         [FfiLayout("AbiLeafInfo")]
         internal struct AbiLeafInfo
         {
+            internal RustBridge.FFIString Name;
             internal nuint Offset;
             internal nuint Size;
             internal byte Kind;
@@ -90,8 +96,8 @@ namespace Cassandra.Tests
         /// </summary>
         /// <remarks>
         /// <c>Marshal.OffsetOf</c> refuses generic types even when closed, so the generic mirrors are
-        /// measured through a stand-in whose field types and total size are asserted to match the
-        /// real thing (see <see cref="EveryGenericMirror_IsFaithfullyRepresentedByItsStandIn"/>).
+        /// measured through a stand-in whose field names, field types and total size are asserted to
+        /// match the real thing (see <see cref="EveryGenericMirror_IsFaithfullyRepresentedByItsStandIn"/>).
         /// That keeps full per-field coverage without the stand-in being able to drift silently.
         /// </remarks>
         [StructLayout(LayoutKind.Sequential)]
@@ -190,7 +196,7 @@ namespace Cassandra.Tests
                         checked((int)leaf.Offset),
                         checked((int)leaf.Size),
                         (AbiKind)leaf.Kind,
-                        null));
+                        leaf.Name.ToManagedString()));
                 }
 
                 for (nuint variantIndex = 0; variantIndex < info.VariantCount; variantIndex++)
@@ -282,6 +288,24 @@ namespace Cassandra.Tests
         }
 
         [Test]
+        public void EveryMirror_NamesItsFieldsLikeRustInTheSameOrder()
+        {
+            // The layout test above cannot see two same-width fields swapped on one side only - and
+            // most mirrors are nothing but pointers, so for them that is the likeliest mistake.
+            foreach (var (rust, managed, type) in Pairs())
+            {
+                var rustNames = rust.Leaves.Select(leaf => ManagedLayout.NormalizeName(leaf.Name)).ToArray();
+                var managedNames = managed.Leaves.Select(leaf => ManagedLayout.NormalizeName(leaf.Name)).ToArray();
+
+                Assert.That(managedNames, Is.EqualTo(rustNames),
+                    $"{Describe(type, rust)}: fields are named or ordered differently (compared ignoring " +
+                    "case and underscores). Managed: " +
+                    $"[{string.Join(", ", managed.Leaves.Select(leaf => leaf.Name))}]. Rust: " +
+                    $"[{string.Join(", ", rust.Leaves.Select(leaf => leaf.Name))}]");
+            }
+        }
+
+        [Test]
         public void EveryRegisteredEnum_HasMatchingDiscriminants()
         {
             var compared = 0;
@@ -327,9 +351,14 @@ namespace Cassandra.Tests
                     "so its field offsets would go unchecked. Add one.");
 
                 var closed = entry.Definition.MakeGenericType(entry.Argument);
+                var closedFieldNames = ManagedLayout.DeclaredFields(closed).Select(field => ManagedLayout.NormalizeName(field.Name)).ToArray();
+                var standInFieldNames = ManagedLayout.DeclaredFields(entry.StandIn).Select(field => ManagedLayout.NormalizeName(field.Name)).ToArray();
                 var closedFieldTypes = ManagedLayout.DeclaredFields(closed).Select(field => field.FieldType).ToArray();
                 var standInFieldTypes = ManagedLayout.DeclaredFields(entry.StandIn).Select(field => field.FieldType).ToArray();
 
+                Assert.That(standInFieldNames, Is.EqualTo(closedFieldNames),
+                    $"the stand-in {entry.StandIn.Name} no longer declares the same fields in the same " +
+                    $"order as {closed.Name}, so measuring it says nothing about the real type");
                 Assert.That(standInFieldTypes, Is.EqualTo(closedFieldTypes),
                     $"the stand-in {entry.StandIn.Name} no longer has the same field types as " +
                     $"{closed.Name}, so measuring it says nothing about the real type");
@@ -342,8 +371,8 @@ namespace Cassandra.Tests
         [Test]
         public void ReflectionFieldOrder_MatchesLayoutOrder()
         {
-            // The generic stand-in check above compares field types in the order reflection reports
-            // them, because Marshal.OffsetOf cannot be used on a generic type. This asserts that for
+            // The generic stand-in check above compares field names and types in the order reflection
+            // reports them, because Marshal.OffsetOf cannot be used on a generic type. This asserts that for
             // every mirror we *can* measure, that order really is ascending-offset order - so the
             // assumption the stand-in check leans on is verified rather than assumed.
             foreach (var mirror in ManagedMirrors().Where(m => Measurable(m.Type)))

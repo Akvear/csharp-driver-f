@@ -17,6 +17,20 @@
 //! nested `#[repr(C)]` structs and `#[repr(transparent)]` newtypes until it reaches something
 //! primitive.
 //!
+//! ## Why leaves carry field names
+//!
+//! Most of these structs are nothing but pointers - `Tcb`, `FFIGCHandle`, the 23-slot
+//! `ExceptionConstructors` table - so offsets and sizes alone cannot tell their fields apart.
+//! Swapping `complete_task` and `fail_task` on one side only keeps every offset intact, and Rust
+//! would then report success through the failure callback. So each leaf also carries the dotted
+//! path of field names leading to it (`tcp.tcp_nodelay`), and the managed side compares those in
+//! order, ignoring case and underscores so that each language keeps its own naming convention.
+//!
+//! A struct in which only one field has any leaves - `FFIStr { slice }`, `BridgedPtr { ptr,
+//! _phantom }`, a transparent newtype - is a wrapper, and adds no segment of its own (see
+//! [`describe_fields`]). That is what lets `FFIStr` line up with a C# mirror declaring `ptr` and
+//! `len` directly.
+//!
 //! ## What the leaf kind is for, and why it has only two values
 //!
 //! Offsets and sizes catch almost everything, but they cannot tell `f32` from `i32`: both are four
@@ -47,11 +61,26 @@ pub enum AbiKind {
 }
 
 /// One primitive field, at the offset the compiler placed it, relative to the outermost type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AbiLeaf {
+    /// Dotted path of the field names leading to this leaf, relative to the outermost type. Empty
+    /// until [`describe_fields`] names it after the field it belongs to.
+    pub name: String,
     pub offset: usize,
     pub size: usize,
     pub kind: AbiKind,
+}
+
+impl AbiLeaf {
+    /// A leaf that does not know yet which field it belongs to - what every primitive reports.
+    pub fn unnamed(offset: usize, size: usize, kind: AbiKind) -> Self {
+        Self {
+            name: String::new(),
+            offset,
+            size,
+            kind,
+        }
+    }
 }
 
 /// One variant of a fieldless integer-repr enum.
@@ -74,9 +103,8 @@ pub struct AbiTypeLayout {
 /// A type whose layout is defined and can be described to the managed side.
 ///
 /// Derive it with `#[derive(FFIType)]` rather than implementing it by hand - the derive reads the
-/// real field list, so it cannot fall out of step with the struct. The handful of manual impls in
-/// this crate are for primitives (below) and for one struct whose fields cannot currently carry the
-/// derive; each is commented where it appears.
+/// real field list, so it cannot fall out of step with the struct. The only manual impls are the
+/// primitive ones below.
 pub trait FFIType: Sized {
     /// Appends this type's primitive leaves to `out`, with offsets relative to `base`.
     fn describe_leaves(base: usize, out: &mut Vec<AbiLeaf>);
@@ -107,11 +135,47 @@ pub trait WordLike: Sized {}
 
 /// Describes `T` as a single opaque machine word.
 pub fn describe_as_word<T>(base: usize, out: &mut Vec<AbiLeaf>) {
-    out.push(AbiLeaf {
-        offset: base,
-        size: size_of::<T>(),
-        kind: AbiKind::Integer,
-    });
+    out.push(AbiLeaf::unnamed(base, size_of::<T>(), AbiKind::Integer));
+}
+
+/// `T`'s leaves at `base`, collected for [`describe_fields`] rather than appended.
+pub fn leaves_of<T: FFIType>(base: usize) -> Vec<AbiLeaf> {
+    let mut leaves = Vec::new();
+    T::describe_leaves(base, &mut leaves);
+    leaves
+}
+
+/// `T` as a single machine word at `base`, collected for [`describe_fields`].
+pub fn word_leaves<T>(base: usize) -> Vec<AbiLeaf> {
+    let mut leaves = Vec::new();
+    describe_as_word::<T>(base, &mut leaves);
+    leaves
+}
+
+/// Appends a struct's leaves to `out`, given each field's name and leaves in declaration order.
+///
+/// Every leaf is prefixed with the name of the field it came from - unless only one field has any
+/// leaves at all, in which case the struct is a wrapper and passes its field's leaves through
+/// unchanged. `ManagedLayout` applies the identical rule to the C# mirror; see the module docs for
+/// why.
+pub fn describe_fields(fields: Vec<(&'static str, Vec<AbiLeaf>)>, out: &mut Vec<AbiLeaf>) {
+    let is_wrapper = fields
+        .iter()
+        .filter(|(_, leaves)| !leaves.is_empty())
+        .count()
+        == 1;
+    for (field, leaves) in fields {
+        for mut leaf in leaves {
+            if !is_wrapper {
+                leaf.name = if leaf.name.is_empty() {
+                    field.to_owned()
+                } else {
+                    format!("{field}.{}", leaf.name)
+                };
+            }
+            out.push(leaf);
+        }
+    }
 }
 
 /// Produces the complete description of `T`.
@@ -134,11 +198,7 @@ macro_rules! impl_scalar {
         $(
             impl FFIType for $ty {
                 fn describe_leaves(base: usize, out: &mut Vec<AbiLeaf>) {
-                    out.push(AbiLeaf {
-                        offset: base,
-                        size: size_of::<$ty>(),
-                        kind: $kind,
-                    });
+                    out.push(AbiLeaf::unnamed(base, size_of::<$ty>(), $kind));
                 }
             }
         )*
@@ -268,6 +328,40 @@ mod tests {
         tail: *const u8,
     }
 
+    /// Two fields, but only one with any leaves: still a wrapper.
+    #[repr(C)]
+    #[derive(FFIType)]
+    struct Tagged {
+        ptr: *const u8,
+        _phantom: PhantomData<u8>,
+    }
+
+    #[repr(C)]
+    #[derive(FFIType)]
+    struct TwoTagged {
+        first: Tagged,
+        second: Tagged,
+    }
+
+    /// Wraps a higher-ranked function pointer, so it has no `FFIType` impl of its own.
+    #[repr(transparent)]
+    struct Callback(#[allow(dead_code)] extern "C" fn(&u8));
+
+    #[repr(C)]
+    #[derive(FFIType)]
+    #[ffi_type(all_words)]
+    struct Callbacks {
+        on_success: Callback,
+        on_failure: Callback,
+    }
+
+    #[repr(C)]
+    #[derive(FFIType)]
+    #[ffi_type(all_words, name = "RenamedCallbacks")]
+    struct OriginalCallbacks {
+        on_success: Callback,
+    }
+
     #[repr(C)]
     #[derive(FFIType)]
     #[ffi_type(name = "Renamed")]
@@ -290,6 +384,23 @@ mod tests {
         Six,
     }
 
+    fn integer(name: &str, offset: usize, size: usize) -> AbiLeaf {
+        AbiLeaf {
+            name: name.to_owned(),
+            offset,
+            size,
+            kind: AbiKind::Integer,
+        }
+    }
+
+    fn names(layout: &AbiTypeLayout) -> Vec<&str> {
+        layout
+            .leaves
+            .iter()
+            .map(|leaf| leaf.name.as_str())
+            .collect()
+    }
+
     #[test]
     fn padding_is_reflected_in_leaf_offsets() {
         let layout = layout_of::<Padded>();
@@ -297,23 +408,7 @@ mod tests {
         assert_eq!(layout.align, 4);
         assert_eq!(
             layout.leaves,
-            vec![
-                AbiLeaf {
-                    offset: 0,
-                    size: 1,
-                    kind: AbiKind::Integer
-                },
-                AbiLeaf {
-                    offset: 4,
-                    size: 4,
-                    kind: AbiKind::Integer
-                },
-                AbiLeaf {
-                    offset: 8,
-                    size: 1,
-                    kind: AbiKind::Integer
-                },
-            ]
+            vec![integer("a", 0, 1), integer("b", 4, 4), integer("c", 8, 1)]
         );
     }
 
@@ -324,11 +419,33 @@ mod tests {
     }
 
     #[test]
-    fn nested_structs_flatten_with_absolute_offsets() {
+    fn nested_structs_flatten_with_absolute_offsets_and_dotted_names() {
         let layout = layout_of::<Nested>();
         let offsets: Vec<usize> = layout.leaves.iter().map(|leaf| leaf.offset).collect();
         assert_eq!(offsets, vec![0, 4, 8, 12, 16]);
-        assert_eq!(layout.leaves.len(), 5);
+        assert_eq!(
+            names(&layout),
+            vec!["head", "body.a", "body.b", "body.c", "tail"]
+        );
+    }
+
+    #[test]
+    fn a_field_without_leaves_does_not_stop_a_struct_being_a_wrapper() {
+        // `BridgedPtr { ptr, _phantom }` relies on this to describe itself as a bare pointer.
+        assert_eq!(names(&layout_of::<Tagged>()), vec![""]);
+        assert_eq!(names(&layout_of::<TwoTagged>()), vec!["first", "second"]);
+    }
+
+    #[test]
+    fn all_words_describes_every_field_as_a_named_word() {
+        let word = size_of::<*const ()>();
+        assert_eq!(
+            layout_of::<Callbacks>().leaves,
+            vec![
+                integer("on_success", 0, word),
+                integer("on_failure", word, word)
+            ]
+        );
     }
 
     #[test]
@@ -346,14 +463,7 @@ mod tests {
     fn enum_variants_carry_explicit_and_implicit_discriminants() {
         let layout = layout_of::<Discriminants>();
         assert_eq!(layout.size, 1);
-        assert_eq!(
-            layout.leaves,
-            vec![AbiLeaf {
-                offset: 0,
-                size: 1,
-                kind: AbiKind::Integer
-            }]
-        );
+        assert_eq!(layout.leaves, vec![integer("", 0, 1)]);
         assert_eq!(
             layout.variants,
             vec![
@@ -377,23 +487,15 @@ mod tests {
 
     #[test]
     fn option_of_a_niche_word_stays_one_word() {
-        let mut leaves = Vec::new();
-        <Option<NonNull<u8>> as FFIType>::describe_leaves(0, &mut leaves);
         assert_eq!(
-            leaves,
-            vec![AbiLeaf {
-                offset: 0,
-                size: size_of::<*const u8>(),
-                kind: AbiKind::Integer
-            }]
+            leaves_of::<Option<NonNull<u8>>>(0),
+            vec![integer("", 0, size_of::<*const u8>())]
         );
     }
 
     #[test]
     fn floats_are_distinguished_from_integers() {
-        let mut leaves = Vec::new();
-        <f64 as FFIType>::describe_leaves(0, &mut leaves);
-        assert_eq!(leaves[0].kind, AbiKind::Float);
+        assert_eq!(leaves_of::<f64>(0)[0].kind, AbiKind::Float);
     }
 
     #[test]
@@ -406,5 +508,15 @@ mod tests {
     #[test]
     fn the_name_option_overrides_the_type_name() {
         assert_eq!(Original::NAME, "Renamed");
+    }
+
+    #[test]
+    fn options_combine_in_one_attribute() {
+        assert_eq!(OriginalCallbacks::NAME, "RenamedCallbacks");
+        // `all_words` in the same attribute still applied.
+        assert_eq!(
+            layout_of::<OriginalCallbacks>().leaves,
+            vec![integer("", 0, size_of::<*const ()>())]
+        );
     }
 }
