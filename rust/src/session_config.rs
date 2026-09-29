@@ -74,8 +74,8 @@ impl BridgedTcpConfig {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct BridgedLoadBalancingPolicy<'a> {
-    is_token_aware: bool,
-    permit_dc_failover: bool,
+    is_token_aware: FFIBool,
+    permit_dc_failover: FFIBool,
     local_dc: CSharpStr<'a>,
 }
 
@@ -88,8 +88,8 @@ impl<'a> BridgedLoadBalancingPolicy<'a> {
             .map(|cstr| cstr.to_str().unwrap().to_owned());
 
         let mut lbpbuilder = DefaultPolicy::builder()
-            .token_aware(self.is_token_aware)
-            .permit_dc_failover(self.permit_dc_failover);
+            .token_aware(self.is_token_aware.into())
+            .permit_dc_failover(self.permit_dc_failover.into());
 
         if let Some(preferred_dc) = local_dc {
             lbpbuilder = lbpbuilder.prefer_datacenter(preferred_dc);
