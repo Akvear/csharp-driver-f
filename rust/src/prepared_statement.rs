@@ -140,6 +140,7 @@ pub extern "C" fn prepared_statement_fill_column_specs_metadata(
                 .map(|pk_indexes| pk_indexes.index),
         )
     }
+    .into()
 }
 
 #[unsafe(no_mangle)]

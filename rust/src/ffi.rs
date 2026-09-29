@@ -1,4 +1,4 @@
-use crate::error_conversion::FFIMaybeException;
+use crate::error_conversion::{FFIException, FFIMaybeException};
 use std::ffi::{CStr, c_char, c_void};
 use std::fmt::Debug;
 use std::marker::PhantomData;
@@ -897,16 +897,11 @@ pub(crate) unsafe fn ffi_callback_for_each<Ctx: Copy, T>(
     context: Ctx,
     callback: unsafe extern "C" fn(Ctx, T) -> FFIMaybeException,
     iter: impl Iterator<Item = T>,
-) -> FFIMaybeException {
+) -> Result<(), FFIException> {
     for item in iter {
-        unsafe {
-            let res = callback(context, item);
-            if res.has_exception() {
-                return res;
-            }
-        }
+        unsafe { callback(context, item) }.into_result()?;
     }
-    FFIMaybeException::ok()
+    Ok(())
 }
 
 #[repr(transparent)]
