@@ -22,7 +22,7 @@ pub(crate) struct BridgedTcpConfig {
     tcp_nodelay: FFIBool,
 
     /// Whether to enable TCP keepalive.
-    keepalive: FFIBool,
+    tcp_keepalive: FFIBool,
 
     /// TCP keepalive interval in milliseconds.
     tcp_keepalive_interval_millis: i32,
@@ -48,7 +48,7 @@ impl BridgedTcpConfig {
     pub(crate) fn apply_to_builder(self, mut builder: SessionBuilder) -> SessionBuilder {
         builder = builder.tcp_nodelay(self.tcp_nodelay.into());
 
-        if self.keepalive.into() {
+        if self.tcp_keepalive.into() {
             builder = builder.tcp_keepalive_interval(Duration::from_millis(
                 self.tcp_keepalive_interval_millis as u64,
             ));
