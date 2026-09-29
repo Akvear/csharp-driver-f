@@ -27,7 +27,8 @@
 //! `ConstructCSharpHost`, and the rest) are described here, and a `#[ffi_type(word)]` field is
 //! reported as one named machine word and nothing more. Signatures are taken on trust - and a wrong
 //! one is not guaranteed to fail loudly: a missing trailing argument just makes Rust read whatever
-//! the next register or stack slot holds. What *is* verified is the layout of the structs carrying
+//! the next register or stack slot holds. (`FfiEntryPointTests` checks only that every P/Invoke
+//! names an export that exists.) What *is* verified is the layout of the structs carrying
 //! function pointers: `ExceptionConstructors` gaining or reordering a slot on one side only, or
 //! `StrategyAddRepFactor`'s three callbacks being declared in a different order, would corrupt
 //! memory or call the wrong function rather than crash.
