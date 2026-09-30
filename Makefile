@@ -23,7 +23,7 @@ endif
 ifeq (${CCM_CONFIG_DIR},)
 	CCM_CONFIG_DIR = ~/.ccm
 endif
-CCM_CONFIG_DIR := $(shell readlink --canonicalize ${CCM_CONFIG_DIR})
+CCM_CONFIG_DIR := $(shell readlink -f ${CCM_CONFIG_DIR})
 
 TEST_TARGET_OPTIONS ?=
 ifeq (${TEST_TARGET_OPTIONS},)
