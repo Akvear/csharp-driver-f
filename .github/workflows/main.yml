@@ -154,7 +154,7 @@ jobs:
           - version: windows-2022
           - version: windows-11-arm
           - version: macos-15-intel
-          - version: macos-14
+          - version: macos-latest
 
     env:
       TARGET_FRAMEWORK: net9
