@@ -63,6 +63,27 @@ impl FFIMaybeException {
     pub(crate) fn try_into_ffi_exception(self) -> Option<FFIException> {
         self.0.try_into_ffi_gc_handle().map(FFIException)
     }
+
+    /// Converts this into a `Result`, so that the `?` operator can be used to propagate an
+    /// exception returned from an FFI callback, instead of manually checking
+    /// [`FFIMaybeException::has_exception`] and returning early.
+    pub(crate) fn into_result(self) -> Result<(), FFIException> {
+        match self.try_into_ffi_exception() {
+            Some(exception) => Err(exception),
+            None => Ok(()),
+        }
+    }
+}
+
+// Allows converting the `Result` produced by `?`-propagating `into_result()` calls back into the
+// `FFIMaybeException` that FFI callback wrappers must return.
+impl From<Result<(), FFIException>> for FFIMaybeException {
+    fn from(result: Result<(), FFIException>) -> Self {
+        match result {
+            Ok(()) => FFIMaybeException::ok(),
+            Err(exception) => FFIMaybeException::from_exception(exception),
+        }
+    }
 }
 
 #[repr(transparent)]

@@ -277,6 +277,7 @@ impl<'a> RustReplicaBridge<'a> {
                 }),
             )
         }
+        .into()
     }
 
     fn get_replicas<'ctx>(
@@ -352,19 +353,15 @@ pub extern "C" fn cluster_state_get_keyspace_names(
         ArcFFI::as_ref(cluster_state_ptr).expect("valid and non-null ClusterState pointer");
 
     unsafe {
-        let ffi_exception = ffi_callback_for_each(
+        ffi_callback_for_each(
             keyspace_name_list_ptr,
             add_keyspace_name_callback,
             cluster_state
                 .keyspaces_iter()
                 .map(|(ks_name, _)| FFIStr::new(ks_name)),
-        );
-        if ffi_exception.has_exception() {
-            return ffi_exception;
-        }
+        )
     }
-
-    FFIMaybeException::ok()
+    .into()
 }
 
 /// Opaque type representing the C# KeyspaceContext.
@@ -604,6 +601,7 @@ pub extern "C" fn cluster_state_get_table_names(
             keyspace.tables.keys().map(|k| FFIStr::new(k.as_str())),
         )
     }
+    .into()
 }
 
 /// Opaque type representing the C# UdtContext.
@@ -861,16 +859,15 @@ pub extern "C" fn cluster_state_get_table_metadata(
             keyspace_name,
             table_name
         );
-        let ffi_exception = ffi_callback_for_each(
+        if let Err(exception) = ffi_callback_for_each(
             partition_keys_ptr,
             add_primary_key_callback,
             table
                 .partition_key
                 .iter()
                 .map(|pk| FFIStr::new(pk.as_str())),
-        );
-        if ffi_exception.has_exception() {
-            return ffi_exception;
+        ) {
+            return FFIMaybeException::from_exception(exception);
         }
 
         // Add clustering keys to the C# ClusteringKeys list via the callback
@@ -879,16 +876,15 @@ pub extern "C" fn cluster_state_get_table_metadata(
             keyspace_name,
             table_name
         );
-        let ffi_exception = ffi_callback_for_each(
+        if let Err(exception) = ffi_callback_for_each(
             clustering_keys_ptr,
             add_primary_key_callback,
             table
                 .clustering_key
                 .iter()
                 .map(|ck| FFIStr::new(ck.as_str())),
-        );
-        if ffi_exception.has_exception() {
-            return ffi_exception;
+        ) {
+            return FFIMaybeException::from_exception(exception);
         }
 
         // Finally, construct the C# TableMetadata object by invoking the callback with pointers to the table metadata.
@@ -897,18 +893,13 @@ pub extern "C" fn cluster_state_get_table_metadata(
             keyspace_name,
             table_name
         );
-        let ffi_exception = construct_table_metadata(
+        construct_table_metadata(
             table_context_ptr,
             table_columns_context_ptr,
             partition_keys_ptr,
             clustering_keys_ptr,
-        );
-        if ffi_exception.has_exception() {
-            return ffi_exception;
-        }
+        )
     }
-
-    FFIMaybeException::ok()
 }
 
 #[unsafe(no_mangle)]
